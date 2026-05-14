@@ -39,7 +39,7 @@ function AgentsPage() {
         description="Создавайте голосовых ассистентов с уникальным голосом, базой знаний и логикой handoff."
         actions={
           <Button asChild className="bg-gradient-primary shadow-elegant">
-            <Link to="/agents"><Plus className="h-4 w-4 mr-1.5" /> Новый агент</Link>
+            <Link to="/agents/$agentId" params={{ agentId: "new" }}><Plus className="h-4 w-4 mr-1.5" /> Новый агент</Link>
           </Button>
         }
       />
@@ -56,7 +56,9 @@ function AgentsPage() {
             <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-6">
               Создайте первого ИИ-агента — настройте голос Gemini, приветствие и подключите Twilio-номер.
             </p>
-            <Button className="bg-gradient-primary shadow-elegant"><Plus className="h-4 w-4 mr-1.5" /> Создать агента</Button>
+            <Button asChild className="bg-gradient-primary shadow-elegant">
+              <Link to="/agents/$agentId" params={{ agentId: "new" }}><Plus className="h-4 w-4 mr-1.5" /> Создать агента</Link>
+            </Button>
           </CardContent>
         </Card>
       ) : (

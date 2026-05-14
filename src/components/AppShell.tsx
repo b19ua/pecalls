@@ -5,9 +5,9 @@ import { AppLogo } from "./AppLogo";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useI18n, LANGUAGE_OPTIONS, type Lang } from "@/lib/i18n";
+import { ADMIN_SESSION_KEY } from "@/routes/login";
 
 const NAV = [
   { to: "/dashboard",  key: "nav.dashboard",  icon: LayoutDashboard },
@@ -27,15 +27,19 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { t, lang, setLang } = useI18n();
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(ADMIN_SESSION_KEY);
+    }
     toast.success(t("nav.signOut"));
     navigate({ to: "/login" });
   };
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-      <div className="p-5 border-b border-sidebar-border">
-        <AppLogo variant="light" />
+      <div className="p-3 border-b border-sidebar-border">
+        <div className="rounded-lg bg-white p-2.5 flex items-center justify-center">
+          <AppLogo size="md" />
+        </div>
       </div>
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {NAV.map(({ to, key, icon: Icon }) => {
@@ -110,7 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <SidebarContent onNavigate={() => setOpen(false)} />
           </SheetContent>
         </Sheet>
-        <AppLogo variant="light" />
+        <AppLogo size="sm" />
         <div className="w-10" />
       </div>
 

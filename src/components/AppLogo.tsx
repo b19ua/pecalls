@@ -1,33 +1,20 @@
-import logoMark from "@/assets/logo-mark.png";
+import logoFull from "@/assets/logo.png";
 
 type Props = {
   className?: string;
-  showText?: boolean;
   variant?: "light" | "dark";
+  size?: "sm" | "md" | "lg";
 };
 
-export function AppLogo({ className = "", showText = true, variant = "dark" }: Props) {
-  const textColor = variant === "light" ? "text-sidebar-foreground" : "text-foreground";
-  const subColor = variant === "light" ? "text-sidebar-foreground/60" : "text-muted-foreground";
+export function AppLogo({ className = "", size = "md" }: Props) {
+  const h = size === "sm" ? "h-8" : size === "lg" ? "h-14" : "h-10";
   return (
-    <div className={`flex items-center gap-2.5 ${className}`}>
+    <div className={`flex items-center ${className}`}>
       <img
-        src={logoMark}
+        src={logoFull}
         alt="Premier Energy AI Calls"
-        width={36}
-        height={36}
-        className="h-9 w-9 object-contain drop-shadow-sm"
+        className={`${h} w-auto object-contain drop-shadow-sm`}
       />
-      {showText && (
-        <div className="flex flex-col leading-tight">
-          <span className={`font-display font-bold text-[15px] tracking-tight ${textColor}`}>
-            Premier Energy
-          </span>
-          <span className={`text-[10px] uppercase tracking-[0.18em] font-semibold ${subColor}`}>
-            AI Calls
-          </span>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Bot, PhoneCall, BookOpen, Megaphone, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Bot, PhoneCall, BookOpen, Megaphone, Settings, LogOut, Phone } from "lucide-react";
 import { AppLogo } from "./AppLogo";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 const NAV = [
   { to: "/dashboard",  label: "Дашборд",        icon: LayoutDashboard },
   { to: "/agents",     label: "ИИ-агенты",      icon: Bot },
+  { to: "/numbers",    label: "Номера Twilio",  icon: Phone },
   { to: "/calls",      label: "Звонки",         icon: PhoneCall },
   { to: "/knowledge",  label: "База знаний",    icon: BookOpen },
   { to: "/campaigns",  label: "Кампании",       icon: Megaphone },

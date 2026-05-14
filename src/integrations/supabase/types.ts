@@ -419,6 +419,56 @@ export type Database = {
         }
         Relationships: []
       }
+      twilio_numbers: {
+        Row: {
+          agent_id: string | null
+          capabilities: Json
+          created_at: string
+          friendly_name: string | null
+          id: string
+          owner_id: string
+          phone_e164: string
+          phone_sid: string
+          status_callback_url: string | null
+          updated_at: string
+          voice_webhook_url: string | null
+        }
+        Insert: {
+          agent_id?: string | null
+          capabilities?: Json
+          created_at?: string
+          friendly_name?: string | null
+          id?: string
+          owner_id: string
+          phone_e164: string
+          phone_sid: string
+          status_callback_url?: string | null
+          updated_at?: string
+          voice_webhook_url?: string | null
+        }
+        Update: {
+          agent_id?: string | null
+          capabilities?: Json
+          created_at?: string
+          friendly_name?: string | null
+          id?: string
+          owner_id?: string
+          phone_e164?: string
+          phone_sid?: string
+          status_callback_url?: string | null
+          updated_at?: string
+          voice_webhook_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "twilio_numbers_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -451,6 +501,21 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      match_chunks: {
+        Args: {
+          match_count?: number
+          p_agent_id: string
+          p_owner_id: string
+          query_embedding: string
+        }
+        Returns: {
+          chunk_index: number
+          content: string
+          document_id: string
+          id: string
+          similarity: number
+        }[]
       }
     }
     Enums: {

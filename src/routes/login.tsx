@@ -28,10 +28,10 @@ function LoginPage() {
     try {
       await login({ data: { username, password } });
       localStorage.setItem(ADMIN_SESSION_KEY, "1");
-      toast.success("Добро пожаловать!");
+      toast.success("Welcome back!");
       navigate({ to: "/dashboard" });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка авторизации");
+      toast.error(err instanceof Error ? err.message : "Authentication error");
     } finally {
       setLoading(false);
     }
@@ -52,15 +52,15 @@ function LoginPage() {
         </div>
         <div className="relative z-10 max-w-md">
           <h2 className="font-display text-4xl font-bold leading-tight">
-            ИИ-звонки нового поколения
+            Next-generation AI calling
           </h2>
           <p className="mt-4 text-sidebar-foreground/70 text-[15px] leading-relaxed">
-            Автоматизированная платформа голосовых ассистентов на базе Gemini Live и Twilio.
-            Входящие, исходящие, RAG-знания, human handoff — всё в одном месте.
+            Automated voice assistant platform powered by Gemini Live and Twilio.
+            Inbound, outbound, RAG knowledge, human handoff — all in one place.
           </p>
         </div>
         <div className="relative z-10 text-xs text-sidebar-foreground/50">
-          © {new Date().getFullYear()} Premier Energy. Все права защищены.
+          © {new Date().getFullYear()} Premier Energy. All rights reserved.
         </div>
       </div>
 
@@ -70,18 +70,18 @@ function LoginPage() {
             <AppLogo size="md" />
           </div>
           <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-3 py-1 text-xs font-semibold">
-            <Lock className="h-3.5 w-3.5" /> Админ-панель
+            <Lock className="h-3.5 w-3.5" /> Admin panel
           </div>
           <h1 className="font-display text-3xl font-bold tracking-tight mt-3">
-            Вход в платформу
+            Sign in to the platform
           </h1>
           <p className="text-muted-foreground mt-2">
-            Войдите как администратор, чтобы управлять ИИ-агентами и звонками.
+            Sign in as administrator to manage AI agents and calls.
           </p>
 
           <form onSubmit={onSubmit} className="mt-8 space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="username">Логин</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
                 value={username}
@@ -92,14 +92,14 @@ function LoginPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">Пароль</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Введите пароль"
+                placeholder="Enter your password"
                 autoComplete="current-password"
               />
             </div>
@@ -110,13 +110,13 @@ function LoginPage() {
               disabled={loading}
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Войти
+              Sign in
             </Button>
           </form>
 
           <p className="mt-6 text-sm text-center">
             <Link to="/" className="text-muted-foreground hover:text-foreground">
-              ← На главную
+              ← Back to home
             </Link>
           </p>
         </div>

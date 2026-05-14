@@ -14,16 +14,466 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      agents: {
+        Row: {
+          created_at: string
+          description: string | null
+          greeting: string
+          handoff_dtmf_digit: string | null
+          handoff_enabled: boolean
+          handoff_numbers: string[]
+          handoff_trigger_phrases: string[]
+          id: string
+          is_active: boolean
+          language: string
+          max_call_seconds: number
+          model: string
+          name: string
+          owner_id: string
+          record_calls: boolean
+          silence_timeout_seconds: number
+          system_prompt: string
+          temperature: number
+          twilio_number_e164: string | null
+          updated_at: string
+          voice: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          greeting?: string
+          handoff_dtmf_digit?: string | null
+          handoff_enabled?: boolean
+          handoff_numbers?: string[]
+          handoff_trigger_phrases?: string[]
+          id?: string
+          is_active?: boolean
+          language?: string
+          max_call_seconds?: number
+          model?: string
+          name: string
+          owner_id: string
+          record_calls?: boolean
+          silence_timeout_seconds?: number
+          system_prompt?: string
+          temperature?: number
+          twilio_number_e164?: string | null
+          updated_at?: string
+          voice?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          greeting?: string
+          handoff_dtmf_digit?: string | null
+          handoff_enabled?: boolean
+          handoff_numbers?: string[]
+          handoff_trigger_phrases?: string[]
+          id?: string
+          is_active?: boolean
+          language?: string
+          max_call_seconds?: number
+          model?: string
+          name?: string
+          owner_id?: string
+          record_calls?: boolean
+          silence_timeout_seconds?: number
+          system_prompt?: string
+          temperature?: number
+          twilio_number_e164?: string | null
+          updated_at?: string
+          voice?: string
+        }
+        Relationships: []
+      }
+      calls: {
+        Row: {
+          agent_id: string | null
+          cost_usd: number
+          created_at: string
+          direction: Database["public"]["Enums"]["call_direction"]
+          duration_seconds: number
+          ended_at: string | null
+          from_number: string | null
+          handoff_at: string | null
+          handoff_to: string | null
+          id: string
+          input_tokens: number
+          metadata: Json
+          output_tokens: number
+          owner_id: string
+          recording_path: string | null
+          recording_url: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["call_status"]
+          summary: string | null
+          to_number: string | null
+          transcript: Json
+          twilio_call_sid: string | null
+          updated_at: string
+        }
+        Insert: {
+          agent_id?: string | null
+          cost_usd?: number
+          created_at?: string
+          direction: Database["public"]["Enums"]["call_direction"]
+          duration_seconds?: number
+          ended_at?: string | null
+          from_number?: string | null
+          handoff_at?: string | null
+          handoff_to?: string | null
+          id?: string
+          input_tokens?: number
+          metadata?: Json
+          output_tokens?: number
+          owner_id: string
+          recording_path?: string | null
+          recording_url?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["call_status"]
+          summary?: string | null
+          to_number?: string | null
+          transcript?: Json
+          twilio_call_sid?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string | null
+          cost_usd?: number
+          created_at?: string
+          direction?: Database["public"]["Enums"]["call_direction"]
+          duration_seconds?: number
+          ended_at?: string | null
+          from_number?: string | null
+          handoff_at?: string | null
+          handoff_to?: string | null
+          id?: string
+          input_tokens?: number
+          metadata?: Json
+          output_tokens?: number
+          owner_id?: string
+          recording_path?: string | null
+          recording_url?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["call_status"]
+          summary?: string | null
+          to_number?: string | null
+          transcript?: Json
+          twilio_call_sid?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calls_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_contacts: {
+        Row: {
+          attempts: number
+          campaign_id: string
+          created_at: string
+          id: string
+          last_call_id: string | null
+          metadata: Json
+          name: string | null
+          owner_id: string
+          phone_e164: string
+          status: Database["public"]["Enums"]["contact_status"]
+        }
+        Insert: {
+          attempts?: number
+          campaign_id: string
+          created_at?: string
+          id?: string
+          last_call_id?: string | null
+          metadata?: Json
+          name?: string | null
+          owner_id: string
+          phone_e164: string
+          status?: Database["public"]["Enums"]["contact_status"]
+        }
+        Update: {
+          attempts?: number
+          campaign_id?: string
+          created_at?: string
+          id?: string
+          last_call_id?: string | null
+          metadata?: Json
+          name?: string | null
+          owner_id?: string
+          phone_e164?: string
+          status?: Database["public"]["Enums"]["contact_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_contacts_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_contacts_last_call_id_fkey"
+            columns: ["last_call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          agent_id: string
+          call_window_end: string
+          call_window_start: string
+          completed_contacts: number
+          created_at: string
+          id: string
+          max_concurrent: number
+          name: string
+          owner_id: string
+          scheduled_at: string | null
+          status: Database["public"]["Enums"]["campaign_status"]
+          timezone: string
+          total_contacts: number
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          call_window_end?: string
+          call_window_start?: string
+          completed_contacts?: number
+          created_at?: string
+          id?: string
+          max_concurrent?: number
+          name: string
+          owner_id: string
+          scheduled_at?: string | null
+          status?: Database["public"]["Enums"]["campaign_status"]
+          timezone?: string
+          total_contacts?: number
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          call_window_end?: string
+          call_window_start?: string
+          completed_contacts?: number
+          created_at?: string
+          id?: string
+          max_concurrent?: number
+          name?: string
+          owner_id?: string
+          scheduled_at?: string | null
+          status?: Database["public"]["Enums"]["campaign_status"]
+          timezone?: string
+          total_contacts?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_chunks: {
+        Row: {
+          agent_id: string
+          chunk_index: number
+          content: string
+          created_at: string
+          document_id: string
+          embedding: string | null
+          id: string
+          owner_id: string
+          token_count: number
+        }
+        Insert: {
+          agent_id: string
+          chunk_index?: number
+          content: string
+          created_at?: string
+          document_id: string
+          embedding?: string | null
+          id?: string
+          owner_id: string
+          token_count?: number
+        }
+        Update: {
+          agent_id?: string
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          document_id?: string
+          embedding?: string | null
+          id?: string
+          owner_id?: string
+          token_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_chunks_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_chunks_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_documents: {
+        Row: {
+          agent_id: string
+          chunk_count: number
+          created_at: string
+          error_message: string | null
+          file_name: string
+          file_path: string
+          id: string
+          mime_type: string | null
+          owner_id: string
+          size_bytes: number
+          status: Database["public"]["Enums"]["doc_status"]
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          chunk_count?: number
+          created_at?: string
+          error_message?: string | null
+          file_name: string
+          file_path: string
+          id?: string
+          mime_type?: string | null
+          owner_id: string
+          size_bytes?: number
+          status?: Database["public"]["Enums"]["doc_status"]
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          chunk_count?: number
+          created_at?: string
+          error_message?: string | null
+          file_name?: string
+          file_path?: string
+          id?: string
+          mime_type?: string | null
+          owner_id?: string
+          size_bytes?: number
+          status?: Database["public"]["Enums"]["doc_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_documents_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
+      call_direction: "inbound" | "outbound"
+      call_status:
+        | "queued"
+        | "ringing"
+        | "in_progress"
+        | "completed"
+        | "failed"
+        | "busy"
+        | "no_answer"
+        | "canceled"
+        | "handoff"
+      campaign_status:
+        | "draft"
+        | "scheduled"
+        | "running"
+        | "paused"
+        | "completed"
+      contact_status: "pending" | "calling" | "completed" | "failed" | "skipped"
+      doc_status: "uploaded" | "processing" | "ready" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +600,23 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+      call_direction: ["inbound", "outbound"],
+      call_status: [
+        "queued",
+        "ringing",
+        "in_progress",
+        "completed",
+        "failed",
+        "busy",
+        "no_answer",
+        "canceled",
+        "handoff",
+      ],
+      campaign_status: ["draft", "scheduled", "running", "paused", "completed"],
+      contact_status: ["pending", "calling", "completed", "failed", "skipped"],
+      doc_status: ["uploaded", "processing", "ready", "failed"],
+    },
   },
 } as const

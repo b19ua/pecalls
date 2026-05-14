@@ -12,8 +12,6 @@ import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { supabase } from "@/integrations/supabase/client";
-import { I18nProvider } from "@/lib/i18n";
-import { TooltipProvider } from "@/components/ui/tooltip";
 
 function NotFoundComponent() {
   return (
@@ -69,13 +67,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Premier Energy AI Calls — Платформа ИИ-звонков" },
-      { name: "description", content: "Автоматизированная платформа ИИ-звонков на базе Gemini Live и Twilio: входящие, исходящие, RAG-знания, human handoff." },
+      { title: "Premier Energy AI Calls" },
+      { name: "description", content: "Ai automation calls platform" },
       { name: "author", content: "Premier Energy" },
       { property: "og:title", content: "Premier Energy AI Calls" },
-      { property: "og:description", content: "Платформа автоматизированных ИИ-звонков." },
+      { property: "og:description", content: "Ai automation calls platform" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "Premier Energy AI Calls" },
+      { name: "twitter:description", content: "Ai automation calls platform" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/A3gAXX6SlUhbYM32QbMT0gxbsEH3/social-images/social-1778756470552-IMG_8820.webp" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/A3gAXX6SlUhbYM32QbMT0gxbsEH3/social-images/social-1778756470552-IMG_8820.webp" },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
   }),
@@ -114,13 +116,9 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <I18nProvider>
-        <TooltipProvider delayDuration={200}>
-          <AuthSync />
-          <Outlet />
-          <Toaster position="top-right" richColors closeButton />
-        </TooltipProvider>
-      </I18nProvider>
+      <AuthSync />
+      <Outlet />
+      <Toaster position="top-right" richColors closeButton />
     </QueryClientProvider>
   );
 }

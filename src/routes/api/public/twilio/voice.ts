@@ -62,16 +62,21 @@ export const Route = createFileRoute("/api/public/twilio/voice")({
           );
         }
 
-        // Build TwiML — MVP: greeting + Gather DTMF for handoff + reroute to bridge if configured
-        const bridgeWs = process.env.GEMINI_BRIDGE_WS_URL; // ws(s)://... external bridge service
+        // Build TwiML — connect Twilio Media Stream to our Supabase edge bridge.
         const greeting = escapeXml(agent.greeting || "Здравствуйте!");
         const lang = agent.language || "ru-RU";
 
+        // Default bridge: Supabase edge function (wss). Override with GEMINI_BRIDGE_WS_URL if needed.
+        const supaUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+        const defaultBridge = supaUrl
+          ? supaUrl.replace(/^https?:/, "wss:").replace(/\/$/, "") + "/functions/v1/voice-call-bridge"
+          : "";
+        const bridgeWs = process.env.GEMINI_BRIDGE_WS_URL || defaultBridge;
+
         if (bridgeWs) {
-          const streamUrl = `${bridgeWs.replace(/\/$/, "")}/?agent_id=${agent.id}&call_sid=${callSid}`;
+          const streamUrl = `${bridgeWs.replace(/\/$/, "")}?agent_id=${agent.id}&call_sid=${callSid}`;
           return twiml(
-            `<Say voice="alice" language="${escapeXml(lang)}">${greeting}</Say>` +
-              `<Connect><Stream url="${escapeXml(streamUrl)}"><Parameter name="agent_id" value="${agent.id}"/></Stream></Connect>`,
+            `<Connect><Stream url="${escapeXml(streamUrl)}"><Parameter name="agent_id" value="${agent.id}"/><Parameter name="call_sid" value="${callSid}"/></Stream></Connect>`,
           );
         }
 

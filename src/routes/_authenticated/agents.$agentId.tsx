@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/use-auth";
 import { GEMINI_VOICES, LANGUAGES } from "@/lib/voices";
 import { PageHeader } from "@/components/PageHeader";
+import { HintIcon } from "@/components/HintIcon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Save, Trash2, Loader2, PhoneCall } from "lucide-react";
 import { toast } from "sonner";
 import { TestCallDialog } from "@/components/TestCallDialog";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/agents/$agentId")({
   component: AgentEditor,
@@ -62,6 +64,7 @@ const DEFAULTS: AgentForm = {
 };
 
 function AgentEditor() {
+  const { t } = useI18n();
   const { agentId } = useParams({ from: "/_authenticated/agents/$agentId" });
   const isNew = agentId === "new";
   const navigate = useNavigate();
@@ -80,7 +83,7 @@ function AgentEditor() {
       .single()
       .then(({ data, error }) => {
         if (error || !data) {
-          toast.error("Агент не найден");
+          toast.error("404");
           navigate({ to: "/agents" });
           return;
         }
@@ -110,13 +113,16 @@ function AgentEditor() {
   const set = <K extends keyof AgentForm>(k: K, v: AgentForm[K]) => setForm((p) => ({ ...p, [k]: v }));
 
   async function handleSave() {
-    if (!user) return;
+    if (!user) {
+      toast.error("Auth required");
+      return;
+    }
     if (!form.name.trim()) {
-      toast.error("Укажите имя агента");
+      toast.error(t("agent.field.name"));
       return;
     }
     if (form.handoff_numbers.length > 5) {
-      toast.error("Не более 5 номеров для handoff");
+      toast.error("max 5");
       return;
     }
     setSaving(true);
@@ -134,71 +140,71 @@ function AgentEditor() {
       toast.error(error.message);
       return;
     }
-    toast.success(isNew ? "Агент создан" : "Сохранено");
+    toast.success("OK");
     if (isNew && data) navigate({ to: "/agents/$agentId", params: { agentId: data.id } });
   }
 
   async function handleDelete() {
-    if (!confirm("Удалить агента и всю его базу знаний?")) return;
+    if (!confirm(t("common.delete") + "?")) return;
     const { error } = await supabase.from("agents").delete().eq("id", agentId);
     if (error) return toast.error(error.message);
-    toast.success("Удалено");
+    toast.success("OK");
     navigate({ to: "/agents" });
   }
 
   if (loading) {
     return (
       <div className="p-8 flex items-center gap-2 text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Загрузка…
+        <Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}
       </div>
     );
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
       <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
-        <Link to="/agents"><ArrowLeft className="h-4 w-4 mr-1" /> К агентам</Link>
+        <Link to="/agents"><ArrowLeft className="h-4 w-4 mr-1" /> {t("agent.backToList")}</Link>
       </Button>
       <PageHeader
-        title={isNew ? "Новый агент" : form.name || "Агент"}
-        description="Голос, поведение, handoff и Twilio-номер"
+        title={isNew ? t("agent.title.new") : form.name || t("nav.agents")}
+        description={t("agent.subtitle")}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {!isNew && (
               <Button variant="outline" onClick={() => setTestOpen(true)}>
-                <PhoneCall className="h-4 w-4 mr-1.5" /> Test Call
+                <PhoneCall className="h-4 w-4 mr-1.5" /> {t("agent.testCall")}
               </Button>
             )}
             {!isNew && (
               <Button variant="outline" onClick={handleDelete}>
-                <Trash2 className="h-4 w-4 mr-1.5" /> Удалить
+                <Trash2 className="h-4 w-4 mr-1.5" /> {t("common.delete")}
               </Button>
             )}
             <Button onClick={handleSave} disabled={saving} className="bg-gradient-primary shadow-elegant">
               {saving ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />}
-              Сохранить
+              {t("common.save")}
             </Button>
           </div>
         }
       />
 
       <div className="space-y-5">
-        <Section title="Основное">
-          <Field label="Имя агента">
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Премьер Поддержка" />
+        <Section title={t("agent.section.basic")}>
+          <Field label={t("agent.field.name")}>
+            <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Premier Support" />
           </Field>
-          <Field label="Описание">
+          <Field label={t("agent.field.description")}>
             <Textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={2} />
           </Field>
           <div className="flex items-center justify-between">
-            <Label>Активен</Label>
+            <Label>{t("agent.field.active")}</Label>
             <Switch checked={form.is_active} onCheckedChange={(v) => set("is_active", v)} />
           </div>
         </Section>
 
-        <Section title="Голос и язык">
+        <Section title={t("agent.section.voice")}>
           <div className="grid md:grid-cols-2 gap-4">
-            <Field label="Голос Gemini">
+            <Field label={t("agent.field.voice")}>
               <Select value={form.voice} onValueChange={(v) => set("voice", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -210,7 +216,7 @@ function AgentEditor() {
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Язык">
+            <Field label={t("agent.field.language")}>
               <Select value={form.language} onValueChange={(v) => set("language", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -219,61 +225,62 @@ function AgentEditor() {
               </Select>
             </Field>
           </div>
-          <Field label={`Температура: ${form.temperature.toFixed(2)}`}>
+          <Field label={`${t("agent.field.temperature")}: ${form.temperature.toFixed(2)}`}>
             <Slider value={[form.temperature]} min={0} max={1.5} step={0.05} onValueChange={(v) => set("temperature", v[0])} />
           </Field>
         </Section>
 
-        <Section title="Поведение">
-          <Field label="Приветствие (произносится при ответе)">
+        <Section title={t("agent.section.behavior")}>
+          <Field label={t("agent.field.greeting")} hint={t("agent.hint.greeting")}>
             <Textarea value={form.greeting} onChange={(e) => set("greeting", e.target.value)} rows={2} />
           </Field>
-          <Field label="Системный промпт">
+          <Field label={t("agent.field.systemPrompt")} hint={t("agent.hint.systemPrompt")}>
             <Textarea value={form.system_prompt} onChange={(e) => set("system_prompt", e.target.value)} rows={6} />
           </Field>
           <div className="grid md:grid-cols-2 gap-4">
-            <Field label="Тишина перед завершением (сек)">
+            <Field label={t("agent.field.silence")}>
               <Input type="number" value={form.silence_timeout_seconds} onChange={(e) => set("silence_timeout_seconds", Number(e.target.value))} />
             </Field>
-            <Field label="Макс. длительность звонка (сек)">
+            <Field label={t("agent.field.maxCall")}>
               <Input type="number" value={form.max_call_seconds} onChange={(e) => set("max_call_seconds", Number(e.target.value))} />
             </Field>
           </div>
           <div className="flex items-center justify-between">
-            <Label>Записывать звонки</Label>
+            <Label>{t("agent.field.record")}</Label>
             <Switch checked={form.record_calls} onCheckedChange={(v) => set("record_calls", v)} />
           </div>
         </Section>
 
-        <Section title="Telephony">
-          <Field label="Twilio номер (E.164, для входящих)">
+        <Section title={t("agent.section.telephony")}>
+          <Field label={t("agent.field.twilio")}>
             <Input value={form.twilio_number_e164} onChange={(e) => set("twilio_number_e164", e.target.value)} placeholder="+37360123456" />
           </Field>
         </Section>
 
-        <Section title="Human Handoff">
+        <Section title={t("agent.section.handoff")}>
           <div className="flex items-center justify-between">
-            <Label>Включить handoff</Label>
+            <Label className="flex items-center gap-1.5">
+              {t("agent.field.handoffOn")} <HintIcon text={t("agent.hint.handoff")} />
+            </Label>
             <Switch checked={form.handoff_enabled} onCheckedChange={(v) => set("handoff_enabled", v)} />
           </div>
-          <Field label="DTMF цифра (нажатие на телефоне)">
+          <Field label={t("agent.field.dtmf")}>
             <Input maxLength={1} value={form.handoff_dtmf_digit} onChange={(e) => set("handoff_dtmf_digit", e.target.value)} className="w-24" />
           </Field>
-          <Field label="Триггерные фразы (через запятую)">
+          <Field label={t("agent.field.phrases")}>
             <Textarea
               rows={2}
               value={form.handoff_trigger_phrases.join(", ")}
               onChange={(e) => set("handoff_trigger_phrases", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
             />
           </Field>
-          <Field label="Номера для перевода (до 5, по одному в строке)">
+          <Field label={t("agent.field.numbers")} hint={t("agent.hint.numbers")}>
             <Textarea
               rows={5}
               placeholder="+37360111111&#10;+37360222222"
               value={form.handoff_numbers.join("\n")}
               onChange={(e) => set("handoff_numbers", e.target.value.split("\n").map((s) => s.trim()).filter(Boolean))}
             />
-            <p className="text-xs text-muted-foreground mt-1">Звонок переводится на случайный свободный номер из списка.</p>
           </Field>
         </Section>
       </div>
@@ -281,7 +288,7 @@ function AgentEditor() {
       {!isNew && (
         <TestCallDialog
           agentId={agentId}
-          agentName={form.name || "Агент"}
+          agentName={form.name || "Agent"}
           open={testOpen}
           onOpenChange={setTestOpen}
         />
@@ -293,7 +300,7 @@ function AgentEditor() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <Card className="bg-gradient-card shadow-soft">
-      <CardContent className="p-6 space-y-4">
+      <CardContent className="p-4 sm:p-6 space-y-4">
         <h3 className="font-display text-lg font-semibold">{title}</h3>
         <Separator />
         {children}
@@ -302,10 +309,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-sm">{label}</Label>
+      <Label className="text-sm flex items-center gap-1.5">
+        {label}
+        {hint && <HintIcon text={hint} />}
+      </Label>
       {children}
     </div>
   );

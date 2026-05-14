@@ -69,7 +69,6 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
     body: JSON.stringify({
       model: "google/gemini-embedding-001",
       input: texts,
-      dimensions: 1536,
     }),
   });
   if (!res.ok) throw new Error(`Embedding failed: ${res.status} ${await res.text()}`);

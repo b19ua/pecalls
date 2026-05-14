@@ -4,7 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PhoneCall, PhoneIncoming, PhoneOutgoing } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { PhoneCall, PhoneIncoming, PhoneOutgoing, Download } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/calls")({ component: CallsPage });
@@ -40,9 +41,26 @@ function CallsPage() {
 
   const localeMap = { ru: "ru-RU", ro: "ro-RO", en: "en-US" } as const;
 
+  const exportCsv = () => {
+    const header = ["created_at", "direction", "from", "to", "status", "duration_seconds"];
+    const rows = calls.map((c) => [c.created_at, c.direction, c.from_number ?? "", c.to_number ?? "", c.status, String(c.duration_seconds)]);
+    const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `calls-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
-      <PageHeader title={t("calls.title")} description={t("calls.subtitle")} />
+      <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+        <PageHeader title={t("calls.title")} description={t("calls.subtitle")} />
+        <Button variant="outline" size="sm" onClick={exportCsv} disabled={!calls.length}>
+          <Download className="h-4 w-4 mr-1.5" /> CSV
+        </Button>
+      </div>
       {loading ? (
         <p className="text-muted-foreground text-sm">{t("common.loading")}</p>
       ) : calls.length === 0 ? (

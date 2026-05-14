@@ -1,0 +1,314 @@
+// Twilio Media Streams ↔ Gemini Live audio bridge.
+// Twilio sends μ-law 8kHz, Gemini wants PCM16 16kHz; Gemini returns PCM16 24kHz, Twilio wants μ-law 8kHz.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY")!;
+const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
+
+const GEMINI_MODELS = [
+  "models/gemini-2.5-flash-native-audio-latest",
+  "models/gemini-2.5-flash-native-audio-preview-12-2025",
+  "models/gemini-2.5-flash-preview-native-audio-dialog",
+];
+const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
+const log = (...a: unknown[]) => console.log("[bridge]", ...a);
+
+Deno.serve((req) => {
+  const url = new URL(req.url);
+  const agentId = url.searchParams.get("agent_id") || "";
+  const callSid = url.searchParams.get("call_sid") || "";
+  const upgrade = req.headers.get("upgrade") || "";
+  if (upgrade.toLowerCase() !== "websocket") {
+    return new Response("expected WebSocket upgrade", { status: 426 });
+  }
+  const { socket: twilio, response } = Deno.upgradeWebSocket(req);
+  handle(twilio, agentId, callSid).catch((e) => console.error("bridge error", e));
+  return response;
+});
+
+type Ctx = { systemPrompt: string; voice: string; language: string; greeting: string };
+
+async function handle(twilio: WebSocket, agentId: string, callSid: string) {
+  let streamSid = "";
+  let gemini: WebSocket | null = null;
+  let geminiReady = false;
+  let geminiModelIndex = 0;
+  let greetingRequested = false;
+  let pendingAudioToGemini: string[] = [];
+  const transcript: { role: "user" | "agent"; text: string; ts: string }[] = [];
+  let lastUserAudioAt = Date.now();
+  let silenceWarned = false;
+  let silenceTimer: number | null = null;
+
+  let ctx: Ctx | null = null;
+  let ctxResolver: ((c: Ctx) => void) | null = null;
+  const ctxReady = new Promise<Ctx>((res) => { ctxResolver = res; });
+
+  const connectGemini = () => {
+    const model = GEMINI_MODELS[geminiModelIndex] || GEMINI_MODELS[0];
+    log("connecting Gemini Live model=", model);
+    gemini = new WebSocket(GEMINI_WS);
+    gemini.onopen = async () => {
+      const c = ctx || await ctxReady;
+      gemini!.send(JSON.stringify({
+        setup: {
+          model,
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } } },
+          },
+          systemInstruction: { parts: [{ text: c.systemPrompt }] },
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
+        },
+      }));
+    };
+    gemini.onmessage = async (ev) => {
+      try {
+        const text = typeof ev.data === "string" ? ev.data : await (ev.data as Blob).text();
+        const msg = JSON.parse(text);
+        if (msg.setupComplete) {
+          geminiReady = true;
+          if (!greetingRequested) {
+            greetingRequested = true;
+            const c = ctx!;
+            const langName: Record<string, string> = { "ru-RU": "Russian", "en-US": "English", "ro-RO": "Romanian" };
+            const lang = langName[c.language] || c.language;
+            gemini!.send(JSON.stringify({
+              clientContent: {
+                turns: [{ role: "user", parts: [{ text: `The phone call has just connected. Speak immediately in ${lang}: greet warmly with "${c.greeting}", then ask one short open question. Keep replies under 2 sentences.` }] }],
+                turnComplete: true,
+              },
+            }));
+          }
+          for (const b64 of pendingAudioToGemini) sendAudioToGemini(b64);
+          pendingAudioToGemini = [];
+          return;
+        }
+        if (msg.serverContent) {
+          const parts = msg.serverContent?.modelTurn?.parts || [];
+          for (const p of parts) {
+            if (p.inlineData?.data) {
+              const pcm = b64ToBytes(p.inlineData.data);
+              const rate = parseAudioRate(p.inlineData.mimeType) || 24000;
+              sendMulawToTwilio(pcmToMulaw8k(pcm, rate));
+            } else if (p.text && !p.thought) {
+              transcript.push({ role: "agent", text: p.text, ts: new Date().toISOString() });
+            }
+          }
+          const it = msg.serverContent?.inputTranscription?.text;
+          if (it) transcript.push({ role: "user", text: it, ts: new Date().toISOString() });
+          const ot = msg.serverContent?.outputTranscription?.text;
+          if (ot) transcript.push({ role: "agent", text: ot, ts: new Date().toISOString() });
+        } else if (msg.error) {
+          log("gemini ERROR", JSON.stringify(msg.error));
+        }
+      } catch (e) {
+        console.error("gemini parse", e);
+      }
+    };
+    gemini.onerror = (e) => log("gemini ERROR", (e as ErrorEvent).message || String(e));
+    gemini.onclose = (e) => {
+      log("gemini CLOSED", e.code, e.reason);
+      geminiReady = false;
+      if (!greetingRequested && e.code === 1008 && geminiModelIndex < GEMINI_MODELS.length - 1 && twilio.readyState === 1) {
+        geminiModelIndex += 1;
+        setTimeout(connectGemini, 150);
+      }
+    };
+  };
+
+  const sendAudioToGemini = (mulawB64: string) => {
+    if (!gemini || gemini.readyState !== 1) return;
+    const mulawBytes = b64ToBytes(mulawB64);
+    let nonSilent = 0;
+    for (let i = 0; i < mulawBytes.length; i++) {
+      if (mulawBytes[i] !== 0xff && mulawBytes[i] !== 0x7f) { nonSilent++; if (nonSilent > 8) break; }
+    }
+    if (nonSilent > 8) lastUserAudioAt = Date.now();
+    const pcm16k = mulaw8kToPcm16k(mulawBytes);
+    gemini.send(JSON.stringify({
+      realtimeInput: { mediaChunks: [{ mimeType: "audio/pcm;rate=16000", data: bytesToB64(pcm16k) }] },
+    }));
+  };
+
+  const checkSilence = () => {
+    if (twilio.readyState !== 1) return;
+    const idleMs = Date.now() - lastUserAudioAt;
+    if (idleMs >= 20_000) {
+      try {
+        if (gemini && gemini.readyState === 1) {
+          gemini.send(JSON.stringify({
+            clientContent: {
+              turns: [{ role: "user", parts: [{ text: "[system] Line silent 20s. Say a brief polite goodbye and end the call." }] }],
+              turnComplete: true,
+            },
+          }));
+        }
+      } catch { /* noop */ }
+      setTimeout(() => { try { twilio.close(); } catch { /* noop */ } }, 4000);
+      if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
+      return;
+    }
+    if (idleMs >= 8_000 && !silenceWarned) {
+      silenceWarned = true;
+      try {
+        if (gemini && gemini.readyState === 1) {
+          gemini.send(JSON.stringify({
+            clientContent: {
+              turns: [{ role: "user", parts: [{ text: "[system] Quiet ~8s. Politely re-engage in one short sentence." }] }],
+              turnComplete: true,
+            },
+          }));
+        }
+      } catch { /* noop */ }
+    } else if (idleMs < 4_000) {
+      silenceWarned = false;
+    }
+  };
+
+  const sendMulawToTwilio = (mulawBytes: Uint8Array) => {
+    if (twilio.readyState !== 1 || !streamSid) return;
+    for (let i = 0; i < mulawBytes.length; i += 160) {
+      const chunk = mulawBytes.slice(i, Math.min(i + 160, mulawBytes.length));
+      twilio.send(JSON.stringify({
+        event: "media",
+        streamSid,
+        media: { payload: bytesToB64(chunk) },
+      }));
+    }
+  };
+
+  twilio.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(typeof ev.data === "string" ? ev.data : "");
+      if (msg.event === "start") {
+        streamSid = msg.start?.streamSid || "";
+        const params = msg.start?.customParameters || msg.start?.custom_parameters || {};
+        if (!agentId && params.agent_id) agentId = params.agent_id;
+        log("twilio START sid=", streamSid, "agent=", agentId);
+        lastUserAudioAt = Date.now();
+        if (silenceTimer === null) silenceTimer = setInterval(checkSilence, 2000) as unknown as number;
+        if (!gemini && agentId) startContextAndGemini(agentId);
+      } else if (msg.event === "media") {
+        const b64 = msg.media?.payload;
+        if (!b64) return;
+        if (geminiReady) sendAudioToGemini(b64);
+        else pendingAudioToGemini.push(b64);
+      } else if (msg.event === "stop") {
+        log("twilio STOP");
+        if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
+        twilio.close();
+      }
+    } catch (e) {
+      console.error("twilio parse", e);
+    }
+  };
+
+  twilio.onclose = async () => {
+    if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
+    try { gemini?.close(); } catch { /* noop */ }
+    if (transcript.length && callSid) {
+      await supa.from("calls").update({ transcript }).eq("twilio_call_sid", callSid);
+    }
+  };
+  twilio.onerror = (e) => log("twilio ERROR", (e as ErrorEvent).message || String(e));
+
+  function startContextAndGemini(id: string) {
+    connectGemini();
+    loadContext(id).then((loaded) => {
+      ctx = loaded;
+      log("loaded ctx voice=", loaded.voice, "lang=", loaded.language);
+      ctxResolver?.(loaded);
+    }).catch((e) => {
+      console.error("load context", e);
+      const fb: Ctx = { systemPrompt: "Ты вежливый ассистент. Отвечай кратко.", voice: "Puck", language: "ru-RU", greeting: "Здравствуйте!" };
+      ctx = fb;
+      ctxResolver?.(fb);
+    });
+  }
+
+  if (agentId) startContextAndGemini(agentId);
+}
+
+async function loadContext(agentId: string): Promise<Ctx> {
+  const { data: agent } = await supa
+    .from("agents")
+    .select("system_prompt, voice, language, greeting, name, description")
+    .eq("id", agentId)
+    .maybeSingle();
+  if (!agent) {
+    return { systemPrompt: "Ты вежливый ассистент Premier Energy.", voice: "Puck", language: "ru-RU", greeting: "Здравствуйте!" };
+  }
+  return {
+    systemPrompt: agent.system_prompt,
+    voice: agent.voice || "Puck",
+    language: agent.language || "ru-RU",
+    greeting: agent.greeting || "Здравствуйте!",
+  };
+}
+
+// ───────── Audio codecs ─────────
+function mulawDecode(u: number): number {
+  u = ~u & 0xff;
+  const sign = u & 0x80;
+  const exponent = (u >> 4) & 0x07;
+  const mantissa = u & 0x0f;
+  let sample = ((mantissa << 3) + 0x84) << exponent;
+  sample -= 0x84;
+  return sign ? -sample : sample;
+}
+function mulawEncode(s: number): number {
+  const BIAS = 0x84, CLIP = 32635;
+  const sign = s < 0 ? 0x80 : 0;
+  if (sign) s = -s;
+  if (s > CLIP) s = CLIP;
+  s += BIAS;
+  let exponent = 7;
+  for (let mask = 0x4000; (s & mask) === 0 && exponent > 0; mask >>= 1) exponent--;
+  const mantissa = (s >> (exponent + 3)) & 0x0f;
+  return ~(sign | (exponent << 4) | mantissa) & 0xff;
+}
+function mulaw8kToPcm16k(mulaw: Uint8Array): Uint8Array {
+  const out = new Int16Array(mulaw.length * 2);
+  let prev = 0;
+  for (let i = 0; i < mulaw.length; i++) {
+    const cur = mulawDecode(mulaw[i]);
+    out[i * 2] = (prev + cur) >> 1;
+    out[i * 2 + 1] = cur;
+    prev = cur;
+  }
+  return new Uint8Array(out.buffer);
+}
+function pcmToMulaw8k(pcmBytes: Uint8Array, sourceRate: number): Uint8Array {
+  const samples = new Int16Array(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength / 2);
+  const ratio = Math.max(1, Math.round(sourceRate / 8000));
+  const outLen = Math.floor(samples.length / ratio);
+  const out = new Uint8Array(outLen);
+  for (let i = 0, j = 0; j < outLen; i += ratio, j++) {
+    let sum = 0;
+    for (let k = 0; k < ratio; k++) sum += samples[i + k] | 0;
+    out[j] = mulawEncode((sum / ratio) | 0);
+  }
+  return out;
+}
+function parseAudioRate(mimeType?: string): number | null {
+  const m = mimeType?.match(/rate=(\d+)/i);
+  return m ? Number(m[1]) : null;
+}
+function b64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function bytesToB64(bytes: Uint8Array): string {
+  let s = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    s += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)));
+  }
+  return btoa(s);
+}

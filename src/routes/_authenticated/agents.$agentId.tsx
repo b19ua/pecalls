@@ -13,8 +13,9 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Save, Trash2, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Trash2, Loader2, PhoneCall } from "lucide-react";
 import { toast } from "sonner";
+import { TestCallDialog } from "@/components/TestCallDialog";
 
 export const Route = createFileRoute("/_authenticated/agents/$agentId")({
   component: AgentEditor,
@@ -68,6 +69,7 @@ function AgentEditor() {
   const [form, setForm] = useState<AgentForm>(DEFAULTS);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [testOpen, setTestOpen] = useState(false);
 
   useEffect(() => {
     if (isNew) return;
@@ -162,6 +164,11 @@ function AgentEditor() {
         description="Голос, поведение, handoff и Twilio-номер"
         actions={
           <div className="flex gap-2">
+            {!isNew && (
+              <Button variant="outline" onClick={() => setTestOpen(true)}>
+                <PhoneCall className="h-4 w-4 mr-1.5" /> Test Call
+              </Button>
+            )}
             {!isNew && (
               <Button variant="outline" onClick={handleDelete}>
                 <Trash2 className="h-4 w-4 mr-1.5" /> Удалить
@@ -270,6 +277,15 @@ function AgentEditor() {
           </Field>
         </Section>
       </div>
+
+      {!isNew && (
+        <TestCallDialog
+          agentId={agentId}
+          agentName={form.name || "Агент"}
+          open={testOpen}
+          onOpenChange={setTestOpen}
+        />
+      )}
     </div>
   );
 }

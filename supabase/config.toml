@@ -2,3 +2,6 @@ project_id = "rdlilbjqdpqzvytejblz"
 
 [functions.voice-call-bridge]
 verify_jwt = false
+
+[functions.agent-test-bridge]
+verify_jwt = false

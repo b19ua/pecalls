@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PhoneCall, PhoneIncoming, PhoneOutgoing } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/calls")({ component: CallsPage });
 
@@ -21,6 +22,7 @@ type Call = {
 };
 
 function CallsPage() {
+  const { t, lang } = useI18n();
   const [calls, setCalls] = useState<Call[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -36,19 +38,19 @@ function CallsPage() {
       });
   }, []);
 
+  const localeMap = { ru: "ru-RU", ro: "ro-RO", en: "en-US" } as const;
+
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <PageHeader title="Звонки" description="История всех входящих и исходящих звонков с транскрипцией и записью." />
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+      <PageHeader title={t("calls.title")} description={t("calls.subtitle")} />
       {loading ? (
-        <p className="text-muted-foreground text-sm">Загрузка…</p>
+        <p className="text-muted-foreground text-sm">{t("common.loading")}</p>
       ) : calls.length === 0 ? (
         <Card className="bg-gradient-card border-dashed border-2">
           <CardContent className="py-16 text-center">
             <PhoneCall className="h-10 w-10 text-primary mx-auto mb-3" />
-            <h3 className="font-display text-xl font-semibold mb-2">Пока нет звонков</h3>
-            <p className="text-muted-foreground text-sm max-w-md mx-auto">
-              Привяжите номер Twilio к агенту и сделайте первый звонок.
-            </p>
+            <h3 className="font-display text-xl font-semibold mb-2">{t("calls.empty.title")}</h3>
+            <p className="text-muted-foreground text-sm max-w-md mx-auto">{t("calls.empty.body")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -56,16 +58,16 @@ function CallsPage() {
           {calls.map((c) => (
             <Link key={c.id} to="/calls/$callId" params={{ callId: c.id }}>
               <Card className="bg-gradient-card shadow-soft hover:shadow-elegant transition-shadow cursor-pointer">
-                <CardContent className="p-4 flex items-center gap-4">
-                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                <CardContent className="p-4 flex items-center gap-3 sm:gap-4">
+                  <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                     {c.direction === "inbound" ? <PhoneIncoming className="h-4 w-4 text-success" /> : <PhoneOutgoing className="h-4 w-4 text-primary-glow" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">
+                    <div className="font-medium truncate text-sm sm:text-base">
                       {c.direction === "inbound" ? c.from_number : c.to_number} → {c.direction === "inbound" ? c.to_number : c.from_number}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {new Date(c.created_at).toLocaleString()} · {c.duration_seconds}s
+                      {new Date(c.created_at).toLocaleString(localeMap[lang])} · {c.duration_seconds}s
                     </div>
                   </div>
                   <Badge variant={c.status === "completed" ? "default" : c.status === "failed" ? "destructive" : "secondary"}>

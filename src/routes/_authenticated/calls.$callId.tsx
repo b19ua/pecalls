@@ -5,12 +5,14 @@ import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/calls/$callId")({ component: CallDetail });
 
 type TranscriptItem = { role: "agent" | "user" | "system"; text: string; ts?: string };
 
 function CallDetail() {
+  const { t } = useI18n();
   const { callId } = useParams({ from: "/_authenticated/calls/$callId" });
   const [call, setCall] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -21,31 +23,31 @@ function CallDetail() {
     });
   }, [callId]);
 
-  if (loading) return <div className="p-8 flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Загрузка…</div>;
-  if (!call) return <div className="p-8">Звонок не найден</div>;
+  if (loading) return <div className="p-8 flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}</div>;
+  if (!call) return <div className="p-8">{t("calls.empty.title")}</div>;
 
   const transcript: TranscriptItem[] = Array.isArray(call.transcript) ? call.transcript : [];
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
       <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
-        <Link to="/calls"><ArrowLeft className="h-4 w-4 mr-1" /> К списку</Link>
+        <Link to="/calls"><ArrowLeft className="h-4 w-4 mr-1" /> {t("call.back")}</Link>
       </Button>
       <PageHeader
-        title={`${call.direction === "inbound" ? "Входящий" : "Исходящий"} · ${call.status}`}
+        title={`${call.direction === "inbound" ? t("call.inbound") : t("call.outbound")} · ${call.status}`}
         description={`${call.from_number ?? "—"} → ${call.to_number ?? "—"} · ${call.duration_seconds}s`}
       />
 
-      <div className="grid md:grid-cols-3 gap-4 mb-5">
-        <Stat label="Длительность" value={`${call.duration_seconds}s`} />
-        <Stat label="Токены" value={(call.input_tokens + call.output_tokens).toLocaleString()} />
-        <Stat label="Стоимость" value={`$${Number(call.cost_usd ?? 0).toFixed(4)}`} />
+      <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-5">
+        <Stat label={t("call.duration")} value={`${call.duration_seconds}s`} />
+        <Stat label={t("call.tokens")} value={(call.input_tokens + call.output_tokens).toLocaleString()} />
+        <Stat label={t("call.cost")} value={`$${Number(call.cost_usd ?? 0).toFixed(4)}`} />
       </div>
 
       {call.recording_url && (
         <Card className="bg-gradient-card shadow-soft mb-5">
           <CardContent className="p-5">
-            <h3 className="font-display text-lg font-semibold mb-3">Запись</h3>
+            <h3 className="font-display text-lg font-semibold mb-3">{t("call.recording")}</h3>
             <audio controls src={call.recording_url} className="w-full" />
           </CardContent>
         </Card>
@@ -53,18 +55,18 @@ function CallDetail() {
 
       <Card className="bg-gradient-card shadow-soft">
         <CardContent className="p-5">
-          <h3 className="font-display text-lg font-semibold mb-3">Транскрипция</h3>
+          <h3 className="font-display text-lg font-semibold mb-3">{t("call.transcript")}</h3>
           {transcript.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Транскрипция появится после завершения звонка.</p>
+            <p className="text-sm text-muted-foreground">{t("call.transcript.empty")}</p>
           ) : (
             <div className="space-y-3">
-              {transcript.map((t, i) => (
-                <div key={i} className={`flex ${t.role === "agent" ? "justify-start" : "justify-end"}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
-                    t.role === "agent" ? "bg-primary/10 text-foreground" : "bg-secondary text-foreground"
+              {transcript.map((tr, i) => (
+                <div key={i} className={`flex ${tr.role === "agent" ? "justify-start" : "justify-end"}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${
+                    tr.role === "agent" ? "bg-primary/10 text-foreground" : "bg-secondary text-foreground"
                   }`}>
-                    <div className="text-[10px] uppercase opacity-60 mb-0.5">{t.role}</div>
-                    {t.text}
+                    <div className="text-[10px] uppercase opacity-60 mb-0.5">{tr.role}</div>
+                    {tr.text}
                   </div>
                 </div>
               ))}
@@ -76,7 +78,7 @@ function CallDetail() {
       {call.summary && (
         <Card className="bg-gradient-card shadow-soft mt-5">
           <CardContent className="p-5">
-            <h3 className="font-display text-lg font-semibold mb-2">Резюме</h3>
+            <h3 className="font-display text-lg font-semibold mb-2">{t("call.summary")}</h3>
             <p className="text-sm whitespace-pre-wrap">{call.summary}</p>
           </CardContent>
         </Card>
@@ -88,9 +90,9 @@ function CallDetail() {
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <Card className="bg-gradient-card shadow-soft">
-      <CardContent className="p-4">
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="font-display text-2xl font-bold">{value}</div>
+      <CardContent className="p-3 sm:p-4">
+        <div className="text-[11px] sm:text-xs text-muted-foreground">{label}</div>
+        <div className="font-display text-lg sm:text-2xl font-bold">{value}</div>
       </CardContent>
     </Card>
   );

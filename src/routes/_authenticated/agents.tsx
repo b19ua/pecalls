@@ -4,8 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Bot, Phone } from "lucide-react";
+import { Plus, Bot, Phone, Lightbulb } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/agents")({
   component: AgentsPage,
@@ -22,6 +23,7 @@ type Agent = {
 };
 
 function AgentsPage() {
+  const { t } = useI18n();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -33,36 +35,39 @@ function AgentsPage() {
   }, []);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader
-        title="ИИ-агенты"
-        description="Создавайте голосовых ассистентов с уникальным голосом, базой знаний и логикой handoff."
+        title={t("agents.title")}
+        description={t("agents.subtitle")}
         actions={
           <Button asChild className="bg-gradient-primary shadow-elegant">
-            <Link to="/agents/$agentId" params={{ agentId: "new" }}><Plus className="h-4 w-4 mr-1.5" /> Новый агент</Link>
+            <Link to="/agents/$agentId" params={{ agentId: "new" }}><Plus className="h-4 w-4 mr-1.5" /> {t("agents.new")}</Link>
           </Button>
         }
       />
 
+      <div className="mb-5 rounded-xl border border-primary/20 bg-primary/5 p-3 flex items-start gap-2.5 text-sm">
+        <Lightbulb className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+        <span className="text-muted-foreground">{t("agents.tip")}</span>
+      </div>
+
       {loading ? (
-        <div className="text-muted-foreground text-sm">Загрузка...</div>
+        <div className="text-muted-foreground text-sm">{t("common.loading")}</div>
       ) : agents.length === 0 ? (
         <Card className="bg-gradient-card border-dashed border-2 border-border">
           <CardContent className="py-16 text-center">
             <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 mb-4">
               <Bot className="h-8 w-8 text-primary" />
             </div>
-            <h3 className="font-display text-xl font-semibold mb-2">Пока нет агентов</h3>
-            <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-6">
-              Создайте первого ИИ-агента — настройте голос Gemini, приветствие и подключите Twilio-номер.
-            </p>
+            <h3 className="font-display text-xl font-semibold mb-2">{t("agents.empty.title")}</h3>
+            <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-6">{t("agents.empty.body")}</p>
             <Button asChild className="bg-gradient-primary shadow-elegant">
-              <Link to="/agents/$agentId" params={{ agentId: "new" }}><Plus className="h-4 w-4 mr-1.5" /> Создать агента</Link>
+              <Link to="/agents/$agentId" params={{ agentId: "new" }}><Plus className="h-4 w-4 mr-1.5" /> {t("agents.empty.cta")}</Link>
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {agents.map((a) => (
             <Link key={a.id} to="/agents/$agentId" params={{ agentId: a.id }}>
               <Card className="bg-gradient-card shadow-soft hover:shadow-elegant transition-shadow cursor-pointer h-full">
@@ -72,7 +77,7 @@ function AgentsPage() {
                       <Bot className="h-5 w-5 text-primary" />
                     </div>
                     <Badge variant={a.is_active ? "default" : "secondary"}>
-                      {a.is_active ? "Активен" : "Выключен"}
+                      {a.is_active ? t("common.active") : t("common.inactive")}
                     </Badge>
                   </div>
                   <h3 className="font-display text-lg font-semibold">{a.name}</h3>

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { verifyTwilioRequest } from "@/lib/twilio-verify.server";
 
 function escapeXml(s: string) {
   return s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]!));
@@ -19,6 +20,9 @@ export const Route = createFileRoute("/api/public/twilio/voice")({
         const url = new URL(request.url);
         const agentIdParam = url.searchParams.get("agent_id");
         const form = await request.formData();
+        if (!(await verifyTwilioRequest(request, form))) {
+          return new Response("Invalid signature", { status: 403 });
+        }
         const callSid = String(form.get("CallSid") ?? "");
         const fromNumber = String(form.get("From") ?? "");
         const toNumber = String(form.get("To") ?? "");

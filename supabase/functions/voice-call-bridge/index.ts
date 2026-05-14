@@ -5,6 +5,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY")!;
+const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY") || "";
+const TWILIO_KEY = Deno.env.get("TWILIO_API_KEY") || "";
+const TWILIO_GATEWAY = "https://connector-gateway.lovable.dev/twilio";
 const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
 
 const GEMINI_MODELS = [
@@ -23,12 +26,27 @@ Deno.serve((req) => {
   if (upgrade.toLowerCase() !== "websocket") {
     return new Response("expected WebSocket upgrade", { status: 426 });
   }
-  const { socket: twilio, response } = Deno.upgradeWebSocket(req);
+  // Twilio Media Streams sends Sec-WebSocket-Protocol: audio.twilio.com.
+  // Echo it back if requested so the handshake completes cleanly.
+  const requested = req.headers.get("sec-websocket-protocol") || "";
+  const wantTwilio = requested.split(",").map((s) => s.trim()).includes("audio.twilio.com");
+  const upgradeOpts = wantTwilio ? { protocol: "audio.twilio.com" } : undefined;
+  const { socket: twilio, response } = Deno.upgradeWebSocket(req, upgradeOpts);
   handle(twilio, agentId, callSid).catch((e) => console.error("bridge error", e));
   return response;
 });
 
-type Ctx = { systemPrompt: string; voice: string; language: string; greeting: string };
+type Ctx = {
+  systemPrompt: string;
+  voice: string;
+  language: string;
+  greeting: string;
+  recordCalls: boolean;
+  handoffEnabled: boolean;
+  handoffDigit: string;
+  handoffPhrases: string[];
+  handoffNumbers: string[];
+};
 
 async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let streamSid = "";
@@ -41,6 +59,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let lastUserAudioAt = Date.now();
   let silenceWarned = false;
   let silenceTimer: number | null = null;
+  let handoffTriggered = false;
+  let recordingStarted = false;
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;
@@ -99,7 +119,10 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
             }
           }
           const it = msg.serverContent?.inputTranscription?.text;
-          if (it) transcript.push({ role: "user", text: it, ts: new Date().toISOString() });
+          if (it) {
+            transcript.push({ role: "user", text: it, ts: new Date().toISOString() });
+            maybeHandoffByPhrase(it);
+          }
           const ot = msg.serverContent?.outputTranscription?.text;
           if (ot) transcript.push({ role: "agent", text: ot, ts: new Date().toISOString() });
         } else if (msg.error) {
@@ -181,6 +204,64 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     }
   };
 
+  const maybeHandoffByPhrase = (text: string) => {
+    if (handoffTriggered || !ctx?.handoffEnabled || !ctx.handoffNumbers.length) return;
+    const lower = text.toLowerCase();
+    const hit = ctx.handoffPhrases.some((p) => p && lower.includes(p.toLowerCase()));
+    if (hit) triggerHandoff("phrase");
+  };
+
+  const triggerHandoff = async (reason: "dtmf" | "phrase") => {
+    if (handoffTriggered || !ctx || !callSid) return;
+    if (!ctx.handoffNumbers.length) return;
+    handoffTriggered = true;
+    const target = ctx.handoffNumbers[Math.floor(Math.random() * ctx.handoffNumbers.length)];
+    log("handoff trigger=", reason, "→", target);
+    try {
+      await supa.from("calls").update({
+        handoff_to: target,
+        handoff_at: new Date().toISOString(),
+      }).eq("twilio_call_sid", callSid);
+    } catch (e) { console.error("handoff db", e); }
+
+    // Re-write the live call's TwiML to dial the operator. This ends the
+    // <Connect><Stream>, Twilio drops the WS, and dials the human number.
+    const twiml = `<Response><Say voice="alice" language="${ctx.language || "ru-RU"}">Соединяю с оператором.</Say><Dial>${escXml(target)}</Dial></Response>`;
+    try {
+      const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_KEY}`,
+          "X-Connection-Api-Key": TWILIO_KEY,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ Twiml: twiml }),
+      });
+      if (!r.ok) log("handoff REST failed", r.status, await r.text());
+    } catch (e) { console.error("handoff REST", e); }
+  };
+
+  const startRecording = async () => {
+    if (recordingStarted || !callSid || !LOVABLE_KEY || !TWILIO_KEY) return;
+    recordingStarted = true;
+    try {
+      const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}/Recordings.json`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_KEY}`,
+          "X-Connection-Api-Key": TWILIO_KEY,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          RecordingChannels: "dual",
+          RecordingStatusCallback: `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/voice-call-bridge`,
+        }),
+      });
+      if (!r.ok) log("record REST failed", r.status, await r.text());
+      else log("recording started for", callSid);
+    } catch (e) { console.error("record REST", e); }
+  };
+
   twilio.onmessage = (ev) => {
     try {
       const msg = JSON.parse(typeof ev.data === "string" ? ev.data : "");
@@ -188,7 +269,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         streamSid = msg.start?.streamSid || "";
         const params = msg.start?.customParameters || msg.start?.custom_parameters || {};
         if (!agentId && params.agent_id) agentId = params.agent_id;
-        log("twilio START sid=", streamSid, "agent=", agentId);
+        if (!callSid && (params.call_sid || msg.start?.callSid)) callSid = params.call_sid || msg.start?.callSid;
+        log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid);
         lastUserAudioAt = Date.now();
         if (silenceTimer === null) silenceTimer = setInterval(checkSilence, 2000) as unknown as number;
         if (!gemini && agentId) startContextAndGemini(agentId);
@@ -197,10 +279,20 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         if (!b64) return;
         if (geminiReady) sendAudioToGemini(b64);
         else pendingAudioToGemini.push(b64);
+      } else if (msg.event === "dtmf") {
+        const digit = String(msg.dtmf?.digit ?? "");
+        log("twilio DTMF", digit);
+        if (ctx?.handoffEnabled && digit && digit === ctx.handoffDigit) {
+          triggerHandoff("dtmf");
+        }
+      } else if (msg.event === "mark") {
+        // Twilio mark ack — no-op.
       } else if (msg.event === "stop") {
         log("twilio STOP");
         if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
         twilio.close();
+      } else if (msg.event === "connected") {
+        // Initial protocol hello — no-op.
       }
     } catch (e) {
       console.error("twilio parse", e);
@@ -220,11 +312,17 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     connectGemini();
     loadContext(id).then((loaded) => {
       ctx = loaded;
-      log("loaded ctx voice=", loaded.voice, "lang=", loaded.language);
+      log("loaded ctx voice=", loaded.voice, "lang=", loaded.language, "rec=", loaded.recordCalls);
       ctxResolver?.(loaded);
+      if (loaded.recordCalls) startRecording();
     }).catch((e) => {
       console.error("load context", e);
-      const fb: Ctx = { systemPrompt: "Ты вежливый ассистент. Отвечай кратко.", voice: "Puck", language: "ru-RU", greeting: "Здравствуйте!" };
+      const fb: Ctx = {
+        systemPrompt: "Ты вежливый ассистент. Отвечай кратко.",
+        voice: "Puck", language: "ru-RU", greeting: "Здравствуйте!",
+        recordCalls: false, handoffEnabled: false, handoffDigit: "0",
+        handoffPhrases: [], handoffNumbers: [],
+      };
       ctx = fb;
       ctxResolver?.(fb);
     });
@@ -236,18 +334,32 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 async function loadContext(agentId: string): Promise<Ctx> {
   const { data: agent } = await supa
     .from("agents")
-    .select("system_prompt, voice, language, greeting, name, description")
+    .select("system_prompt, voice, language, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers")
     .eq("id", agentId)
     .maybeSingle();
   if (!agent) {
-    return { systemPrompt: "Ты вежливый ассистент Premier Energy.", voice: "Puck", language: "ru-RU", greeting: "Здравствуйте!" };
+    return {
+      systemPrompt: "Ты вежливый ассистент Premier Energy.",
+      voice: "Puck", language: "ru-RU", greeting: "Здравствуйте!",
+      recordCalls: false, handoffEnabled: false, handoffDigit: "0",
+      handoffPhrases: [], handoffNumbers: [],
+    };
   }
   return {
     systemPrompt: agent.system_prompt,
     voice: agent.voice || "Puck",
     language: agent.language || "ru-RU",
     greeting: agent.greeting || "Здравствуйте!",
+    recordCalls: !!agent.record_calls,
+    handoffEnabled: !!agent.handoff_enabled,
+    handoffDigit: agent.handoff_dtmf_digit || "0",
+    handoffPhrases: Array.isArray(agent.handoff_trigger_phrases) ? agent.handoff_trigger_phrases : [],
+    handoffNumbers: Array.isArray(agent.handoff_numbers) ? agent.handoff_numbers : [],
   };
+}
+
+function escXml(s: string) {
+  return s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]!));
 }
 
 // ───────── Audio codecs ─────────

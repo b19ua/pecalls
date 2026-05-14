@@ -22,12 +22,12 @@ export const Route = createFileRoute("/api/public/twilio/status")({
           "no-answer": "failed",
           canceled: "failed",
         };
-        const update: Record<string, unknown> = {
-          status: map[status] ?? "in_progress",
+        const update = {
+          status: (map[status] ?? "in_progress") as "queued" | "ringing" | "in_progress" | "completed" | "failed",
           duration_seconds: duration || 0,
+          ...(status === "completed" ? { ended_at: new Date().toISOString() } : {}),
+          ...(recordingUrl ? { recording_url: `${recordingUrl}.mp3` } : {}),
         };
-        if (status === "completed") update.ended_at = new Date().toISOString();
-        if (recordingUrl) update.recording_url = `${recordingUrl}.mp3`;
 
         await supabaseAdmin.from("calls").update(update).eq("twilio_call_sid", callSid);
         return new Response("ok");

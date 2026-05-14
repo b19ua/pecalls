@@ -12,6 +12,7 @@ import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { supabase } from "@/integrations/supabase/client";
+import { I18nProvider } from "@/lib/i18n";
 
 function NotFoundComponent() {
   return (
@@ -116,9 +117,11 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthSync />
-      <Outlet />
-      <Toaster position="top-right" richColors closeButton />
+      <I18nProvider>
+        <AuthSync />
+        <Outlet />
+        <Toaster position="top-right" richColors closeButton />
+      </I18nProvider>
     </QueryClientProvider>
   );
 }

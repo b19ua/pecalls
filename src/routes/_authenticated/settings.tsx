@@ -1,32 +1,55 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, AlertCircle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { CheckCircle2, AlertCircle, Globe } from "lucide-react";
+import { useI18n, LANGUAGE_OPTIONS, type Lang } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/settings")({ component: SettingsPage });
 
 function SettingsPage() {
+  const { t, lang, setLang } = useI18n();
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <PageHeader title="Настройки" description="Подключения, ключи и параметры платформы." />
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
+      <PageHeader title={t("set.title")} description={t("set.subtitle")} />
 
       <Card className="bg-gradient-card shadow-soft mb-4">
-        <CardHeader><CardTitle className="text-base">Интеграции</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><Globe className="h-4 w-4 text-primary" /> {t("set.lang")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Label className="text-xs text-muted-foreground">{t("set.lang.hint")}</Label>
+          <Select value={lang} onValueChange={(v) => setLang(v as Lang)}>
+            <SelectTrigger className="w-full sm:w-72"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {LANGUAGE_OPTIONS.map((l) => (
+                <SelectItem key={l.code} value={l.code}>
+                  <span className="mr-1.5">{l.flag}</span>{l.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-gradient-card shadow-soft mb-4">
+        <CardHeader><CardTitle className="text-base">{t("set.integrations")}</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <Row label="Twilio коннектор" status="connected" detail="Звонки и SMS работают через Lovable Gateway." />
-          <Row label="Gemini AI (Lovable AI Gateway)" status="connected" detail="LOVABLE_API_KEY настроен. Модель: gemini-2.5-flash native audio." />
-          <Row label="WebSocket мост Twilio ↔ Gemini Live" status="pending" detail="Будет реализован на следующем этапе (отдельный сервер)." />
+          <Row label="Twilio" status="connected" detail="Lovable Gateway" />
+          <Row label="Gemini AI Gateway" status="connected" detail="LOVABLE_API_KEY · gemini-2.5-flash native audio" />
+          <Row label="WebSocket bridge Twilio ↔ Gemini Live" status="connected" detail="Edge Function deployed" />
         </CardContent>
       </Card>
 
       <Card className="bg-gradient-card shadow-soft">
-        <CardHeader><CardTitle className="text-base">Что дальше</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">{t("set.next")}</CardTitle></CardHeader>
         <CardContent className="text-sm text-muted-foreground space-y-2">
-          <p>• Конструктор агентов с предпрослушкой голосов</p>
-          <p>• Загрузка RAG-документов и индексация эмбеддингов</p>
-          <p>• TwiML вебхуки для входящих и исходящих</p>
-          <p>• Media Streams ↔ Gemini Live мост</p>
-          <p>• Логика human handoff (фраза + DTMF, рандомный свободный номер)</p>
+          <p>• {t("set.next.1")}</p>
+          <p>• {t("set.next.2")}</p>
+          <p>• {t("set.next.3")}</p>
+          <p>• {t("set.next.4")}</p>
+          <p>• {t("set.next.5")}</p>
         </CardContent>
       </Card>
     </div>

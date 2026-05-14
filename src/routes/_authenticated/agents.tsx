@@ -64,29 +64,31 @@ function AgentsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {agents.map((a) => (
-            <Card key={a.id} className="bg-gradient-card shadow-soft hover:shadow-elegant transition-shadow cursor-pointer">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Bot className="h-5 w-5 text-primary" />
+            <Link key={a.id} to="/agents/$agentId" params={{ agentId: a.id }}>
+              <Card className="bg-gradient-card shadow-soft hover:shadow-elegant transition-shadow cursor-pointer h-full">
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <Bot className="h-5 w-5 text-primary" />
+                    </div>
+                    <Badge variant={a.is_active ? "default" : "secondary"}>
+                      {a.is_active ? "Активен" : "Выключен"}
+                    </Badge>
                   </div>
-                  <Badge variant={a.is_active ? "default" : "secondary"}>
-                    {a.is_active ? "Активен" : "Выключен"}
-                  </Badge>
-                </div>
-                <h3 className="font-display text-lg font-semibold">{a.name}</h3>
-                {a.description && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{a.description}</p>}
-                <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="px-2 py-0.5 rounded bg-secondary">{a.voice}</span>
-                  <span>{a.language}</span>
-                </div>
-                {a.twilio_number_e164 && (
-                  <div className="mt-2 flex items-center gap-1.5 text-xs text-foreground/80">
-                    <Phone className="h-3 w-3" /> {a.twilio_number_e164}
+                  <h3 className="font-display text-lg font-semibold">{a.name}</h3>
+                  {a.description && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{a.description}</p>}
+                  <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="px-2 py-0.5 rounded bg-secondary">{a.voice}</span>
+                    <span>{a.language}</span>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                  {a.twilio_number_e164 && (
+                    <div className="mt-2 flex items-center gap-1.5 text-xs text-foreground/80">
+                      <Phone className="h-3 w-3" /> {a.twilio_number_e164}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       )}

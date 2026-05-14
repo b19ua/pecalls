@@ -13,6 +13,7 @@ import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
 import { supabase } from "@/integrations/supabase/client";
 import { I18nProvider } from "@/lib/i18n";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 function NotFoundComponent() {
   return (
@@ -118,9 +119,11 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider>
-        <AuthSync />
-        <Outlet />
-        <Toaster position="top-right" richColors closeButton />
+        <TooltipProvider delayDuration={200}>
+          <AuthSync />
+          <Outlet />
+          <Toaster position="top-right" richColors closeButton />
+        </TooltipProvider>
       </I18nProvider>
     </QueryClientProvider>
   );

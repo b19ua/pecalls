@@ -119,9 +119,11 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider>
-        <AuthSync />
-        <Outlet />
-        <Toaster position="top-right" richColors closeButton />
+        <TooltipProvider delayDuration={200}>
+          <AuthSync />
+          <Outlet />
+          <Toaster position="top-right" richColors closeButton />
+        </TooltipProvider>
       </I18nProvider>
     </QueryClientProvider>
   );

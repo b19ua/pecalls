@@ -277,6 +277,15 @@ function AgentEditor() {
           </Field>
         </Section>
       </div>
+
+      {!isNew && (
+        <TestCallDialog
+          agentId={agentId}
+          agentName={form.name || "Агент"}
+          open={testOpen}
+          onOpenChange={setTestOpen}
+        />
+      )}
     </div>
   );
 }

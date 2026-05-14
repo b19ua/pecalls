@@ -165,6 +165,11 @@ function AgentEditor() {
         actions={
           <div className="flex gap-2">
             {!isNew && (
+              <Button variant="outline" onClick={() => setTestOpen(true)}>
+                <PhoneCall className="h-4 w-4 mr-1.5" /> Test Call
+              </Button>
+            )}
+            {!isNew && (
               <Button variant="outline" onClick={handleDelete}>
                 <Trash2 className="h-4 w-4 mr-1.5" /> Удалить
               </Button>

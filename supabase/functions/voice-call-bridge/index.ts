@@ -26,8 +26,6 @@ Deno.serve((req) => {
   if (upgrade.toLowerCase() !== "websocket") {
     return new Response("expected WebSocket upgrade", { status: 426 });
   }
-  // Twilio Media Streams sends Sec-WebSocket-Protocol: audio.twilio.com.
-  // Echo it back if requested so the handshake completes cleanly.
   const requested = req.headers.get("sec-websocket-protocol") || "";
   const wantTwilio = requested.split(",").map((s) => s.trim()).includes("audio.twilio.com");
   const upgradeOpts = wantTwilio ? { protocol: "audio.twilio.com" } : undefined;
@@ -37,6 +35,8 @@ Deno.serve((req) => {
 });
 
 type Ctx = {
+  agentId: string;
+  ownerId: string;
   systemPrompt: string;
   voice: string;
   language: string;
@@ -61,6 +61,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let silenceTimer: number | null = null;
   let handoffTriggered = false;
   let recordingStarted = false;
+  // RAG state
+  let lastRagAt = 0;
+  let userBuffer = "";
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;
@@ -122,6 +125,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (it) {
             transcript.push({ role: "user", text: it, ts: new Date().toISOString() });
             maybeHandoffByPhrase(it);
+            // Accumulate user speech and trigger RAG opportunistically
+            userBuffer = (userBuffer + " " + it).slice(-600);
+            void maybeInjectRag(it);
           }
           const ot = msg.serverContent?.outputTranscription?.text;
           if (ot) transcript.push({ role: "agent", text: ot, ts: new Date().toISOString() });
@@ -155,6 +161,36 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     gemini.send(JSON.stringify({
       realtimeInput: { mediaChunks: [{ mimeType: "audio/pcm;rate=16000", data: bytesToB64(pcm16k) }] },
     }));
+  };
+
+  // ───────── RAG ─────────
+  const maybeInjectRag = async (utterance: string) => {
+    if (!ctx || !gemini || gemini.readyState !== 1) return;
+    const now = Date.now();
+    if (now - lastRagAt < 4500) return; // throttle
+    const q = utterance.trim();
+    if (q.length < 8) return;
+    lastRagAt = now;
+    try {
+      const emb = await embedText(q);
+      if (!emb) return;
+      const { data } = await supa.rpc("match_chunks", {
+        query_embedding: emb as unknown as string,
+        p_agent_id: ctx.agentId,
+        p_owner_id: ctx.ownerId,
+        match_count: 4,
+      });
+      const hits = (data ?? []).filter((r: { similarity: number }) => r.similarity > 0.55);
+      if (!hits.length) return;
+      const ctxText = hits.map((h: { content: string }, i: number) => `[${i + 1}] ${h.content}`).join("\n\n");
+      log("RAG hits=", hits.length, "for:", q.slice(0, 60));
+      gemini.send(JSON.stringify({
+        clientContent: {
+          turns: [{ role: "user", parts: [{ text: `[INTERNAL CONTEXT — do not read aloud. Use it to answer the caller's last question precisely. If the answer is not here, say you don't know.]\n\n${ctxText}` }] }],
+          turnComplete: false,
+        },
+      }));
+    } catch (e) { console.error("rag", e); }
   };
 
   const checkSilence = () => {
@@ -224,8 +260,6 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       }).eq("twilio_call_sid", callSid);
     } catch (e) { console.error("handoff db", e); }
 
-    // Re-write the live call's TwiML to dial the operator. This ends the
-    // <Connect><Stream>, Twilio drops the WS, and dials the human number.
     const twiml = `<Response><Say voice="alice" language="${ctx.language || "ru-RU"}">Соединяю с оператором.</Say><Dial>${escXml(target)}</Dial></Response>`;
     try {
       const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
@@ -285,14 +319,10 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         if (ctx?.handoffEnabled && digit && digit === ctx.handoffDigit) {
           triggerHandoff("dtmf");
         }
-      } else if (msg.event === "mark") {
-        // Twilio mark ack — no-op.
       } else if (msg.event === "stop") {
         log("twilio STOP");
         if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
         twilio.close();
-      } else if (msg.event === "connected") {
-        // Initial protocol hello — no-op.
       }
     } catch (e) {
       console.error("twilio parse", e);
@@ -302,8 +332,12 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   twilio.onclose = async () => {
     if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
     try { gemini?.close(); } catch { /* noop */ }
-    if (transcript.length && callSid) {
-      await supa.from("calls").update({ transcript }).eq("twilio_call_sid", callSid);
+    if (callSid && transcript.length) {
+      try {
+        await supa.from("calls").update({ transcript }).eq("twilio_call_sid", callSid);
+      } catch (e) { console.error("save transcript", e); }
+      // Generate summary asynchronously
+      void generateSummary(callSid, transcript, ctx?.language || "ru-RU");
     }
   };
   twilio.onerror = (e) => log("twilio ERROR", (e as ErrorEvent).message || String(e));
@@ -318,6 +352,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     }).catch((e) => {
       console.error("load context", e);
       const fb: Ctx = {
+        agentId: id, ownerId: "",
         systemPrompt: "Ты вежливый ассистент. Отвечай кратко.",
         voice: "Puck", language: "ru-RU", greeting: "Здравствуйте!",
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
@@ -334,11 +369,12 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 async function loadContext(agentId: string): Promise<Ctx> {
   const { data: agent } = await supa
     .from("agents")
-    .select("system_prompt, voice, language, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers")
+    .select("id, owner_id, system_prompt, voice, language, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers")
     .eq("id", agentId)
     .maybeSingle();
   if (!agent) {
     return {
+      agentId, ownerId: "",
       systemPrompt: "Ты вежливый ассистент Premier Energy.",
       voice: "Puck", language: "ru-RU", greeting: "Здравствуйте!",
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
@@ -346,6 +382,8 @@ async function loadContext(agentId: string): Promise<Ctx> {
     };
   }
   return {
+    agentId: agent.id,
+    ownerId: agent.owner_id,
     systemPrompt: agent.system_prompt,
     voice: agent.voice || "Puck",
     language: agent.language || "ru-RU",
@@ -356,6 +394,56 @@ async function loadContext(agentId: string): Promise<Ctx> {
     handoffPhrases: Array.isArray(agent.handoff_trigger_phrases) ? agent.handoff_trigger_phrases : [],
     handoffNumbers: Array.isArray(agent.handoff_numbers) ? agent.handoff_numbers : [],
   };
+}
+
+async function embedText(text: string): Promise<number[] | null> {
+  if (!LOVABLE_KEY) return null;
+  try {
+    const r = await fetch("https://ai.gateway.lovable.dev/v1/embeddings", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LOVABLE_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "google/gemini-embedding-001", input: [text] }),
+    });
+    if (!r.ok) { log("embed fail", r.status); return null; }
+    const j = await r.json();
+    return j.data?.[0]?.embedding ?? null;
+  } catch (e) { console.error("embed", e); return null; }
+}
+
+async function generateSummary(
+  callSid: string,
+  transcript: { role: string; text: string }[],
+  lang: string,
+) {
+  if (!LOVABLE_KEY || transcript.length < 2) return;
+  const langName: Record<string, string> = { "ru-RU": "русском", "en-US": "English", "ro-RO": "română" };
+  const ln = langName[lang] || "русском";
+  const dialog = transcript.map((m) => `${m.role === "agent" ? "Agent" : "User"}: ${m.text}`).join("\n").slice(0, 8000);
+  try {
+    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LOVABLE_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: `Ты — аналитик звонков. Ответь на ${ln} коротко: 1) о чём звонок (1-2 предложения), 2) ключевые факты (буллеты), 3) намерение клиента, 4) следующие шаги. Без воды.` },
+          { role: "user", content: dialog },
+        ],
+      }),
+    });
+    if (!r.ok) { log("summary fail", r.status); return; }
+    const j = await r.json();
+    const summary = j.choices?.[0]?.message?.content?.trim();
+    const usage = j.usage || {};
+    if (summary) {
+      await supa.from("calls").update({
+        summary,
+        input_tokens: usage.prompt_tokens || 0,
+        output_tokens: usage.completion_tokens || 0,
+      }).eq("twilio_call_sid", callSid);
+      log("summary saved", callSid);
+    }
+  } catch (e) { console.error("summary", e); }
 }
 
 function escXml(s: string) {

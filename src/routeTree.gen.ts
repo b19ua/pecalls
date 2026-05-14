@@ -18,6 +18,7 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedCampaignsRouteImport } from './routes/_authenticated/campaigns'
 import { Route as AuthenticatedCallsRouteImport } from './routes/_authenticated/calls'
 import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated/agents'
+import { Route as AuthenticatedAgentsAgentIdRouteImport } from './routes/_authenticated/agents.$agentId'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -63,38 +64,47 @@ const AuthenticatedAgentsRoute = AuthenticatedAgentsRouteImport.update({
   path: '/agents',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedAgentsAgentIdRoute =
+  AuthenticatedAgentsAgentIdRouteImport.update({
+    id: '/$agentId',
+    path: '/$agentId',
+    getParentRoute: () => AuthenticatedAgentsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/agents': typeof AuthenticatedAgentsRoute
+  '/agents': typeof AuthenticatedAgentsRouteWithChildren
   '/calls': typeof AuthenticatedCallsRoute
   '/campaigns': typeof AuthenticatedCampaignsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/agents': typeof AuthenticatedAgentsRoute
+  '/agents': typeof AuthenticatedAgentsRouteWithChildren
   '/calls': typeof AuthenticatedCallsRoute
   '/campaigns': typeof AuthenticatedCampaignsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
-  '/_authenticated/agents': typeof AuthenticatedAgentsRoute
+  '/_authenticated/agents': typeof AuthenticatedAgentsRouteWithChildren
   '/_authenticated/calls': typeof AuthenticatedCallsRoute
   '/_authenticated/campaigns': typeof AuthenticatedCampaignsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/knowledge'
     | '/settings'
+    | '/agents/$agentId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/knowledge'
     | '/settings'
+    | '/agents/$agentId'
   id:
     | '__root__'
     | '/'
@@ -128,6 +140,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/knowledge'
     | '/_authenticated/settings'
+    | '/_authenticated/agents/$agentId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -201,11 +214,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgentsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/agents/$agentId': {
+      id: '/_authenticated/agents/$agentId'
+      path: '/$agentId'
+      fullPath: '/agents/$agentId'
+      preLoaderRoute: typeof AuthenticatedAgentsAgentIdRouteImport
+      parentRoute: typeof AuthenticatedAgentsRoute
+    }
   }
 }
 
+interface AuthenticatedAgentsRouteChildren {
+  AuthenticatedAgentsAgentIdRoute: typeof AuthenticatedAgentsAgentIdRoute
+}
+
+const AuthenticatedAgentsRouteChildren: AuthenticatedAgentsRouteChildren = {
+  AuthenticatedAgentsAgentIdRoute: AuthenticatedAgentsAgentIdRoute,
+}
+
+const AuthenticatedAgentsRouteWithChildren =
+  AuthenticatedAgentsRoute._addFileChildren(AuthenticatedAgentsRouteChildren)
+
 interface AuthenticatedRouteChildren {
-  AuthenticatedAgentsRoute: typeof AuthenticatedAgentsRoute
+  AuthenticatedAgentsRoute: typeof AuthenticatedAgentsRouteWithChildren
   AuthenticatedCallsRoute: typeof AuthenticatedCallsRoute
   AuthenticatedCampaignsRoute: typeof AuthenticatedCampaignsRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
@@ -214,7 +245,7 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedAgentsRoute: AuthenticatedAgentsRoute,
+  AuthenticatedAgentsRoute: AuthenticatedAgentsRouteWithChildren,
   AuthenticatedCallsRoute: AuthenticatedCallsRoute,
   AuthenticatedCampaignsRoute: AuthenticatedCampaignsRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,

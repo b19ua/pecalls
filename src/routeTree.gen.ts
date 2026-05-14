@@ -13,11 +13,13 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedNumbersRouteImport } from './routes/_authenticated/numbers'
 import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCampaignsRouteImport } from './routes/_authenticated/campaigns'
 import { Route as AuthenticatedCallsRouteImport } from './routes/_authenticated/calls'
 import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated/agents'
+import { Route as AuthenticatedCallsCallIdRouteImport } from './routes/_authenticated/calls.$callId'
 import { Route as AuthenticatedAgentsAgentIdRouteImport } from './routes/_authenticated/agents.$agentId'
 import { Route as ApiPublicTwilioVoiceRouteImport } from './routes/api/public/twilio/voice'
 import { Route as ApiPublicTwilioStatusRouteImport } from './routes/api/public/twilio/status'
@@ -39,6 +41,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedNumbersRoute = AuthenticatedNumbersRouteImport.update({
+  id: '/numbers',
+  path: '/numbers',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedKnowledgeRoute = AuthenticatedKnowledgeRouteImport.update({
@@ -66,6 +73,12 @@ const AuthenticatedAgentsRoute = AuthenticatedAgentsRouteImport.update({
   path: '/agents',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedCallsCallIdRoute =
+  AuthenticatedCallsCallIdRouteImport.update({
+    id: '/$callId',
+    path: '/$callId',
+    getParentRoute: () => AuthenticatedCallsRoute,
+  } as any)
 const AuthenticatedAgentsAgentIdRoute =
   AuthenticatedAgentsAgentIdRouteImport.update({
     id: '/$agentId',
@@ -87,12 +100,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/agents': typeof AuthenticatedAgentsRouteWithChildren
-  '/calls': typeof AuthenticatedCallsRoute
+  '/calls': typeof AuthenticatedCallsRouteWithChildren
   '/campaigns': typeof AuthenticatedCampaignsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
+  '/numbers': typeof AuthenticatedNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
+  '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/api/public/twilio/status': typeof ApiPublicTwilioStatusRoute
   '/api/public/twilio/voice': typeof ApiPublicTwilioVoiceRoute
 }
@@ -100,12 +115,14 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/agents': typeof AuthenticatedAgentsRouteWithChildren
-  '/calls': typeof AuthenticatedCallsRoute
+  '/calls': typeof AuthenticatedCallsRouteWithChildren
   '/campaigns': typeof AuthenticatedCampaignsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
+  '/numbers': typeof AuthenticatedNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
+  '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/api/public/twilio/status': typeof ApiPublicTwilioStatusRoute
   '/api/public/twilio/voice': typeof ApiPublicTwilioVoiceRoute
 }
@@ -115,12 +132,14 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/agents': typeof AuthenticatedAgentsRouteWithChildren
-  '/_authenticated/calls': typeof AuthenticatedCallsRoute
+  '/_authenticated/calls': typeof AuthenticatedCallsRouteWithChildren
   '/_authenticated/campaigns': typeof AuthenticatedCampaignsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRoute
+  '/_authenticated/numbers': typeof AuthenticatedNumbersRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
+  '/_authenticated/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/api/public/twilio/status': typeof ApiPublicTwilioStatusRoute
   '/api/public/twilio/voice': typeof ApiPublicTwilioVoiceRoute
 }
@@ -134,8 +153,10 @@ export interface FileRouteTypes {
     | '/campaigns'
     | '/dashboard'
     | '/knowledge'
+    | '/numbers'
     | '/settings'
     | '/agents/$agentId'
+    | '/calls/$callId'
     | '/api/public/twilio/status'
     | '/api/public/twilio/voice'
   fileRoutesByTo: FileRoutesByTo
@@ -147,8 +168,10 @@ export interface FileRouteTypes {
     | '/campaigns'
     | '/dashboard'
     | '/knowledge'
+    | '/numbers'
     | '/settings'
     | '/agents/$agentId'
+    | '/calls/$callId'
     | '/api/public/twilio/status'
     | '/api/public/twilio/voice'
   id:
@@ -161,8 +184,10 @@ export interface FileRouteTypes {
     | '/_authenticated/campaigns'
     | '/_authenticated/dashboard'
     | '/_authenticated/knowledge'
+    | '/_authenticated/numbers'
     | '/_authenticated/settings'
     | '/_authenticated/agents/$agentId'
+    | '/_authenticated/calls/$callId'
     | '/api/public/twilio/status'
     | '/api/public/twilio/voice'
   fileRoutesById: FileRoutesById
@@ -205,6 +230,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/numbers': {
+      id: '/_authenticated/numbers'
+      path: '/numbers'
+      fullPath: '/numbers'
+      preLoaderRoute: typeof AuthenticatedNumbersRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/knowledge': {
       id: '/_authenticated/knowledge'
       path: '/knowledge'
@@ -239,6 +271,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/agents'
       preLoaderRoute: typeof AuthenticatedAgentsRouteImport
       parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/calls/$callId': {
+      id: '/_authenticated/calls/$callId'
+      path: '/$callId'
+      fullPath: '/calls/$callId'
+      preLoaderRoute: typeof AuthenticatedCallsCallIdRouteImport
+      parentRoute: typeof AuthenticatedCallsRoute
     }
     '/_authenticated/agents/$agentId': {
       id: '/_authenticated/agents/$agentId'
@@ -275,21 +314,34 @@ const AuthenticatedAgentsRouteChildren: AuthenticatedAgentsRouteChildren = {
 const AuthenticatedAgentsRouteWithChildren =
   AuthenticatedAgentsRoute._addFileChildren(AuthenticatedAgentsRouteChildren)
 
+interface AuthenticatedCallsRouteChildren {
+  AuthenticatedCallsCallIdRoute: typeof AuthenticatedCallsCallIdRoute
+}
+
+const AuthenticatedCallsRouteChildren: AuthenticatedCallsRouteChildren = {
+  AuthenticatedCallsCallIdRoute: AuthenticatedCallsCallIdRoute,
+}
+
+const AuthenticatedCallsRouteWithChildren =
+  AuthenticatedCallsRoute._addFileChildren(AuthenticatedCallsRouteChildren)
+
 interface AuthenticatedRouteChildren {
   AuthenticatedAgentsRoute: typeof AuthenticatedAgentsRouteWithChildren
-  AuthenticatedCallsRoute: typeof AuthenticatedCallsRoute
+  AuthenticatedCallsRoute: typeof AuthenticatedCallsRouteWithChildren
   AuthenticatedCampaignsRoute: typeof AuthenticatedCampaignsRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRoute
+  AuthenticatedNumbersRoute: typeof AuthenticatedNumbersRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAgentsRoute: AuthenticatedAgentsRouteWithChildren,
-  AuthenticatedCallsRoute: AuthenticatedCallsRoute,
+  AuthenticatedCallsRoute: AuthenticatedCallsRouteWithChildren,
   AuthenticatedCampaignsRoute: AuthenticatedCampaignsRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRoute,
+  AuthenticatedNumbersRoute: AuthenticatedNumbersRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
 }
 
@@ -307,3 +359,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

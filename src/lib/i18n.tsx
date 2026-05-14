@@ -590,7 +590,7 @@ type Ctx = { lang: Lang; setLang: (l: Lang) => void; t: (key: string) => string 
 const I18nContext = createContext<Ctx | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>("ru");
+  const [lang, setLangState] = useState<Lang>("en");
 
   useEffect(() => {
     if (typeof window === "undefined") return;

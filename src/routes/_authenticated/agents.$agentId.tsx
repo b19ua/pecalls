@@ -69,6 +69,7 @@ function AgentEditor() {
   const [form, setForm] = useState<AgentForm>(DEFAULTS);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [testOpen, setTestOpen] = useState(false);
 
   useEffect(() => {
     if (isNew) return;

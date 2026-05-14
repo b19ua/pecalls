@@ -9,8 +9,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, Upload, FileText, Loader2, Trash2, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
+import { BookOpen, Upload, FileText, Loader2, Trash2, RefreshCw, AlertCircle, CheckCircle2, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/knowledge")({ component: KnowledgePage });
 
@@ -30,6 +31,7 @@ const ACCEPT = ".pdf,.txt,.md,.docx,application/pdf,text/plain,text/markdown,app
 const MAX_BYTES = 50 * 1024 * 1024;
 
 function KnowledgePage() {
+  const { t } = useI18n();
   const { user } = useAuth();
   const processFn = useServerFn(processDocument);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -60,7 +62,7 @@ function KnowledgePage() {
   async function handleFile(file: File) {
     if (!user || !agentId) return;
     if (file.size > MAX_BYTES) {
-      toast.error("Файл больше 50 МБ");
+      toast.error("> 50 MB");
       return;
     }
     setUploading(true);
@@ -87,16 +89,16 @@ function KnowledgePage() {
       if (insErr || !doc) throw insErr ?? new Error("insert failed");
 
       await loadDocs(agentId);
-      toast.success("Файл загружен, индексируем…");
+      toast.success("OK");
       try {
         await processFn({ data: { documentId: doc.id } });
-        toast.success("Документ проиндексирован");
+        toast.success("OK");
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Ошибка индексации");
+        toast.error(err instanceof Error ? err.message : "err");
       }
       await loadDocs(agentId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка загрузки");
+      toast.error(err instanceof Error ? err.message : "err");
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -107,20 +109,19 @@ function KnowledgePage() {
     setBusy(doc.id);
     try {
       await processFn({ data: { documentId: doc.id } });
-      toast.success("Переиндексировано");
+      toast.success("OK");
       await loadDocs(agentId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка");
+      toast.error(err instanceof Error ? err.message : "err");
     } finally {
       setBusy(null);
     }
   }
 
   async function remove(doc: Doc) {
-    if (!confirm(`Удалить ${doc.file_name}?`)) return;
+    if (!confirm(`${t("common.delete")}: ${doc.file_name}?`)) return;
     setBusy(doc.id);
     await supabase.storage.from("knowledge-files").remove([
-      // file_path is fetched separately; fetch fresh
       (await supabase.from("knowledge_documents").select("file_path").eq("id", doc.id).single()).data?.file_path ?? "",
     ]);
     await supabase.from("knowledge_documents").delete().eq("id", doc.id);
@@ -129,25 +130,27 @@ function KnowledgePage() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <PageHeader
-        title="База знаний"
-        description="PDF, TXT, MD, DOCX до 50 МБ. Текст автоматически разбивается на фрагменты и индексируется в векторную базу для RAG."
-      />
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
+      <PageHeader title={t("kb.title")} description={t("kb.subtitle")} />
+
+      <div className="mb-5 rounded-xl border border-primary/20 bg-primary/5 p-3 flex items-start gap-2.5 text-sm">
+        <Lightbulb className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+        <span className="text-muted-foreground">{t("kb.tip")}</span>
+      </div>
 
       {agents.length === 0 ? (
         <Card className="bg-gradient-card border-dashed border-2">
           <CardContent className="py-16 text-center">
             <BookOpen className="h-10 w-10 text-primary mx-auto mb-3" />
-            <p className="text-muted-foreground">Сначала создайте агента, затем загружайте сюда документы.</p>
+            <p className="text-muted-foreground">{t("kb.noAgents")}</p>
           </CardContent>
         </Card>
       ) : (
         <>
           <Card className="bg-gradient-card shadow-soft mb-5">
-            <CardContent className="p-5 flex flex-col md:flex-row gap-3 md:items-center">
+            <CardContent className="p-4 sm:p-5 flex flex-col md:flex-row gap-3 md:items-end">
               <div className="flex-1">
-                <label className="text-xs uppercase tracking-wider text-muted-foreground">Агент</label>
+                <label className="text-xs uppercase tracking-wider text-muted-foreground">{t("kb.agent")}</label>
                 <Select value={agentId} onValueChange={setAgentId}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -169,7 +172,7 @@ function KnowledgePage() {
                   className="bg-gradient-primary shadow-elegant w-full md:w-auto"
                 >
                   {uploading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Upload className="h-4 w-4 mr-1.5" />}
-                  Загрузить документ
+                  {t("kb.upload")}
                 </Button>
               </div>
             </CardContent>
@@ -179,20 +182,20 @@ function KnowledgePage() {
             {docs.length === 0 ? (
               <Card className="bg-gradient-card border-dashed border-2">
                 <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                  Документов пока нет. Загрузите первый файл выше.
+                  {t("kb.empty")}
                 </CardContent>
               </Card>
             ) : docs.map((d) => (
               <Card key={d.id} className="bg-gradient-card shadow-soft">
-                <CardContent className="p-4 flex items-center gap-4">
+                <CardContent className="p-4 flex items-center gap-3 sm:gap-4">
                   <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                     <FileText className="h-5 w-5 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{d.file_name}</div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-3 mt-0.5">
+                    <div className="font-medium truncate text-sm sm:text-base">{d.file_name}</div>
+                    <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-2 sm:gap-3 mt-0.5">
                       <span>{(d.size_bytes / 1024).toFixed(0)} KB</span>
-                      <span>{d.chunk_count} фрагм.</span>
+                      <span>{d.chunk_count} {t("kb.chunks")}</span>
                       <StatusBadge status={d.status} />
                     </div>
                     {d.error_message && (
@@ -218,8 +221,9 @@ function KnowledgePage() {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === "ready") return <Badge variant="default" className="gap-1"><CheckCircle2 className="h-3 w-3" /> готов</Badge>;
-  if (status === "processing") return <Badge variant="secondary" className="gap-1"><Loader2 className="h-3 w-3 animate-spin" /> индексация</Badge>;
-  if (status === "failed") return <Badge variant="destructive">ошибка</Badge>;
+  const { t } = useI18n();
+  if (status === "ready") return <Badge variant="default" className="gap-1"><CheckCircle2 className="h-3 w-3" /> {t("kb.status.ready")}</Badge>;
+  if (status === "processing") return <Badge variant="secondary" className="gap-1"><Loader2 className="h-3 w-3 animate-spin" /> {t("kb.status.processing")}</Badge>;
+  if (status === "failed") return <Badge variant="destructive">{t("kb.status.failed")}</Badge>;
   return <Badge variant="outline">{status}</Badge>;
 }

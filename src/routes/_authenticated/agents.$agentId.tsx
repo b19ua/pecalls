@@ -84,10 +84,13 @@ function AgentEditor() {
   const navigate = useNavigate();
   const saveAgentFn = useServerFn(saveAgent);
   const deleteAgentFn = useServerFn(deleteAgent);
+  const provisionSipFn = useServerFn(provisionInboundSip);
   const [form, setForm] = useState<AgentForm>(DEFAULTS);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
+  const [inboundSip, setInboundSip] = useState<{ sip_domain: string; username: string; password: string } | null>(null);
+  const [provisioning, setProvisioning] = useState(false);
 
   useEffect(() => {
     if (isNew) return;

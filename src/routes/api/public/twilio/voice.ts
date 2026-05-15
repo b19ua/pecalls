@@ -28,21 +28,35 @@ export const Route = createFileRoute("/api/public/twilio/voice")({
         const toNumber = String(form.get("To") ?? "");
         const direction = String(form.get("Direction") ?? "inbound");
 
-        // Resolve agent: explicit param OR by To number lookup (inbound)
+        // Resolve agent: explicit param OR by To number / SIP domain
         let agentId = agentIdParam || null;
-        let agent: any = null;
+        let agent: { id: string; owner_id: string; greeting: string; language: string; handoff_enabled: boolean; handoff_numbers: string[] | null; [k: string]: unknown } | null = null;
         if (!agentId && toNumber) {
-          const { data } = await supabaseAdmin
-            .from("agents")
-            .select("*")
-            .eq("twilio_number_e164", toNumber)
-            .eq("is_active", true)
-            .maybeSingle();
-          agent = data;
-          agentId = data?.id ?? null;
+          // Inbound SIP comes as "sip:user@agent-xxx.sip.twilio.com" — extract the domain
+          const sipMatch = toNumber.match(/^sip:[^@]+@([^;>\s]+)/i);
+          if (sipMatch) {
+            const domain = sipMatch[1].toLowerCase();
+            const { data } = await supabaseAdmin
+              .from("agents")
+              .select("*")
+              .eq("inbound_sip_domain", domain)
+              .eq("is_active", true)
+              .maybeSingle();
+            agent = data as typeof agent;
+            agentId = data?.id ?? null;
+          } else {
+            const { data } = await supabaseAdmin
+              .from("agents")
+              .select("*")
+              .eq("twilio_number_e164", toNumber)
+              .eq("is_active", true)
+              .maybeSingle();
+            agent = data as typeof agent;
+            agentId = data?.id ?? null;
+          }
         } else if (agentId) {
           const { data } = await supabaseAdmin.from("agents").select("*").eq("id", agentId).maybeSingle();
-          agent = data;
+          agent = data as typeof agent;
         }
 
         if (!agent) {

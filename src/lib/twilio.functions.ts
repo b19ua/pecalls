@@ -32,9 +32,14 @@ async function gwPost(path: string, body: Record<string, string>) {
   return data;
 }
 
-function publicBaseUrl(req: Request) {
-  const u = new URL(req.url);
-  return `${u.protocol}//${u.host}`;
+function publicBaseUrl(_req: Request) {
+  // Twilio fetches webhooks from a public, unauthenticated URL.
+  // The id-preview--*.lovable.app host is gated by Lovable auth and 302s to
+  // an HTML auth-bridge page → Twilio error 11750 (response > 64KB).
+  // Always use the stable published project URL for Twilio webhooks.
+  const override = process.env.PUBLIC_APP_URL;
+  if (override) return override.replace(/\/$/, "");
+  return "https://project--d7e8c4a9-917e-4bb2-a113-6e70fdf150da.lovable.app";
 }
 
 /** Sync Twilio numbers from account into our cache table */

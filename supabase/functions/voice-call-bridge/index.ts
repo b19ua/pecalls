@@ -81,6 +81,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           generationConfig: {
             responseModalities: ["AUDIO"],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } } },
+            thinkingConfig: { thinkingLevel: "minimal" },
           },
           systemInstruction: { parts: [{ text: c.systemPrompt }] },
           inputAudioTranscription: {},

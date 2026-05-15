@@ -46,7 +46,7 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
-      <div className="hidden lg:flex flex-col justify-between p-10 bg-gradient-hero text-sidebar-foreground relative overflow-hidden">
+      <div className="hidden lg:flex flex-col p-10 bg-gradient-hero text-sidebar-foreground relative overflow-hidden">
         <div
           className="absolute inset-0 opacity-20"
           style={{
@@ -54,10 +54,14 @@ function LoginPage() {
               "radial-gradient(circle at 20% 30%, oklch(0.7 0.18 152) 0%, transparent 50%), radial-gradient(circle at 80% 70%, oklch(0.6 0.15 180) 0%, transparent 50%)",
           }}
         />
-        <div className="relative z-10">
-          <AppLogo size="lg" />
+        <div className="relative z-10 flex-1 flex items-center justify-center">
+          <img
+            src={logoFull}
+            alt="Premier Energy AI Calls"
+            className="w-1/3 h-auto object-contain drop-shadow-lg"
+          />
         </div>
-        <div className="relative z-10 max-w-md">
+        <div className="relative z-10 max-w-md mx-auto text-center">
           <h2 className="font-display text-4xl font-bold leading-tight">
             Next-generation AI calling
           </h2>
@@ -66,7 +70,7 @@ function LoginPage() {
             Inbound, outbound, RAG knowledge, human handoff — all in one place.
           </p>
         </div>
-        <div className="relative z-10 text-xs text-sidebar-foreground/50">
+        <div className="relative z-10 text-xs text-sidebar-foreground/50 mt-8 text-center">
           © {new Date().getFullYear()} Premier Energy. All rights reserved.
         </div>
       </div>

@@ -235,7 +235,7 @@ export const provisionInboundSip = createServerFn({ method: "POST" })
       });
       // Map credential list to the SIP Domain (Auth Calls)
       await gwPost(`/SIP/Domains/${domainSid}/Auth/Calls/CredentialListMappings.json`, {
-        CredentialListSid: credListSid,
+        CredentialListSid: credListSid as string,
       });
     }
 

@@ -42,6 +42,12 @@ type AgentForm = {
   handoff_dtmf_digit: string;
   handoff_trigger_phrases: string[];
   handoff_numbers: string[];
+  outbound_mode: "twilio_number" | "sip_trunk";
+  sip_domain: string;
+  sip_username: string;
+  sip_password: string;
+  sip_transport: "tls" | "tcp" | "udp";
+  sip_from_number: string;
 };
 
 const DEFAULTS: AgentForm = {
@@ -62,6 +68,12 @@ const DEFAULTS: AgentForm = {
   handoff_dtmf_digit: "0",
   handoff_trigger_phrases: ["соедини с менеджером", "оператор", "human", "manager"],
   handoff_numbers: [],
+  outbound_mode: "twilio_number",
+  sip_domain: "",
+  sip_username: "",
+  sip_password: "",
+  sip_transport: "tls",
+  sip_from_number: "",
 };
 
 function AgentEditor() {
@@ -107,6 +119,12 @@ function AgentEditor() {
           handoff_dtmf_digit: data.handoff_dtmf_digit ?? "0",
           handoff_trigger_phrases: data.handoff_trigger_phrases ?? [],
           handoff_numbers: data.handoff_numbers ?? [],
+          outbound_mode: (data.outbound_mode as "twilio_number" | "sip_trunk") ?? "twilio_number",
+          sip_domain: data.sip_domain ?? "",
+          sip_username: data.sip_username ?? "",
+          sip_password: data.sip_password ?? "",
+          sip_transport: (data.sip_transport as "tls" | "tcp" | "udp") ?? "tls",
+          sip_from_number: data.sip_from_number ?? "",
         });
         setLoading(false);
       });
@@ -132,6 +150,10 @@ function AgentEditor() {
             ...form,
             description: form.description || null,
             twilio_number_e164: form.twilio_number_e164 || null,
+            sip_domain: form.sip_domain || null,
+            sip_username: form.sip_username || null,
+            sip_password: form.sip_password || null,
+            sip_from_number: form.sip_from_number || null,
           },
         },
       });
@@ -258,6 +280,49 @@ function AgentEditor() {
           <Field label={t("agent.field.twilio")}>
             <Input value={form.twilio_number_e164} onChange={(e) => set("twilio_number_e164", e.target.value)} placeholder="+37360123456" />
           </Field>
+
+          <Field label="Исходящие звонки через">
+            <Select value={form.outbound_mode} onValueChange={(v) => set("outbound_mode", v as "twilio_number" | "sip_trunk")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="twilio_number">Twilio номер (по умолчанию)</SelectItem>
+                <SelectItem value="sip_trunk">Свой SIP trunk</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+
+          {form.outbound_mode === "sip_trunk" && (
+            <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+              <p className="text-xs text-muted-foreground">
+                Звонки будут уходить через ваш SIP-провайдер (например <code className="font-mono">mytrunk.pstn.twilio.com</code>).
+                Twilio-аккаунт платформы используется только для маршрутизации.
+              </p>
+              <div className="grid md:grid-cols-2 gap-4">
+                <Field label="SIP домен / termination URI">
+                  <Input value={form.sip_domain} onChange={(e) => set("sip_domain", e.target.value)} placeholder="mytrunk.pstn.twilio.com" />
+                </Field>
+                <Field label="Transport">
+                  <Select value={form.sip_transport} onValueChange={(v) => set("sip_transport", v as "tls" | "tcp" | "udp")}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tls">TLS (рекомендуется)</SelectItem>
+                      <SelectItem value="tcp">TCP</SelectItem>
+                      <SelectItem value="udp">UDP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="SIP username">
+                  <Input value={form.sip_username} onChange={(e) => set("sip_username", e.target.value)} autoComplete="off" />
+                </Field>
+                <Field label="SIP password">
+                  <Input type="password" value={form.sip_password} onChange={(e) => set("sip_password", e.target.value)} autoComplete="new-password" />
+                </Field>
+                <Field label="Caller ID (E.164, опционально)">
+                  <Input value={form.sip_from_number} onChange={(e) => set("sip_from_number", e.target.value)} placeholder="+37360123456" />
+                </Field>
+              </div>
+            </div>
+          )}
         </Section>
 
         <Section title={t("agent.section.handoff")}>

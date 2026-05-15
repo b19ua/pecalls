@@ -29,9 +29,15 @@ export type Database = {
           max_call_seconds: number
           model: string
           name: string
+          outbound_mode: string
           owner_id: string
           record_calls: boolean
           silence_timeout_seconds: number
+          sip_domain: string | null
+          sip_from_number: string | null
+          sip_password: string | null
+          sip_transport: string
+          sip_username: string | null
           system_prompt: string
           temperature: number
           twilio_number_e164: string | null
@@ -52,9 +58,15 @@ export type Database = {
           max_call_seconds?: number
           model?: string
           name: string
+          outbound_mode?: string
           owner_id: string
           record_calls?: boolean
           silence_timeout_seconds?: number
+          sip_domain?: string | null
+          sip_from_number?: string | null
+          sip_password?: string | null
+          sip_transport?: string
+          sip_username?: string | null
           system_prompt?: string
           temperature?: number
           twilio_number_e164?: string | null
@@ -75,9 +87,15 @@ export type Database = {
           max_call_seconds?: number
           model?: string
           name?: string
+          outbound_mode?: string
           owner_id?: string
           record_calls?: boolean
           silence_timeout_seconds?: number
+          sip_domain?: string | null
+          sip_from_number?: string | null
+          sip_password?: string | null
+          sip_transport?: string
+          sip_username?: string | null
           system_prompt?: string
           temperature?: number
           twilio_number_e164?: string | null

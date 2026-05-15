@@ -30,7 +30,8 @@ export const Route = createFileRoute("/api/public/twilio/voice")({
 
         // Resolve agent: explicit param OR by To number / SIP domain
         let agentId = agentIdParam || null;
-        let agent: { id: string; owner_id: string; greeting: string; language: string; handoff_enabled: boolean; handoff_numbers: string[] | null; [k: string]: unknown } | null = null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let agent: any = null;
         if (!agentId && toNumber) {
           // Inbound SIP comes as "sip:user@agent-xxx.sip.twilio.com" — extract the domain
           const sipMatch = toNumber.match(/^sip:[^@]+@([^;>\s]+)/i);

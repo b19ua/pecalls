@@ -159,7 +159,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     if (nonSilent > 8) lastUserAudioAt = Date.now();
     const pcm16k = mulaw8kToPcm16k(mulawBytes);
     gemini.send(JSON.stringify({
-      realtimeInput: { mediaChunks: [{ mimeType: "audio/pcm;rate=16000", data: bytesToB64(pcm16k) }] },
+      realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: bytesToB64(pcm16k) } },
     }));
   };
 

@@ -212,10 +212,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       try {
         if (gemini && gemini.readyState === 1) {
           gemini.send(JSON.stringify({
-            clientContent: {
-              turns: [{ role: "user", parts: [{ text: "[system] Quiet ~8s. Politely re-engage in one short sentence." }] }],
-              turnComplete: true,
-            },
+            realtimeInput: { text: "[system] Quiet ~8s. Politely re-engage in one short sentence." },
           }));
         }
       } catch { /* noop */ }

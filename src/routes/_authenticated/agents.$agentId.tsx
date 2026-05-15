@@ -196,7 +196,7 @@ function AgentEditor() {
     setProvisioning(true);
     try {
       const res = await provisionSipFn({ data: { agentId } });
-      setInboundSip({ sip_domain: res.sip_domain, username: res.username, password: res.password });
+      setInboundSip({ sip_domain: res.sip_domain ?? "", username: res.username, password: res.password });
       toast.success("SIP домен создан");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось создать SIP");

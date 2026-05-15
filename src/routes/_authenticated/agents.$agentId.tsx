@@ -353,6 +353,44 @@ function AgentEditor() {
           )}
         </Section>
 
+        <Section title="Входящие звонки через SIP">
+          <p className="text-xs text-muted-foreground">
+            Создайте уникальный SIP-домен для этого агента. Настройте у себя в SIP-провайдере (FreePBX, Asterisk и т.п.)
+            переадресацию входящих звонков на этот SIP URI с указанными логином и паролем — звонки будут приниматься агентом.
+          </p>
+          {inboundSip ? (
+            <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
+              <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <Label className="text-xs text-muted-foreground">SIP URI</Label>
+                  <code className="block font-mono text-xs mt-1 break-all">sip:{inboundSip.username}@{inboundSip.sip_domain}</code>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Domain</Label>
+                  <code className="block font-mono text-xs mt-1 break-all">{inboundSip.sip_domain}</code>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Username</Label>
+                  <code className="block font-mono text-xs mt-1 break-all">{inboundSip.username}</code>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Password</Label>
+                  <code className="block font-mono text-xs mt-1 break-all">{inboundSip.password}</code>
+                </div>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={handleProvisionSip} disabled={provisioning}>
+                {provisioning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Обновить webhook
+              </Button>
+            </div>
+          ) : (
+            <Button type="button" onClick={handleProvisionSip} disabled={provisioning || isNew}>
+              {provisioning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Создать SIP-домен для входящих
+            </Button>
+          )}
+        </Section>
+
         <Section title={t("agent.section.handoff")}>
           <div className="flex items-center justify-between">
             <Label className="flex items-center gap-1.5">

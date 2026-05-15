@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { saveAgent, deleteAgent } from "@/lib/agents.functions";
-import { provisionInboundSip } from "@/lib/twilio.functions";
+import { provisionInboundSip, deleteInboundSip } from "@/lib/twilio.functions";
 import { GEMINI_VOICES, LANGUAGES } from "@/lib/voices";
 import { PageHeader } from "@/components/PageHeader";
 import { HintIcon } from "@/components/HintIcon";

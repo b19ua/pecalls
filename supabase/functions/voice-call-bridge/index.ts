@@ -199,10 +199,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       try {
         if (gemini && gemini.readyState === 1) {
           gemini.send(JSON.stringify({
-            clientContent: {
-              turns: [{ role: "user", parts: [{ text: "[system] Line silent 20s. Say a brief polite goodbye and end the call." }] }],
-              turnComplete: true,
-            },
+            realtimeInput: { text: "[system] Line silent 20s. Say a brief polite goodbye and end the call." },
           }));
         }
       } catch { /* noop */ }

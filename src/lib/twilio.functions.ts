@@ -21,11 +21,16 @@ async function gwGet(path: string) {
   return data;
 }
 
-async function gwPost(path: string, body: Record<string, string>) {
+async function gwPost(path: string, body: Record<string, string | string[]>) {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(body)) {
+    if (Array.isArray(v)) v.forEach((vv) => params.append(k, vv));
+    else params.append(k, v);
+  }
   const r = await fetch(`${GATEWAY}${path}`, {
     method: "POST",
     headers: { ...gwHeaders(), "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(body),
+    body: params,
   });
   const data = await r.json();
   if (!r.ok) throw new Error(`Twilio ${r.status}: ${JSON.stringify(data)}`);
@@ -151,7 +156,7 @@ export const placeOutboundCall = createServerFn({ method: "POST" })
       Url: `${base}/api/public/twilio/voice?agent_id=${agent.id}`,
       StatusCallback: `${base}/api/public/twilio/status`,
       StatusCallbackMethod: "POST",
-      StatusCallbackEvent: "initiated ringing answered completed",
+      StatusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
       Record: "true",
     });
 

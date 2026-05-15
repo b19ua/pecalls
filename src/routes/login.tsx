@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/AppLogo";
+import logoFull from "@/assets/logo.png";
 import { toast } from "sonner";
 import { Loader2, Lock } from "lucide-react";
 import { verifyAdminLogin } from "@/lib/admin-auth.functions";

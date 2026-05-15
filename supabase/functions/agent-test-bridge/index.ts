@@ -108,9 +108,8 @@ async function handle(client: WebSocket, ctx: Ctx) {
             const langName: Record<string, string> = { "ru-RU": "Russian", "en-US": "English", "ro-RO": "Romanian" };
             const lang = langName[ctx.language] || ctx.language;
             gemini!.send(JSON.stringify({
-              clientContent: {
-                turns: [{ role: "user", parts: [{ text: `Test call started. Speak immediately in ${lang}: greet warmly with "${ctx.greeting}", then ask one short open question. Keep replies under 2 sentences.` }] }],
-                turnComplete: true,
+              realtimeInput: {
+                text: `Test call started. Speak immediately in ${lang}: greet warmly with "${ctx.greeting}", then ask one short open question. Keep replies under 2 sentences.`,
               },
             }));
           }

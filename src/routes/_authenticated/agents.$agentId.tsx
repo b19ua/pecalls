@@ -150,6 +150,10 @@ function AgentEditor() {
             ...form,
             description: form.description || null,
             twilio_number_e164: form.twilio_number_e164 || null,
+            sip_domain: form.sip_domain || null,
+            sip_username: form.sip_username || null,
+            sip_password: form.sip_password || null,
+            sip_from_number: form.sip_from_number || null,
           },
         },
       });

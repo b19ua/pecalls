@@ -156,7 +156,7 @@ export const placeOutboundCall = createServerFn({ method: "POST" })
       Url: `${base}/api/public/twilio/voice?agent_id=${agent.id}`,
       StatusCallback: `${base}/api/public/twilio/status`,
       StatusCallbackMethod: "POST",
-      StatusCallbackEvent: "initiated ringing answered completed",
+      StatusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
       Record: "true",
     });
 

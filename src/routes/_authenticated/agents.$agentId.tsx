@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { saveAgent, deleteAgent } from "@/lib/agents.functions";
+import { provisionInboundSip } from "@/lib/twilio.functions";
 import { GEMINI_VOICES, LANGUAGES } from "@/lib/voices";
 import { PageHeader } from "@/components/PageHeader";
 import { HintIcon } from "@/components/HintIcon";
@@ -83,10 +84,13 @@ function AgentEditor() {
   const navigate = useNavigate();
   const saveAgentFn = useServerFn(saveAgent);
   const deleteAgentFn = useServerFn(deleteAgent);
+  const provisionSipFn = useServerFn(provisionInboundSip);
   const [form, setForm] = useState<AgentForm>(DEFAULTS);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
+  const [inboundSip, setInboundSip] = useState<{ sip_domain: string; username: string; password: string } | null>(null);
+  const [provisioning, setProvisioning] = useState(false);
 
   useEffect(() => {
     if (isNew) return;
@@ -126,6 +130,13 @@ function AgentEditor() {
           sip_transport: (data.sip_transport as "tls" | "tcp" | "udp") ?? "tls",
           sip_from_number: data.sip_from_number ?? "",
         });
+        if (data.inbound_sip_domain && data.inbound_sip_username && data.inbound_sip_password) {
+          setInboundSip({
+            sip_domain: data.inbound_sip_domain,
+            username: data.inbound_sip_username,
+            password: data.inbound_sip_password,
+          });
+        }
         setLoading(false);
       });
   }, [agentId, isNew, navigate]);
@@ -174,6 +185,23 @@ function AgentEditor() {
       navigate({ to: "/agents" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delete failed");
+    }
+  }
+
+  async function handleProvisionSip() {
+    if (isNew) {
+      toast.error("Сначала сохраните агента");
+      return;
+    }
+    setProvisioning(true);
+    try {
+      const res = await provisionSipFn({ data: { agentId } });
+      setInboundSip({ sip_domain: res.sip_domain ?? "", username: res.username, password: res.password });
+      toast.success("SIP домен создан");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось создать SIP");
+    } finally {
+      setProvisioning(false);
     }
   }
 
@@ -322,6 +350,44 @@ function AgentEditor() {
                 </Field>
               </div>
             </div>
+          )}
+        </Section>
+
+        <Section title="Входящие звонки через SIP">
+          <p className="text-xs text-muted-foreground">
+            Создайте уникальный SIP-домен для этого агента. Настройте у себя в SIP-провайдере (FreePBX, Asterisk и т.п.)
+            переадресацию входящих звонков на этот SIP URI с указанными логином и паролем — звонки будут приниматься агентом.
+          </p>
+          {inboundSip ? (
+            <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
+              <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <Label className="text-xs text-muted-foreground">SIP URI</Label>
+                  <code className="block font-mono text-xs mt-1 break-all">sip:{inboundSip.username}@{inboundSip.sip_domain}</code>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Domain</Label>
+                  <code className="block font-mono text-xs mt-1 break-all">{inboundSip.sip_domain}</code>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Username</Label>
+                  <code className="block font-mono text-xs mt-1 break-all">{inboundSip.username}</code>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Password</Label>
+                  <code className="block font-mono text-xs mt-1 break-all">{inboundSip.password}</code>
+                </div>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={handleProvisionSip} disabled={provisioning}>
+                {provisioning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Обновить webhook
+              </Button>
+            </div>
+          ) : (
+            <Button type="button" onClick={handleProvisionSip} disabled={provisioning || isNew}>
+              {provisioning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Создать SIP-домен для входящих
+            </Button>
           )}
         </Section>
 

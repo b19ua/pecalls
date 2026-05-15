@@ -146,6 +146,120 @@ export const configureTwilioNumber = createServerFn({ method: "POST" })
     return { ok: true, voiceUrl };
   });
 
+function genPassword(len = 28) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const buf = new Uint8Array(len);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, (b) => alphabet[b % alphabet.length]).join("");
+}
+
+function genSlug() {
+  const alphabet = "abcdefghijkmnpqrstuvwxyz23456789";
+  const buf = new Uint8Array(10);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, (b) => alphabet[b % alphabet.length]).join("");
+}
+
+/** Provision a per-agent Twilio SIP Domain so the customer can route inbound SIP calls to the agent */
+export const provisionInboundSip = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({ agentId: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const base = publicBaseUrl(getRequest());
+
+    const { data: agent, error } = await supabase
+      .from("agents")
+      .select("id, inbound_sip_slug, inbound_sip_domain, inbound_sip_domain_sid, inbound_sip_username, inbound_sip_password, inbound_sip_credential_list_sid")
+      .eq("id", data.agentId)
+      .eq("owner_id", userId)
+      .single();
+    if (error || !agent) throw new Error("Agent not found");
+
+    const slug = agent.inbound_sip_slug || `agent-${genSlug()}`;
+    const desired = `${slug}.sip.twilio.com`;
+    const voiceUrl = `${base}/api/public/twilio/voice?agent_id=${agent.id}`;
+    const statusUrl = `${base}/api/public/twilio/status`;
+
+    // 1) Find or create SIP Domain
+    let domainSid = agent.inbound_sip_domain_sid as string | null;
+    let domainName = agent.inbound_sip_domain as string | null;
+    if (!domainSid) {
+      const list = await gwGet(`/SIP/Domains.json?PageSize=200`);
+      const existing = (list.domains || []).find((d: { domain_name: string; sid: string }) => d.domain_name === desired);
+      if (existing) {
+        domainSid = existing.sid;
+        domainName = existing.domain_name;
+        await gwPostAllowEmpty(`/SIP/Domains/${domainSid}.json`, {
+          VoiceUrl: voiceUrl,
+          VoiceMethod: "POST",
+          VoiceStatusCallbackUrl: statusUrl,
+          VoiceStatusCallbackMethod: "POST",
+        });
+      } else {
+        const created = await gwPost(`/SIP/Domains.json`, {
+          DomainName: desired,
+          FriendlyName: `Agent ${agent.id.slice(0, 8)}`,
+          VoiceUrl: voiceUrl,
+          VoiceMethod: "POST",
+          VoiceStatusCallbackUrl: statusUrl,
+          VoiceStatusCallbackMethod: "POST",
+        });
+        domainSid = created.sid;
+        domainName = created.domain_name;
+      }
+    } else {
+      // refresh voice url in case base url changed
+      await gwPostAllowEmpty(`/SIP/Domains/${domainSid}.json`, {
+        VoiceUrl: voiceUrl,
+        VoiceMethod: "POST",
+        VoiceStatusCallbackUrl: statusUrl,
+        VoiceStatusCallbackMethod: "POST",
+      });
+    }
+
+    // 2) Credential list + credential
+    const username = agent.inbound_sip_username || `agent_${slug.replace(/^agent-/, "")}`;
+    const password = agent.inbound_sip_password || genPassword(28);
+    let credListSid = agent.inbound_sip_credential_list_sid as string | null;
+
+    if (!credListSid) {
+      const cl = await gwPost(`/SIP/CredentialLists.json`, {
+        FriendlyName: `Agent ${agent.id.slice(0, 8)} SIP`,
+      });
+      credListSid = cl.sid;
+      await gwPost(`/SIP/CredentialLists/${credListSid}/Credentials.json`, {
+        Username: username,
+        Password: password,
+      });
+      // Map credential list to the SIP Domain (Auth Calls)
+      await gwPost(`/SIP/Domains/${domainSid}/Auth/Calls/CredentialListMappings.json`, {
+        CredentialListSid: credListSid as string,
+      });
+    }
+
+    await supabase
+      .from("agents")
+      .update({
+        inbound_sip_slug: slug,
+        inbound_sip_domain: domainName,
+        inbound_sip_domain_sid: domainSid,
+        inbound_sip_username: username,
+        inbound_sip_password: password,
+        inbound_sip_credential_list_sid: credListSid,
+      })
+      .eq("id", agent.id);
+
+    return {
+      sip_domain: domainName,
+      sip_uri: `sip:${slug}@${domainName}`,
+      username,
+      password,
+      voice_url: voiceUrl,
+    };
+  });
+
 /** Place an outbound call */
 export const placeOutboundCall = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

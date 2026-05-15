@@ -206,6 +206,27 @@ function AgentEditor() {
     }
   }
 
+  async function handleDeleteSip() {
+    if (!confirm("Удалить SIP-домен? Входящие звонки перестанут работать.")) return;
+    setProvisioning(true);
+    try {
+      await deleteSipFn({ data: { agentId } });
+      setInboundSip(null);
+      toast.success("SIP-домен удалён");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка удаления");
+    } finally {
+      setProvisioning(false);
+    }
+  }
+
+  function copy(text: string, label: string) {
+    navigator.clipboard.writeText(text).then(
+      () => toast.success(`${label} скопировано`),
+      () => toast.error("Не удалось скопировать"),
+    );
+  }
+
   if (loading) {
     return (
       <div className="p-8 flex items-center gap-2 text-muted-foreground">

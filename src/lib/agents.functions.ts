@@ -48,6 +48,12 @@ const AgentSchema = z.object({
   handoff_dtmf_digit: z.string().max(2),
   handoff_trigger_phrases: z.array(z.string().max(200)).max(50),
   handoff_numbers: z.array(z.string().max(20)).max(5),
+  outbound_mode: z.enum(["twilio_number", "sip_trunk"]).default("twilio_number"),
+  sip_domain: z.string().max(255).nullable().optional(),
+  sip_username: z.string().max(255).nullable().optional(),
+  sip_password: z.string().max(500).nullable().optional(),
+  sip_transport: z.enum(["tls", "tcp", "udp"]).default("tls"),
+  sip_from_number: z.string().max(50).nullable().optional(),
 });
 
 export const saveAgent = createServerFn({ method: "POST" })

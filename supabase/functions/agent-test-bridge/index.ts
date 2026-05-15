@@ -154,7 +154,7 @@ async function handle(client: WebSocket, ctx: Ctx) {
   const sendAudioToGemini = (b64Pcm16k: string) => {
     if (!gemini || gemini.readyState !== 1) return;
     gemini.send(JSON.stringify({
-      realtimeInput: { mediaChunks: [{ mimeType: "audio/pcm;rate=16000", data: b64Pcm16k }] },
+      realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: b64Pcm16k } },
     }));
   };
 

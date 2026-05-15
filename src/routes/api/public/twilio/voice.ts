@@ -24,17 +24,39 @@ export const Route = createFileRoute("/api/public/twilio/voice")({
           return new Response("Invalid signature", { status: 403 });
         }
         const callSid = String(form.get("CallSid") ?? "");
-        const fromNumber = String(form.get("From") ?? "");
-        const toNumber = String(form.get("To") ?? "");
+        const fromRaw = String(form.get("From") ?? "");
+        const toRaw = String(form.get("To") ?? "");
         const direction = String(form.get("Direction") ?? "inbound");
+        const sipDomainSid = String(form.get("SipDomainSid") ?? "");
 
-        // Resolve agent: explicit param OR by To number / SIP domain
+        // Normalize SIP URI -> bare number/identifier for storage
+        const stripSip = (s: string) => {
+          const m = s.match(/^sips?:([^@;>\s]+)/i);
+          return m ? (m[1].startsWith("+") || /^\d+$/.test(m[1]) ? m[1] : s) : s;
+        };
+        const fromNumber = stripSip(fromRaw);
+        const toNumber = stripSip(toRaw);
+
+        // Resolve agent. Priority: explicit param > SipDomainSid > SIP To domain > PSTN To number
         let agentId = agentIdParam || null;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let agent: any = null;
-        if (!agentId && toNumber) {
-          // Inbound SIP comes as "sip:user@agent-xxx.sip.twilio.com" — extract the domain
-          const sipMatch = toNumber.match(/^sip:[^@]+@([^;>\s]+)/i);
+
+        if (agentId) {
+          const { data } = await supabaseAdmin.from("agents").select("*").eq("id", agentId).maybeSingle();
+          agent = data;
+        } else if (sipDomainSid) {
+          const { data } = await supabaseAdmin
+            .from("agents")
+            .select("*")
+            .eq("inbound_sip_domain_sid", sipDomainSid)
+            .eq("is_active", true)
+            .maybeSingle();
+          agent = data;
+          agentId = data?.id ?? null;
+        }
+        if (!agent && toRaw) {
+          const sipMatch = toRaw.match(/^sips?:[^@]+@([^;>\s]+)/i);
           if (sipMatch) {
             const domain = sipMatch[1].toLowerCase();
             const { data } = await supabaseAdmin
@@ -43,22 +65,20 @@ export const Route = createFileRoute("/api/public/twilio/voice")({
               .eq("inbound_sip_domain", domain)
               .eq("is_active", true)
               .maybeSingle();
-            agent = data as typeof agent;
+            agent = data;
             agentId = data?.id ?? null;
           } else {
             const { data } = await supabaseAdmin
               .from("agents")
               .select("*")
-              .eq("twilio_number_e164", toNumber)
+              .eq("twilio_number_e164", toRaw)
               .eq("is_active", true)
               .maybeSingle();
-            agent = data as typeof agent;
+            agent = data;
             agentId = data?.id ?? null;
           }
-        } else if (agentId) {
-          const { data } = await supabaseAdmin.from("agents").select("*").eq("id", agentId).maybeSingle();
-          agent = data as typeof agent;
         }
+
 
         if (!agent) {
           return twiml(`<Say voice="alice" language="ru-RU">Извините, агент недоступен. Попробуйте позже.</Say><Hangup/>`);

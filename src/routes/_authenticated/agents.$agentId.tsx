@@ -119,6 +119,12 @@ function AgentEditor() {
           handoff_dtmf_digit: data.handoff_dtmf_digit ?? "0",
           handoff_trigger_phrases: data.handoff_trigger_phrases ?? [],
           handoff_numbers: data.handoff_numbers ?? [],
+          outbound_mode: (data.outbound_mode as "twilio_number" | "sip_trunk") ?? "twilio_number",
+          sip_domain: data.sip_domain ?? "",
+          sip_username: data.sip_username ?? "",
+          sip_password: data.sip_password ?? "",
+          sip_transport: (data.sip_transport as "tls" | "tcp" | "udp") ?? "tls",
+          sip_from_number: data.sip_from_number ?? "",
         });
         setLoading(false);
       });

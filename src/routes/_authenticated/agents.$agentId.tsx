@@ -42,6 +42,12 @@ type AgentForm = {
   handoff_dtmf_digit: string;
   handoff_trigger_phrases: string[];
   handoff_numbers: string[];
+  outbound_mode: "twilio_number" | "sip_trunk";
+  sip_domain: string;
+  sip_username: string;
+  sip_password: string;
+  sip_transport: "tls" | "tcp" | "udp";
+  sip_from_number: string;
 };
 
 const DEFAULTS: AgentForm = {
@@ -62,6 +68,12 @@ const DEFAULTS: AgentForm = {
   handoff_dtmf_digit: "0",
   handoff_trigger_phrases: ["соедини с менеджером", "оператор", "human", "manager"],
   handoff_numbers: [],
+  outbound_mode: "twilio_number",
+  sip_domain: "",
+  sip_username: "",
+  sip_password: "",
+  sip_transport: "tls",
+  sip_from_number: "",
 };
 
 function AgentEditor() {

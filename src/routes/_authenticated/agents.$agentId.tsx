@@ -69,7 +69,8 @@ function AgentEditor() {
   const { agentId } = useParams({ from: "/_authenticated/agents/$agentId" });
   const isNew = agentId === "new";
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const saveAgentFn = useServerFn(saveAgent);
+  const deleteAgentFn = useServerFn(deleteAgent);
   const [form, setForm] = useState<AgentForm>(DEFAULTS);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -114,10 +115,6 @@ function AgentEditor() {
   const set = <K extends keyof AgentForm>(k: K, v: AgentForm[K]) => setForm((p) => ({ ...p, [k]: v }));
 
   async function handleSave() {
-    if (!user) {
-      toast.error("Auth required");
-      return;
-    }
     if (!form.name.trim()) {
       toast.error(t("agent.field.name"));
       return;
@@ -127,30 +124,35 @@ function AgentEditor() {
       return;
     }
     setSaving(true);
-    const payload = {
-      ...form,
-      twilio_number_e164: form.twilio_number_e164 || null,
-      description: form.description || null,
-      owner_id: user.id,
-    };
-    const { data, error } = isNew
-      ? await supabase.from("agents").insert(payload).select("id").single()
-      : await supabase.from("agents").update(payload).eq("id", agentId).select("id").single();
-    setSaving(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      const res = await saveAgentFn({
+        data: {
+          id: isNew ? null : agentId,
+          data: {
+            ...form,
+            description: form.description || null,
+            twilio_number_e164: form.twilio_number_e164 || null,
+          },
+        },
+      });
+      toast.success("OK");
+      if (isNew) navigate({ to: "/agents/$agentId", params: { agentId: res.id } });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
     }
-    toast.success("OK");
-    if (isNew && data) navigate({ to: "/agents/$agentId", params: { agentId: data.id } });
   }
 
   async function handleDelete() {
     if (!confirm(t("common.delete") + "?")) return;
-    const { error } = await supabase.from("agents").delete().eq("id", agentId);
-    if (error) return toast.error(error.message);
-    toast.success("OK");
-    navigate({ to: "/agents" });
+    try {
+      await deleteAgentFn({ data: { id: agentId } });
+      toast.success("OK");
+      navigate({ to: "/agents" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delete failed");
+    }
   }
 
   if (loading) {

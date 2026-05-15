@@ -377,33 +377,41 @@ function AgentEditor() {
 
         <Section title="Входящие звонки через SIP">
           <p className="text-xs text-muted-foreground">
-            Создайте уникальный SIP-домен для этого агента. Настройте у себя в SIP-провайдере (FreePBX, Asterisk и т.п.)
-            переадресацию входящих звонков на этот SIP URI с указанными логином и паролем — звонки будут приниматься агентом.
+            Создайте уникальный SIP-домен для этого агента. В вашем SIP-провайдере (FreePBX, Asterisk, 3CX и т.п.) создайте
+            исходящий SIP trunk на указанный адрес с этим логином/паролем (digest auth) и направьте на него входящие вызовы —
+            агент будет автоматически отвечать.
           </p>
           {inboundSip ? (
-            <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
-              <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                <div>
-                  <Label className="text-xs text-muted-foreground">SIP URI</Label>
-                  <code className="block font-mono text-xs mt-1 break-all">sip:{inboundSip.username}@{inboundSip.sip_domain}</code>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Domain</Label>
-                  <code className="block font-mono text-xs mt-1 break-all">{inboundSip.sip_domain}</code>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Username</Label>
-                  <code className="block font-mono text-xs mt-1 break-all">{inboundSip.username}</code>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Password</Label>
-                  <code className="block font-mono text-xs mt-1 break-all">{inboundSip.password}</code>
-                </div>
+            <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+              <div className="space-y-3">
+                {[
+                  { label: "SIP host (Termination URI)", value: inboundSip.sip_domain, hint: "Куда направлять INVITE из вашего PBX" },
+                  { label: "Auth username", value: inboundSip.username, hint: "Digest authentication username" },
+                  { label: "Auth password", value: inboundSip.password, hint: "Digest authentication password" },
+                  { label: "Transport", value: "TLS (рекомендуется), порт 5061", hint: "Поддерживается также UDP/TCP на 5060" },
+                  { label: "Формат вызова", value: `sip:НОМЕР@${inboundSip.sip_domain}`, hint: "Любой номер в Request-URI — мы маршрутизируем по домену" },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-start justify-between gap-3 border-b border-border/40 pb-2 last:border-0 last:pb-0">
+                    <div className="min-w-0 flex-1">
+                      <Label className="text-xs text-muted-foreground">{row.label}</Label>
+                      <code className="block font-mono text-xs mt-0.5 break-all">{row.value}</code>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{row.hint}</p>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0" onClick={() => copy(row.value, row.label)}>
+                      Copy
+                    </Button>
+                  </div>
+                ))}
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={handleProvisionSip} disabled={provisioning}>
-                {provisioning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                Обновить webhook
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={handleProvisionSip} disabled={provisioning}>
+                  {provisioning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                  Обновить webhook
+                </Button>
+                <Button type="button" variant="destructive" size="sm" onClick={handleDeleteSip} disabled={provisioning}>
+                  Удалить SIP-домен
+                </Button>
+              </div>
             </div>
           ) : (
             <Button type="button" onClick={handleProvisionSip} disabled={provisioning || isNew}>

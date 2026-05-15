@@ -88,6 +88,7 @@ async function handle(client: WebSocket, ctx: Ctx) {
           generationConfig: {
             responseModalities: ["AUDIO"],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: ctx.voice } } },
+            thinkingConfig: { thinkingLevel: "minimal" },
           },
           systemInstruction: { parts: [{ text: ctx.systemPrompt }] },
           inputAudioTranscription: {},

@@ -130,6 +130,13 @@ function AgentEditor() {
           sip_transport: (data.sip_transport as "tls" | "tcp" | "udp") ?? "tls",
           sip_from_number: data.sip_from_number ?? "",
         });
+        if (data.inbound_sip_domain && data.inbound_sip_username && data.inbound_sip_password) {
+          setInboundSip({
+            sip_domain: data.inbound_sip_domain,
+            username: data.inbound_sip_username,
+            password: data.inbound_sip_password,
+          });
+        }
         setLoading(false);
       });
   }, [agentId, isNew, navigate]);

@@ -185,9 +185,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const ctxText = hits.map((h: { content: string }, i: number) => `[${i + 1}] ${h.content}`).join("\n\n");
       log("RAG hits=", hits.length, "for:", q.slice(0, 60));
       gemini.send(JSON.stringify({
-        clientContent: {
-          turns: [{ role: "user", parts: [{ text: `[INTERNAL CONTEXT — do not read aloud. Use it to answer the caller's last question precisely. If the answer is not here, say you don't know.]\n\n${ctxText}` }] }],
-          turnComplete: false,
+        realtimeInput: {
+          text: `[INTERNAL CONTEXT — do not read aloud. Use it to answer the caller's last question precisely. If the answer is not here, say you don't know.]\n\n${ctxText}`,
         },
       }));
     } catch (e) { console.error("rag", e); }

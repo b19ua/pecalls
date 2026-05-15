@@ -188,6 +188,23 @@ function AgentEditor() {
     }
   }
 
+  async function handleProvisionSip() {
+    if (isNew) {
+      toast.error("Сначала сохраните агента");
+      return;
+    }
+    setProvisioning(true);
+    try {
+      const res = await provisionSipFn({ data: { agentId } });
+      setInboundSip({ sip_domain: res.sip_domain, username: res.username, password: res.password });
+      toast.success("SIP домен создан");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось создать SIP");
+    } finally {
+      setProvisioning(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-8 flex items-center gap-2 text-muted-foreground">

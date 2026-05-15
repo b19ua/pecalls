@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate, useParams, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/use-auth";
+import { saveAgent, deleteAgent } from "@/lib/agents.functions";
 import { GEMINI_VOICES, LANGUAGES } from "@/lib/voices";
 import { PageHeader } from "@/components/PageHeader";
 import { HintIcon } from "@/components/HintIcon";

@@ -37,6 +37,25 @@ async function gwPost(path: string, body: Record<string, string | string[]>) {
   return data;
 }
 
+async function gwPostAllowEmpty(path: string, body: Record<string, string | string[] | null | undefined>) {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(body)) {
+    if (Array.isArray(v)) {
+      v.forEach((vv) => params.append(k, vv));
+      continue;
+    }
+    params.append(k, v ?? "");
+  }
+  const r = await fetch(`${GATEWAY}${path}`, {
+    method: "POST",
+    headers: { ...gwHeaders(), "Content-Type": "application/x-www-form-urlencoded" },
+    body: params,
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(`Twilio ${r.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
 function publicBaseUrl(_req: Request) {
   // Twilio fetches webhooks from a public, unauthenticated URL.
   // The id-preview--*.lovable.app host is gated by Lovable auth and 302s to
@@ -106,11 +125,13 @@ export const configureTwilioNumber = createServerFn({ method: "POST" })
     const voiceUrl = `${base}/api/public/twilio/voice?agent_id=${data.agentId ?? ""}`;
     const statusUrl = `${base}/api/public/twilio/status`;
 
-    await gwPost(`/IncomingPhoneNumbers/${row.phone_sid}.json`, {
+    await gwPostAllowEmpty(`/IncomingPhoneNumbers/${row.phone_sid}.json`, {
       VoiceUrl: voiceUrl,
       VoiceMethod: "POST",
       StatusCallback: statusUrl,
       StatusCallbackMethod: "POST",
+      VoiceApplicationSid: "",
+      TrunkSid: "",
     });
 
     await supabase

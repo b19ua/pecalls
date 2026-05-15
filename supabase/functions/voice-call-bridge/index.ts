@@ -11,8 +11,8 @@ const TWILIO_GATEWAY = "https://connector-gateway.lovable.dev/twilio";
 const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
 
 const GEMINI_MODELS = [
+  "models/gemini-3.1-flash-live-preview",
   "models/gemini-2.5-flash-native-audio-latest",
-  "models/gemini-2.5-flash-native-audio-preview-12-2025",
   "models/gemini-2.5-flash-preview-native-audio-dialog",
 ];
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;

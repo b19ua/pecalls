@@ -8,6 +8,7 @@ import { AppLogo } from "@/components/AppLogo";
 import { toast } from "sonner";
 import { Loader2, Lock } from "lucide-react";
 import { verifyAdminLogin } from "@/lib/admin-auth.functions";
+import { supabase } from "@/integrations/supabase/client";
 
 export const ADMIN_SESSION_KEY = "pe_admin_session";
 
@@ -26,7 +27,12 @@ function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login({ data: { username, password } });
+      const res = await login({ data: { username, password } });
+      const { error: setErr } = await supabase.auth.setSession({
+        access_token: res.access_token,
+        refresh_token: res.refresh_token,
+      });
+      if (setErr) throw setErr;
       localStorage.setItem(ADMIN_SESSION_KEY, "1");
       toast.success("Welcome back!");
       navigate({ to: "/dashboard" });

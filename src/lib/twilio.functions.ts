@@ -260,6 +260,50 @@ export const provisionInboundSip = createServerFn({ method: "POST" })
     };
   });
 
+async function gwDelete(path: string) {
+  const r = await fetch(`${GATEWAY}${path}`, { method: "DELETE", headers: gwHeaders() });
+  if (!r.ok && r.status !== 404) {
+    const text = await r.text();
+    throw new Error(`Twilio DELETE ${path} ${r.status}: ${text}`);
+  }
+}
+
+/** Remove the inbound SIP domain & credentials for an agent */
+export const deleteInboundSip = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({ agentId: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: agent, error } = await supabase
+      .from("agents")
+      .select("id, inbound_sip_domain_sid, inbound_sip_credential_list_sid")
+      .eq("id", data.agentId)
+      .eq("owner_id", userId)
+      .single();
+    if (error || !agent) throw new Error("Agent not found");
+
+    if (agent.inbound_sip_domain_sid) {
+      await gwDelete(`/SIP/Domains/${agent.inbound_sip_domain_sid}.json`);
+    }
+    if (agent.inbound_sip_credential_list_sid) {
+      await gwDelete(`/SIP/CredentialLists/${agent.inbound_sip_credential_list_sid}.json`);
+    }
+
+    await supabase
+      .from("agents")
+      .update({
+        inbound_sip_slug: null,
+        inbound_sip_domain: null,
+        inbound_sip_domain_sid: null,
+        inbound_sip_username: null,
+        inbound_sip_password: null,
+        inbound_sip_credential_list_sid: null,
+      })
+      .eq("id", agent.id);
+
+    return { ok: true };
+  });
+
 /** Place an outbound call */
 export const placeOutboundCall = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

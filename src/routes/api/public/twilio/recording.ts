@@ -1,0 +1,127 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { verifyTwilioRequest } from "@/lib/twilio-verify.server";
+
+const GATEWAY = "https://connector-gateway.lovable.dev/twilio";
+
+async function downloadRecording(recordingSid: string): Promise<ArrayBuffer> {
+  const lov = process.env.LOVABLE_API_KEY!;
+  const tw = process.env.TWILIO_API_KEY!;
+  const r = await fetch(`${GATEWAY}/Recordings/${recordingSid}.mp3`, {
+    headers: { Authorization: `Bearer ${lov}`, "X-Connection-Api-Key": tw },
+  });
+  if (!r.ok) throw new Error(`Recording download failed: ${r.status}`);
+  return await r.arrayBuffer();
+}
+
+async function transcribeWithGemini(audio: ArrayBuffer, language: string): Promise<string> {
+  const key = process.env.LOVABLE_API_KEY;
+  if (!key) return "";
+  // base64 encode
+  const bytes = new Uint8Array(audio);
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  const b64 = btoa(bin);
+
+  const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Транскрибируй этот звонок на языке ${language}. Каналы: 1 — клиент, 2 — агент. Верни диалог в формате:\nСпикер: текст\nБез комментариев, только транскрипт.`,
+            },
+            // OpenAI-compat audio input
+            { type: "input_audio", input_audio: { data: b64, format: "mp3" } },
+          ],
+        },
+      ],
+    }),
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    console.error("[recording] transcription failed", r.status, t);
+    return "";
+  }
+  const data = await r.json();
+  return data?.choices?.[0]?.message?.content ?? "";
+}
+
+export const Route = createFileRoute("/api/public/twilio/recording")({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const form = await request.formData();
+        if (!(await verifyTwilioRequest(request, form))) {
+          return new Response("Invalid signature", { status: 403 });
+        }
+        const callSid = String(form.get("CallSid") ?? "");
+        const recordingSid = String(form.get("RecordingSid") ?? "");
+        const recordingUrl = String(form.get("RecordingUrl") ?? "");
+        const status = String(form.get("RecordingStatus") ?? "");
+        const duration = Number(form.get("RecordingDuration") ?? 0);
+
+        if (!callSid || !recordingSid || status !== "completed") {
+          return new Response("ok");
+        }
+
+        // Look up the call to get owner/agent
+        const { data: call } = await supabaseAdmin
+          .from("calls")
+          .select("id, owner_id, agent_id, agents(language)")
+          .eq("twilio_call_sid", callSid)
+          .maybeSingle();
+
+        if (!call) {
+          console.warn("[recording] call not found", callSid);
+          return new Response("ok");
+        }
+
+        // Download from Twilio and store in Supabase
+        let storagePath: string | null = null;
+        try {
+          const audio = await downloadRecording(recordingSid);
+          const path = `${call.owner_id}/${call.id}/${recordingSid}.mp3`;
+          const { error: upErr } = await supabaseAdmin.storage
+            .from("call-recordings")
+            .upload(path, new Uint8Array(audio), { contentType: "audio/mpeg", upsert: true });
+          if (upErr) throw upErr;
+          storagePath = path;
+
+          // Transcribe (best-effort, don't block)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const lang = ((call as any).agents?.language as string) || "ru-RU";
+          const transcript = await transcribeWithGemini(audio, lang);
+
+          await supabaseAdmin
+            .from("calls")
+            .update({
+              recording_path: storagePath,
+              recording_url: `${recordingUrl}.mp3`,
+              ...(duration ? { duration_seconds: duration } : {}),
+              ...(transcript
+                ? { transcript: [{ source: "gemini", text: transcript, at: new Date().toISOString() }] }
+                : {}),
+            })
+            .eq("id", call.id);
+        } catch (e) {
+          console.error("[recording] processing failed", e);
+          await supabaseAdmin
+            .from("calls")
+            .update({ recording_url: `${recordingUrl}.mp3` })
+            .eq("id", call.id);
+        }
+
+        return new Response("ok");
+      },
+    },
+  },
+});

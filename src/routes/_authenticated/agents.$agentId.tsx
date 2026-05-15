@@ -85,6 +85,7 @@ function AgentEditor() {
   const saveAgentFn = useServerFn(saveAgent);
   const deleteAgentFn = useServerFn(deleteAgent);
   const provisionSipFn = useServerFn(provisionInboundSip);
+  const deleteSipFn = useServerFn(deleteInboundSip);
   const [form, setForm] = useState<AgentForm>(DEFAULTS);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);

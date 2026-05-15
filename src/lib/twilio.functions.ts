@@ -164,29 +164,43 @@ export const placeOutboundCall = createServerFn({ method: "POST" })
 
     const { data: agent, error: aerr } = await supabase
       .from("agents")
-      .select("id, twilio_number_e164")
+      .select("id, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number")
       .eq("id", data.agentId)
       .eq("owner_id", userId)
       .single();
     if (aerr || !agent) throw new Error("Agent not found");
-    if (!agent.twilio_number_e164) throw new Error("Agent has no Twilio number assigned");
 
-    const twiml = await gwPost("/Calls.json", {
-      To: data.toNumber,
-      From: agent.twilio_number_e164,
+    const useSip = agent.outbound_mode === "sip_trunk" && agent.sip_domain;
+    const fromNumber = useSip
+      ? (agent.sip_from_number || agent.twilio_number_e164)
+      : agent.twilio_number_e164;
+    if (!fromNumber) throw new Error("Agent has no caller-ID number assigned (Twilio number or SIP From)");
+
+    const transport = (agent.sip_transport || "tls").toLowerCase();
+    const toParam = useSip
+      ? `sip:${data.toNumber.replace(/^\+/, "")}@${agent.sip_domain}${transport ? `;transport=${transport}` : ""}`
+      : data.toNumber;
+
+    const callBody: Record<string, string | string[]> = {
+      To: toParam,
+      From: fromNumber,
       Url: `${base}/api/public/twilio/voice?agent_id=${agent.id}`,
       StatusCallback: `${base}/api/public/twilio/status`,
       StatusCallbackMethod: "POST",
       StatusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
       Record: "true",
-    });
+    };
+    if (useSip && agent.sip_username) callBody.SipAuthUsername = agent.sip_username;
+    if (useSip && agent.sip_password) callBody.SipAuthPassword = agent.sip_password;
+
+    const twiml = await gwPost("/Calls.json", callBody);
 
     await supabase.from("calls").insert({
       owner_id: userId,
       agent_id: agent.id,
       twilio_call_sid: twiml.sid,
       direction: "outbound",
-      from_number: agent.twilio_number_e164,
+      from_number: fromNumber,
       to_number: data.toNumber,
       status: "queued",
     });

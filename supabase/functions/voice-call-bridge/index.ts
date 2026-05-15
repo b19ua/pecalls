@@ -81,6 +81,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           generationConfig: {
             responseModalities: ["AUDIO"],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } } },
+            thinkingConfig: { thinkingLevel: "minimal" },
           },
           systemInstruction: { parts: [{ text: c.systemPrompt }] },
           inputAudioTranscription: {},
@@ -100,9 +101,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
             const langName: Record<string, string> = { "ru-RU": "Russian", "en-US": "English", "ro-RO": "Romanian" };
             const lang = langName[c.language] || c.language;
             gemini!.send(JSON.stringify({
-              clientContent: {
-                turns: [{ role: "user", parts: [{ text: `The phone call has just connected. Speak immediately in ${lang}: greet warmly with "${c.greeting}", then ask one short open question. Keep replies under 2 sentences.` }] }],
-                turnComplete: true,
+              realtimeInput: {
+                text: `The phone call has just connected. Speak immediately in ${lang}: greet warmly with "${c.greeting}", then ask one short open question. Keep replies under 2 sentences.`,
               },
             }));
           }
@@ -159,7 +159,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     if (nonSilent > 8) lastUserAudioAt = Date.now();
     const pcm16k = mulaw8kToPcm16k(mulawBytes);
     gemini.send(JSON.stringify({
-      realtimeInput: { mediaChunks: [{ mimeType: "audio/pcm;rate=16000", data: bytesToB64(pcm16k) }] },
+      realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: bytesToB64(pcm16k) } },
     }));
   };
 
@@ -185,9 +185,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const ctxText = hits.map((h: { content: string }, i: number) => `[${i + 1}] ${h.content}`).join("\n\n");
       log("RAG hits=", hits.length, "for:", q.slice(0, 60));
       gemini.send(JSON.stringify({
-        clientContent: {
-          turns: [{ role: "user", parts: [{ text: `[INTERNAL CONTEXT — do not read aloud. Use it to answer the caller's last question precisely. If the answer is not here, say you don't know.]\n\n${ctxText}` }] }],
-          turnComplete: false,
+        realtimeInput: {
+          text: `[INTERNAL CONTEXT — do not read aloud. Use it to answer the caller's last question precisely. If the answer is not here, say you don't know.]\n\n${ctxText}`,
         },
       }));
     } catch (e) { console.error("rag", e); }
@@ -200,10 +199,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       try {
         if (gemini && gemini.readyState === 1) {
           gemini.send(JSON.stringify({
-            clientContent: {
-              turns: [{ role: "user", parts: [{ text: "[system] Line silent 20s. Say a brief polite goodbye and end the call." }] }],
-              turnComplete: true,
-            },
+            realtimeInput: { text: "[system] Line silent 20s. Say a brief polite goodbye and end the call." },
           }));
         }
       } catch { /* noop */ }
@@ -216,10 +212,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       try {
         if (gemini && gemini.readyState === 1) {
           gemini.send(JSON.stringify({
-            clientContent: {
-              turns: [{ role: "user", parts: [{ text: "[system] Quiet ~8s. Politely re-engage in one short sentence." }] }],
-              turnComplete: true,
-            },
+            realtimeInput: { text: "[system] Quiet ~8s. Politely re-engage in one short sentence." },
           }));
         }
       } catch { /* noop */ }

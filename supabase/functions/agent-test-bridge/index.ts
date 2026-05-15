@@ -88,6 +88,7 @@ async function handle(client: WebSocket, ctx: Ctx) {
           generationConfig: {
             responseModalities: ["AUDIO"],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: ctx.voice } } },
+            thinkingConfig: { thinkingLevel: "minimal" },
           },
           systemInstruction: { parts: [{ text: ctx.systemPrompt }] },
           inputAudioTranscription: {},
@@ -107,9 +108,8 @@ async function handle(client: WebSocket, ctx: Ctx) {
             const langName: Record<string, string> = { "ru-RU": "Russian", "en-US": "English", "ro-RO": "Romanian" };
             const lang = langName[ctx.language] || ctx.language;
             gemini!.send(JSON.stringify({
-              clientContent: {
-                turns: [{ role: "user", parts: [{ text: `Test call started. Speak immediately in ${lang}: greet warmly with "${ctx.greeting}", then ask one short open question. Keep replies under 2 sentences.` }] }],
-                turnComplete: true,
+              realtimeInput: {
+                text: `Test call started. Speak immediately in ${lang}: greet warmly with "${ctx.greeting}", then ask one short open question. Keep replies under 2 sentences.`,
               },
             }));
           }
@@ -154,7 +154,7 @@ async function handle(client: WebSocket, ctx: Ctx) {
   const sendAudioToGemini = (b64Pcm16k: string) => {
     if (!gemini || gemini.readyState !== 1) return;
     gemini.send(JSON.stringify({
-      realtimeInput: { mediaChunks: [{ mimeType: "audio/pcm;rate=16000", data: b64Pcm16k }] },
+      realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: b64Pcm16k } },
     }));
   };
 

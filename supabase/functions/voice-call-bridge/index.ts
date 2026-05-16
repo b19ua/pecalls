@@ -86,6 +86,17 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           systemInstruction: { parts: [{ text: c.systemPrompt }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
+          // Make VAD less trigger-happy on background noise (street, TV, car, kids).
+          // Low start sensitivity = need clearer speech to interrupt the agent.
+          // Larger silenceDuration = wait longer before deciding user finished talking.
+          realtimeInputConfig: {
+            automaticActivityDetection: {
+              startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
+              endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
+              prefixPaddingMs: 300,
+              silenceDurationMs: 900,
+            },
+          },
         },
       }));
     };
@@ -149,15 +160,45 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     };
   };
 
+  // Local noise gate so background sound (street, TV, kids) doesn't reach Gemini
+  // and falsely interrupt the agent. We track an adaptive noise floor on the
+  // incoming μ-law frames and only forward audio when RMS is clearly above it.
+  // Hangover frames keep the gate open briefly so we don't clip word tails.
+  let noiseFloor = 600; // RMS in Int16 units, starts conservative
+  let hangoverFrames = 0;
+  const HANGOVER_FRAMES = 12; // ~240ms at 20ms frames
+  const SPEECH_MARGIN = 2.2; // rms must exceed floor * margin to count as speech
+
   const sendAudioToGemini = (mulawB64: string) => {
     if (!gemini || gemini.readyState !== 1) return;
     const mulawBytes = b64ToBytes(mulawB64);
-    let nonSilent = 0;
-    for (let i = 0; i < mulawBytes.length; i++) {
-      if (mulawBytes[i] !== 0xff && mulawBytes[i] !== 0x7f) { nonSilent++; if (nonSilent > 8) break; }
-    }
-    if (nonSilent > 8) lastUserAudioAt = Date.now();
     const pcm16k = mulaw8kToPcm16k(mulawBytes);
+
+    // Compute RMS over the PCM16 frame
+    let sumSq = 0;
+    const view = new DataView(pcm16k.buffer, pcm16k.byteOffset, pcm16k.byteLength);
+    const samples = pcm16k.byteLength / 2;
+    for (let i = 0; i < samples; i++) {
+      const s = view.getInt16(i * 2, true);
+      sumSq += s * s;
+    }
+    const rms = Math.sqrt(sumSq / Math.max(1, samples));
+
+    const isSpeech = rms > noiseFloor * SPEECH_MARGIN && rms > 800;
+    if (isSpeech) {
+      hangoverFrames = HANGOVER_FRAMES;
+      lastUserAudioAt = Date.now();
+    } else {
+      // Slowly adapt noise floor upward toward ambient, faster downward
+      noiseFloor = rms < noiseFloor
+        ? noiseFloor * 0.92 + rms * 0.08
+        : noiseFloor * 0.99 + rms * 0.01;
+      noiseFloor = Math.min(Math.max(noiseFloor, 300), 4000);
+    }
+
+    if (!isSpeech && hangoverFrames <= 0) return; // drop background frame
+    if (hangoverFrames > 0) hangoverFrames--;
+
     gemini.send(JSON.stringify({
       realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: bytesToB64(pcm16k) } },
     }));

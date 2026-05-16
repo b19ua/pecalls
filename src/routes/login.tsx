@@ -54,21 +54,21 @@ function LoginPage() {
               "radial-gradient(circle at 20% 30%, oklch(0.7 0.18 152) 0%, transparent 50%), radial-gradient(circle at 80% 70%, oklch(0.6 0.15 180) 0%, transparent 50%)",
           }}
         />
-        <div className="relative z-10 flex-1 flex items-center justify-center">
+        <div className="relative z-10 flex-1 flex flex-col items-center justify-center">
           <img
             src={logoFull}
             alt="Premier Energy AI Calls"
-            className="w-1/3 h-auto object-contain drop-shadow-lg"
+            className="w-2/3 h-auto object-contain drop-shadow-lg"
           />
-        </div>
-        <div className="relative z-10 max-w-md mx-auto text-center">
-          <h2 className="font-display text-4xl font-bold leading-tight">
-            Next-generation AI calling
-          </h2>
-          <p className="mt-4 text-sidebar-foreground/70 text-[15px] leading-relaxed">
-            Automated voice assistant platform powered by Gemini Live and Twilio.
-            Inbound, outbound, RAG knowledge, human handoff — all in one place.
-          </p>
+          <div className="max-w-md mx-auto text-center mt-8">
+            <h2 className="font-display text-4xl font-bold leading-tight">
+              Next-generation AI calling
+            </h2>
+            <p className="mt-4 text-sidebar-foreground/70 text-[15px] leading-relaxed">
+              Automated voice assistant platform powered by Gemini Live and Twilio.
+              Inbound, outbound, RAG knowledge, human handoff — all in one place.
+            </p>
+          </div>
         </div>
         <div className="relative z-10 text-xs text-sidebar-foreground/50 mt-8 text-center">
           © {new Date().getFullYear()} Premier Energy. All rights reserved.

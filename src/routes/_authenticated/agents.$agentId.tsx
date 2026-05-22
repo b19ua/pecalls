@@ -49,6 +49,7 @@ type AgentForm = {
   sip_password: string;
   sip_transport: "tls" | "tcp" | "udp";
   sip_from_number: string;
+  sip_route_prefix: string;
 };
 
 const DEFAULTS: AgentForm = {

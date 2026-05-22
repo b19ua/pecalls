@@ -76,6 +76,7 @@ const DEFAULTS: AgentForm = {
   sip_password: "",
   sip_transport: "tls",
   sip_from_number: "",
+  sip_route_prefix: "",
 };
 
 function AgentEditor() {

@@ -169,6 +169,7 @@ function AgentEditor() {
             sip_username: form.sip_username || null,
             sip_password: form.sip_password || null,
             sip_from_number: form.sip_from_number || null,
+            sip_route_prefix: form.sip_route_prefix || null,
           },
         },
       });

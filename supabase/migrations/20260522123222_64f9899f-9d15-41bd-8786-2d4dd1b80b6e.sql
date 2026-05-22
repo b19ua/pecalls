@@ -1,0 +1,1 @@
+UPDATE public.agents SET sip_password = 'xzw1SS3Dbn2mhj4BBAx0001' WHERE id = 'cd90a7da-c2a0-47f9-bf73-152a72dc04dc';

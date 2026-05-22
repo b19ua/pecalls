@@ -374,6 +374,9 @@ function AgentEditor() {
                 <Field label="Caller ID (E.164, опционально)">
                   <Input value={form.sip_from_number} onChange={(e) => set("sip_from_number", e.target.value)} placeholder="+37360123456" />
                 </Field>
+                <Field label="Route prefix (опционально)">
+                  <Input value={form.sip_route_prefix} onChange={(e) => set("sip_route_prefix", e.target.value)} placeholder="88" />
+                </Field>
               </div>
             </div>
           )}

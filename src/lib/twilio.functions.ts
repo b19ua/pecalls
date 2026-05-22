@@ -322,7 +322,7 @@ export const placeOutboundCall = createServerFn({ method: "POST" })
 
     const { data: agent, error: aerr } = await supabase
       .from("agents")
-      .select("id, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number")
+      .select("id, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix")
       .eq("id", data.agentId)
       .eq("owner_id", userId)
       .single();
@@ -335,9 +335,13 @@ export const placeOutboundCall = createServerFn({ method: "POST" })
     if (!fromNumber) throw new Error("Agent has no caller-ID number assigned (Twilio number or SIP From)");
 
     const transport = (agent.sip_transport || "tls").toLowerCase();
+    const prefix = (agent.sip_route_prefix || "").trim();
+    const dialDigits = data.toNumber.replace(/^\+/, "");
+    const sipUser = useSip ? `${prefix}${dialDigits}` : "";
     const toParam = useSip
-      ? `sip:${data.toNumber.replace(/^\+/, "")}@${agent.sip_domain}${transport ? `;transport=${transport}` : ""}`
+      ? `sip:${sipUser}@${agent.sip_domain}${transport ? `;transport=${transport}` : ""}`
       : data.toNumber;
+
 
     const callBody: Record<string, string | string[]> = {
       To: toParam,

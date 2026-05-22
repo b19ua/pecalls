@@ -49,6 +49,7 @@ type AgentForm = {
   sip_password: string;
   sip_transport: "tls" | "tcp" | "udp";
   sip_from_number: string;
+  sip_route_prefix: string;
 };
 
 const DEFAULTS: AgentForm = {
@@ -75,6 +76,7 @@ const DEFAULTS: AgentForm = {
   sip_password: "",
   sip_transport: "tls",
   sip_from_number: "",
+  sip_route_prefix: "",
 };
 
 function AgentEditor() {
@@ -130,6 +132,7 @@ function AgentEditor() {
           sip_password: data.sip_password ?? "",
           sip_transport: (data.sip_transport as "tls" | "tcp" | "udp") ?? "tls",
           sip_from_number: data.sip_from_number ?? "",
+          sip_route_prefix: data.sip_route_prefix ?? "",
         });
         if (data.inbound_sip_domain && data.inbound_sip_username && data.inbound_sip_password) {
           setInboundSip({
@@ -166,6 +169,7 @@ function AgentEditor() {
             sip_username: form.sip_username || null,
             sip_password: form.sip_password || null,
             sip_from_number: form.sip_from_number || null,
+            sip_route_prefix: form.sip_route_prefix || null,
           },
         },
       });
@@ -369,6 +373,9 @@ function AgentEditor() {
                 </Field>
                 <Field label="Caller ID (E.164, опционально)">
                   <Input value={form.sip_from_number} onChange={(e) => set("sip_from_number", e.target.value)} placeholder="+37360123456" />
+                </Field>
+                <Field label="Route prefix (опционально)">
+                  <Input value={form.sip_route_prefix} onChange={(e) => set("sip_route_prefix", e.target.value)} placeholder="88" />
                 </Field>
               </div>
             </div>

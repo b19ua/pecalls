@@ -42,6 +42,7 @@ export type Database = {
           sip_domain: string | null
           sip_from_number: string | null
           sip_password: string | null
+          sip_route_prefix: string | null
           sip_transport: string
           sip_username: string | null
           system_prompt: string
@@ -77,6 +78,7 @@ export type Database = {
           sip_domain?: string | null
           sip_from_number?: string | null
           sip_password?: string | null
+          sip_route_prefix?: string | null
           sip_transport?: string
           sip_username?: string | null
           system_prompt?: string
@@ -112,6 +114,7 @@ export type Database = {
           sip_domain?: string | null
           sip_from_number?: string | null
           sip_password?: string | null
+          sip_route_prefix?: string | null
           sip_transport?: string
           sip_username?: string | null
           system_prompt?: string

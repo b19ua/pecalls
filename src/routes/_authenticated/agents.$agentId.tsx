@@ -132,6 +132,7 @@ function AgentEditor() {
           sip_password: data.sip_password ?? "",
           sip_transport: (data.sip_transport as "tls" | "tcp" | "udp") ?? "tls",
           sip_from_number: data.sip_from_number ?? "",
+          sip_route_prefix: data.sip_route_prefix ?? "",
         });
         if (data.inbound_sip_domain && data.inbound_sip_username && data.inbound_sip_password) {
           setInboundSip({

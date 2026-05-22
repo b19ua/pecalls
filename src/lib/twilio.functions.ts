@@ -342,10 +342,6 @@ export const placeOutboundCall = createServerFn({ method: "POST" })
       ? `sip:${sipUser}@${agent.sip_domain}${transport ? `;transport=${transport}` : ""}`
       : data.toNumber;
 
-    const transport = (agent.sip_transport || "tls").toLowerCase();
-    const toParam = useSip
-      ? `sip:${data.toNumber.replace(/^\+/, "")}@${agent.sip_domain}${transport ? `;transport=${transport}` : ""}`
-      : data.toNumber;
 
     const callBody: Record<string, string | string[]> = {
       To: toParam,

@@ -54,6 +54,7 @@ const AgentSchema = z.object({
   sip_password: z.string().max(500).nullable().optional(),
   sip_transport: z.enum(["tls", "tcp", "udp"]).default("tls"),
   sip_from_number: z.string().max(50).nullable().optional(),
+  sip_route_prefix: z.string().max(20).nullable().optional(),
 });
 
 export const saveAgent = createServerFn({ method: "POST" })

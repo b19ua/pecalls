@@ -152,6 +152,9 @@ const ru: Dict = {
   "numbers.dialog.recipient": "Номер получателя (E.164)",
   "numbers.dialog.call": "Позвонить",
   "numbers.tip": "Чтобы вебхуки работали в продакшене — опубликуйте проект (preview-URL не подходит для Twilio).",
+  "numbers.customSip": "Свой SIP",
+  "numbers.boundDirectly": "Привязан напрямую",
+  "numbers.inboundHost": "Входящий SIP host",
 
   // Calls
   "calls.title": "Звонки",
@@ -346,6 +349,9 @@ const ro: Dict = {
   "numbers.dialog.recipient": "Număr destinatar (E.164)",
   "numbers.dialog.call": "Apelează",
   "numbers.tip": "Pentru ca webhook-urile să funcționeze în producție — publicați proiectul.",
+  "numbers.customSip": "SIP propriu",
+  "numbers.boundDirectly": "Atribuit direct",
+  "numbers.inboundHost": "Host SIP de intrare",
 
   "calls.title": "Apeluri",
   "calls.subtitle": "Istoricul tuturor apelurilor cu transcriere și înregistrare.",
@@ -535,6 +541,9 @@ const en: Dict = {
   "numbers.dialog.recipient": "Recipient number (E.164)",
   "numbers.dialog.call": "Call",
   "numbers.tip": "For webhooks to work in production — publish the project (preview URLs won't work for Twilio).",
+  "numbers.customSip": "Custom SIP",
+  "numbers.boundDirectly": "Bound directly",
+  "numbers.inboundHost": "Inbound SIP host",
 
   "calls.title": "Calls",
   "calls.subtitle": "History of all inbound and outbound calls with transcript and recording.",

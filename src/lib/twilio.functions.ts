@@ -336,8 +336,12 @@ export const placeOutboundCall = createServerFn({ method: "POST" })
 
     const transport = (agent.sip_transport || "tls").toLowerCase();
     const prefix = (agent.sip_route_prefix || "").trim();
-    const dialDigits = data.toNumber.replace(/^\+/, "");
-    const sipUser = useSip ? `${prefix}${dialDigits}` : "";
+    const normalizedTo = data.toNumber.trim();
+    const sipUser = useSip
+      ? prefix
+        ? `${prefix}${normalizedTo.replace(/^\+/, "")}`
+        : normalizedTo
+      : "";
     const toParam = useSip
       ? `sip:${sipUser}@${agent.sip_domain}${transport ? `;transport=${transport}` : ""}`
       : data.toNumber;

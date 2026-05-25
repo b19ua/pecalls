@@ -348,12 +348,13 @@ function AgentEditor() {
           {form.outbound_mode === "sip_trunk" && (
             <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
               <p className="text-xs text-muted-foreground">
-                Звонки будут уходить через ваш SIP-провайдер (например <code className="font-mono">mytrunk.pstn.twilio.com</code>).
-                Twilio-аккаунт платформы используется только для маршрутизации.
+                Исходящие звонки будут уходить через ваш SIP-провайдер. Если провайдер ждёт номер в формате E.164,
+                оставьте Route prefix пустым — тогда номер уйдёт как <code className="font-mono">+373...</code>. Префикс
+                нужен только если ваш PBX требует добавлять код маршрута вроде <code className="font-mono">88</code>.
               </p>
               <div className="grid md:grid-cols-2 gap-4">
-                <Field label="SIP домен / termination URI">
-                  <Input value={form.sip_domain} onChange={(e) => set("sip_domain", e.target.value)} placeholder="mytrunk.pstn.twilio.com" />
+                <Field label="SIP домен / termination URI" hint="Хост вашего SIP-провайдера для исходящих вызовов, например gpg.vgtele.com">
+                  <Input value={form.sip_domain} onChange={(e) => set("sip_domain", e.target.value)} placeholder="gpg.vgtele.com" />
                 </Field>
                 <Field label="Transport">
                   <Select value={form.sip_transport} onValueChange={(v) => set("sip_transport", v as "tls" | "tcp" | "udp")}>
@@ -374,7 +375,7 @@ function AgentEditor() {
                 <Field label="Caller ID (E.164, опционально)">
                   <Input value={form.sip_from_number} onChange={(e) => set("sip_from_number", e.target.value)} placeholder="+37360123456" />
                 </Field>
-                <Field label="Route prefix (опционально)">
+                <Field label="Route prefix (опционально)" hint="Если оставить пустым, номер уходит как +373...; если указать 88, получится 88373...">
                   <Input value={form.sip_route_prefix} onChange={(e) => set("sip_route_prefix", e.target.value)} placeholder="88" />
                 </Field>
               </div>
@@ -384,9 +385,9 @@ function AgentEditor() {
 
         <Section title="Входящие звонки через SIP">
           <p className="text-xs text-muted-foreground">
-            Создайте уникальный SIP-домен для этого агента. В вашем SIP-провайдере (FreePBX, Asterisk, 3CX и т.п.) создайте
-            исходящий SIP trunk на указанный адрес с этим логином/паролем (digest auth) и направьте на него входящие вызовы —
-            агент будет автоматически отвечать.
+            Для входящих вызовов ваш SIP/PBX должен отправлять INVITE прямо на домен агента ниже, а не на Elastic SIP Trunk.
+            То есть входящий маршрут должен вести на <code className="font-mono">*.sip.twilio.com</code> из этого блока,
+            с указанными логином и паролем — тогда агент автоматически ответит.
           </p>
           {inboundSip ? (
             <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
@@ -396,7 +397,7 @@ function AgentEditor() {
                   { label: "Auth username", value: inboundSip.username, hint: "Digest authentication username" },
                   { label: "Auth password", value: inboundSip.password, hint: "Digest authentication password" },
                   { label: "Transport", value: "TLS (рекомендуется), порт 5061", hint: "Поддерживается также UDP/TCP на 5060" },
-                  { label: "Формат вызова", value: `sip:НОМЕР@${inboundSip.sip_domain}`, hint: "Любой номер в Request-URI — мы маршрутизируем по домену" },
+                  { label: "Формат вызова", value: `sip:+37322010075@${inboundSip.sip_domain}`, hint: "Для вашего номера используйте именно такой адрес в маршруте PBX" },
                 ].map((row) => (
                   <div key={row.label} className="flex items-start justify-between gap-3 border-b border-border/40 pb-2 last:border-0 last:pb-0">
                     <div className="min-w-0 flex-1">

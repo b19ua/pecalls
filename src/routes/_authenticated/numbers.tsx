@@ -55,7 +55,7 @@ function NumbersPage() {
         phone_e164: agent.twilio_number_e164!,
         friendly_name: agent.name,
         agent_id: agent.id,
-        voice_webhook_url: agent.inbound_sip_domain ? `/sip/${agent.inbound_sip_domain}` : null,
+        voice_webhook_url: agent.inbound_sip_domain ? `sip:${agent.twilio_number_e164}@${agent.inbound_sip_domain}` : null,
         inbound_sip_domain: agent.inbound_sip_domain,
         source: "sip",
       }));
@@ -139,7 +139,8 @@ function NumbersPage() {
                       </span>
                       {n.voice_webhook_url && <span className="text-success">✓ {t("numbers.webhookActive")}</span>}
                     </div>
-                    {n.voice_webhook_url && <div className="text-xs text-success mt-0.5">✓ {t("numbers.webhookActive")}</div>}
+                     {n.voice_webhook_url && n.source === "sip" && <div className="text-xs text-success mt-0.5 font-mono break-all">{n.voice_webhook_url}</div>}
+                     {n.voice_webhook_url && n.source === "twilio" && <div className="text-xs text-success mt-0.5">✓ {t("numbers.webhookActive")}</div>}
                   </div>
                 </div>
                 <div className="w-full sm:w-72">

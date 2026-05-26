@@ -14,12 +14,17 @@ const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
 
 const GEMINI_MODELS = [
-  "models/gemini-3.1-flash-live-preview",
   "models/gemini-2.5-flash-native-audio-latest",
-  "models/gemini-2.5-flash-preview-native-audio-dialog",
+  "models/gemini-2.5-flash-native-audio-preview-09-2025",
 ];
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
 const log = (...a: unknown[]) => console.log("[test-bridge]", ...a);
+const LANGUAGE_NAMES: Record<string, string> = { ru: "Russian", ro: "Romanian", en: "English", uk: "Ukrainian" };
+
+function getLanguageName(language: string): string {
+  const short = (language || "ru-RU").split("-")[0];
+  return LANGUAGE_NAMES[short] || language;
+}
 
 type Ctx = { systemPrompt: string; voice: string; language: string; greeting: string };
 
@@ -105,11 +110,14 @@ async function handle(client: WebSocket, ctx: Ctx) {
           sendJSON({ type: "ready" });
           if (!greeted) {
             greeted = true;
-            const langName: Record<string, string> = { "ru-RU": "Russian", "en-US": "English", "ro-RO": "Romanian" };
-            const lang = langName[ctx.language] || ctx.language;
+            const lang = getLanguageName(ctx.language);
             gemini!.send(JSON.stringify({
-              realtimeInput: {
-                text: `Test call started. Speak immediately in ${lang}: greet warmly with "${ctx.greeting}", then ask one short open question. Keep replies under 2 sentences.`,
+              clientContent: {
+                turns: [{
+                  role: "user",
+                  parts: [{ text: `Say exactly this greeting in ${lang} with no translation and no extra words: "${ctx.greeting}"` }],
+                }],
+                turnComplete: true,
               },
             }));
           }

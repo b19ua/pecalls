@@ -21,34 +21,34 @@ async function extractText(bytes: Uint8Array, mime: string, fileName: string): P
     return new TextDecoder().decode(bytes);
   }
   if (mime === "application/pdf" || lower.endsWith(".pdf")) {
-    // Use Gemini multimodal to extract text from PDF
-    const apiKey = process.env.LOVABLE_API_KEY!;
-    // Encode in chunks to avoid stack overflow on large files
+    // Use Gemini multimodal to extract text from PDF (direct Google API)
+    const apiKey = process.env.GEMINI_API_KEY!;
+    if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
     let binary = "";
     const chunkSize = 0x8000;
     for (let i = 0; i < bytes.length; i += chunkSize) {
       binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
     }
     const b64 = btoa(binary);
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
             role: "user",
-            content: [
-              { type: "text", text: "Extract all readable text from this document. Return plain text only, preserve paragraph structure." },
-              { type: "image_url", image_url: { url: `data:application/pdf;base64,${b64}` } },
+            parts: [
+              { text: "Extract all readable text from this document. Return plain text only, preserve paragraph structure." },
+              { inlineData: { mimeType: "application/pdf", data: b64 } },
             ],
-          },
-        ],
-      }),
-    });
+          }],
+        }),
+      },
+    );
     if (!res.ok) throw new Error(`PDF extraction failed: ${res.status} ${await res.text()}`);
     const json = await res.json();
-    return json.choices?.[0]?.message?.content ?? "";
+    return json.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("") ?? "";
   }
   if (
     mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||

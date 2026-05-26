@@ -1,0 +1,1 @@
+UPDATE public.agents SET model = 'gemini-2.5-flash-native-audio-latest' WHERE model = 'gemini-2.5-flash-preview-native-audio-dialog'; ALTER TABLE public.agents ALTER COLUMN model SET DEFAULT 'gemini-2.5-flash-native-audio-latest';

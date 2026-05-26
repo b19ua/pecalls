@@ -10,10 +10,11 @@ const TWILIO_KEY = Deno.env.get("TWILIO_API_KEY") || "";
 const TWILIO_GATEWAY = "https://connector-gateway.lovable.dev/twilio";
 const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-// Order matters: try lowest-latency native-audio dialog first, fall back to others.
+// Order matters: native-audio-latest is the only stable native-audio model in v1beta today,
+// fall back to the half-cascade live model if it is unavailable.
 const GEMINI_MODELS = [
-  "models/gemini-2.5-flash-preview-native-audio-dialog",
   "models/gemini-2.5-flash-native-audio-latest",
+  "models/gemini-2.0-flash-live-001",
   "models/gemini-3.1-flash-live-preview",
 ];
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
@@ -82,19 +83,16 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           generationConfig: {
             responseModalities: ["AUDIO"],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } } },
-            thinkingConfig: { thinkingLevel: "minimal" },
           },
           systemInstruction: { parts: [{ text: c.systemPrompt }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          // Tuned for low-latency natural dialog: fast end-of-turn detection,
-          // medium start sensitivity so user can interrupt the agent quickly.
+          // Let Gemini's built-in VAD handle turn detection with defaults —
+          // overrides (esp. on native-audio models) can silently break it.
           realtimeInputConfig: {
             automaticActivityDetection: {
               startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
               endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
-              prefixPaddingMs: 120,
-              silenceDurationMs: 350,
             },
           },
         },
@@ -181,45 +179,14 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     };
   };
 
-  // Local noise gate so background sound (street, TV, kids) doesn't reach Gemini
-  // and falsely interrupt the agent. We track an adaptive noise floor on the
-  // incoming μ-law frames and only forward audio when RMS is clearly above it.
-  // Hangover frames keep the gate open briefly so we don't clip word tails.
-  let noiseFloor = 600; // RMS in Int16 units, starts conservative
-  let hangoverFrames = 0;
-  const HANGOVER_FRAMES = 12; // ~240ms at 20ms frames
-  const SPEECH_MARGIN = 2.2; // rms must exceed floor * margin to count as speech
-
+  // Forward every Twilio audio frame to Gemini. Gemini's server-side VAD
+  // handles turn detection — a custom RMS gate here was muting the caller
+  // on quieter phone lines after the greeting.
   const sendAudioToGemini = (mulawB64: string) => {
     if (!gemini || gemini.readyState !== 1) return;
     const mulawBytes = b64ToBytes(mulawB64);
     const pcm16k = mulaw8kToPcm16k(mulawBytes);
-
-    // Compute RMS over the PCM16 frame
-    let sumSq = 0;
-    const view = new DataView(pcm16k.buffer, pcm16k.byteOffset, pcm16k.byteLength);
-    const samples = pcm16k.byteLength / 2;
-    for (let i = 0; i < samples; i++) {
-      const s = view.getInt16(i * 2, true);
-      sumSq += s * s;
-    }
-    const rms = Math.sqrt(sumSq / Math.max(1, samples));
-
-    const isSpeech = rms > noiseFloor * SPEECH_MARGIN && rms > 800;
-    if (isSpeech) {
-      hangoverFrames = HANGOVER_FRAMES;
-      lastUserAudioAt = Date.now();
-    } else {
-      // Slowly adapt noise floor upward toward ambient, faster downward
-      noiseFloor = rms < noiseFloor
-        ? noiseFloor * 0.92 + rms * 0.08
-        : noiseFloor * 0.99 + rms * 0.01;
-      noiseFloor = Math.min(Math.max(noiseFloor, 300), 4000);
-    }
-
-    if (!isSpeech && hangoverFrames <= 0) return; // drop background frame
-    if (hangoverFrames > 0) hangoverFrames--;
-
+    lastUserAudioAt = Date.now();
     gemini.send(JSON.stringify({
       realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: bytesToB64(pcm16k) } },
     }));

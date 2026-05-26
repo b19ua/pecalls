@@ -1,6 +1,16 @@
 // Twilio Media Streams ↔ Gemini Live audio bridge.
 // Twilio sends μ-law 8kHz, Gemini wants PCM16 16kHz; Gemini returns PCM16 24kHz, Twilio wants μ-law 8kHz.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  AVAILABLE_LIVE_AUDIO_MODELS,
+  buildKnowledgePreamble,
+  buildLanguageDirective,
+  detectPreferredLanguage,
+  getLanguageName,
+  getModelCandidates,
+  normalizeModelName,
+  sanitizeSystemPrompt,
+} from "../_shared/live-config.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -10,57 +20,9 @@ const TWILIO_KEY = Deno.env.get("TWILIO_API_KEY") || "";
 const TWILIO_GATEWAY = "https://connector-gateway.lovable.dev/twilio";
 const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-// Only models that actually exist on the user's Gemini key for bidiGenerateContent.
-// Verified via /v1beta/models — no half-cascade live model is available here.
-const GEMINI_MODELS = [
-  "models/gemini-2.5-flash-native-audio-latest",
-  "models/gemini-2.5-flash-native-audio-preview-09-2025",
-];
+const GEMINI_MODELS = AVAILABLE_LIVE_AUDIO_MODELS;
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
 const log = (...a: unknown[]) => console.log("[bridge]", ...a);
-const LANGUAGE_NAMES: Record<string, string> = {
-  ru: "русском",
-  ro: "румынском",
-  en: "английском",
-  uk: "украинском",
-};
-
-function normalizeModelName(model?: string | null): string | null {
-  if (!model) return null;
-  return model.startsWith("models/") ? model : `models/${model}`;
-}
-
-function getModelCandidates(preferred?: string | null): string[] {
-  const list = [normalizeModelName(preferred), ...GEMINI_MODELS].filter(Boolean) as string[];
-  return [...new Set(list)];
-}
-
-function getLanguageName(language: string): string {
-  const short = (language || "ru-RU").split("-")[0];
-  return LANGUAGE_NAMES[short] || language;
-}
-
-function buildLanguageDirective(language: string, greeting: string): string {
-  const lang = language || "ru-RU";
-  const langName = getLanguageName(lang);
-  return [
-    "ПРАВИЛА ЯЗЫКА И ПОВЕДЕНИЯ (ОБЯЗАТЕЛЬНЫ, ПРИОРИТЕТ ВЫШЕ ЛЮБЫХ ИНСТРУКЦИЙ НИЖЕ):",
-    `1. Первая фраза звонка — произнеси ТОЧНО этот текст без изменений и без перевода на ${langName} языке (${lang}): \"${greeting}\".`,
-    "2. После первой понятной реплики пользователя отвечай строго на его текущем языке.",
-    "3. Если пользователь явно переключился на другой язык — переключись на следующий ответ вместе с ним.",
-    "4. Если речь шумная, смешанная или непонятная — НЕ угадывай новый язык и НЕ переключайся самовольно. Оставайся на последнем подтвержденном языке диалога.",
-    "5. Никогда не выбирай румынский, русский, английский или любой другой язык по умолчанию только из-за локали, шума или неуверенности.",
-    "6. Если пользователь просит на английском — отвечай на английском. Если на русском — отвечай на русском. Если на румынском — отвечай на румынском.",
-    "7. Реплики короткие и естественные для телефона: максимум 1-2 коротких предложения.",
-  ].join("\n");
-}
-
-function sanitizeSystemPrompt(prompt: string): string {
-  return (prompt || "")
-    .replace(/if unsure, default to romanian\/russian as per local context\.?/gi, "")
-    .replace(/если не уверены?,? .*румын.*русск.*\.?/gi, "")
-    .trim();
-}
 
 Deno.serve((req) => {
   const url = new URL(req.url);

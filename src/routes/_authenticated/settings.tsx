@@ -141,7 +141,7 @@ function SettingsPage() {
         <CardHeader><CardTitle className="text-base">{t("set.integrations")}</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <Row label="Twilio" status="connected" detail="Lovable Gateway" />
-          <Row label="Gemini AI Gateway" status="connected" detail="LOVABLE_API_KEY · gemini-3.1-flash-live-preview" />
+          <Row label="Gemini API (Google)" status="connected" detail="GEMINI_API_KEY · gemini-2.5-flash-native-audio-latest" />
           <Row label="WebSocket bridge Twilio ↔ Gemini Live" status="connected" detail="Edge Function deployed" />
         </CardContent>
       </Card>

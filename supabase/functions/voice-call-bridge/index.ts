@@ -55,6 +55,13 @@ function buildLanguageDirective(language: string, greeting: string): string {
   ].join("\n");
 }
 
+function sanitizeSystemPrompt(prompt: string): string {
+  return (prompt || "")
+    .replace(/if unsure, default to romanian\/russian as per local context\.?/gi, "")
+    .replace(/если не уверены?,? .*румын.*русск.*\.?/gi, "")
+    .trim();
+}
+
 Deno.serve((req) => {
   const url = new URL(req.url);
   const agentId = url.searchParams.get("agent_id") || "";
@@ -109,13 +116,13 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   const ctxReady = new Promise<Ctx>((res) => { ctxResolver = res; });
 
   const connectGemini = () => {
-    const modelCandidates = getModelCandidates(ctx?.model);
-    const model = modelCandidates[geminiModelIndex] || modelCandidates[0] || GEMINI_MODELS[0];
-    log("connecting Gemini Live model=", model);
     gemini = new WebSocket(GEMINI_WS);
     gemini.onopen = async () => {
       const c = ctx || await ctxReady;
       const lang = c.language || "ru-RU";
+      const modelCandidates = getModelCandidates(c.model);
+      const model = modelCandidates[geminiModelIndex] || modelCandidates[0] || GEMINI_MODELS[0];
+      log("connecting Gemini Live model=", model);
       const langDirective = buildLanguageDirective(lang, c.greeting);
       gemini!.send(JSON.stringify({
         setup: {
@@ -129,7 +136,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
               voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } },
             },
           },
-          systemInstruction: { parts: [{ text: langDirective + c.systemPrompt }] },
+          systemInstruction: { parts: [{ text: `${langDirective}\n\n${sanitizeSystemPrompt(c.systemPrompt)}` }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           realtimeInputConfig: {

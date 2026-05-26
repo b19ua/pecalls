@@ -44,6 +44,7 @@ type Ctx = {
   agentId: string;
   ownerId: string;
   systemPrompt: string;
+  knowledgeContext: string;
   voice: string;
   language: string;
   model: string;
@@ -69,9 +70,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let silenceTimer: number | null = null;
   let handoffTriggered = false;
   let recordingStarted = false;
-  // RAG state
-  let lastRagAt = 0;
-  let userBuffer = "";
+  let confirmedLanguage = "ru-RU";
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;
@@ -85,7 +84,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const modelCandidates = getModelCandidates(c.model);
       const model = modelCandidates[geminiModelIndex] || modelCandidates[0] || GEMINI_MODELS[0];
       log("connecting Gemini Live model=", model);
+      confirmedLanguage = lang;
       const langDirective = buildLanguageDirective(lang, c.greeting);
+      const knowledgePreamble = buildKnowledgePreamble(c.knowledgeContext);
       gemini!.send(JSON.stringify({
         setup: {
           model,
@@ -98,7 +99,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
               voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } },
             },
           },
-          systemInstruction: { parts: [{ text: `${langDirective}\n\n${sanitizeSystemPrompt(c.systemPrompt)}` }] },
+          systemInstruction: { parts: [{ text: `${langDirective}\n\n${knowledgePreamble}\n\n${sanitizeSystemPrompt(c.systemPrompt)}`.trim() }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           realtimeInputConfig: {
@@ -148,8 +149,6 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (it) {
             transcript.push({ role: "user", text: it, ts: new Date().toISOString() });
             maybeHandoffByPhrase(it);
-            // Accumulate user speech and trigger RAG opportunistically
-            userBuffer = (userBuffer + " " + it).slice(-600);
             void maybeInjectRag(it);
           }
           const ot = msg.serverContent?.outputTranscription?.text;
@@ -218,8 +217,21 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   // Mid-call text injection breaks native-audio turn behavior (model switches
   // language or stops responding). Disabled until we have tool/function calling
   // wired through Gemini Live's tools API instead of free-form text turns.
-  const maybeInjectRag = async (_utterance: string) => {
-    // intentionally no-op
+  const maybeInjectRag = async (utterance: string) => {
+    const detected = detectPreferredLanguage(utterance, confirmedLanguage || ctx?.language || "ru-RU");
+    if (detected.confidence < 0.72 || detected.language === confirmedLanguage) return;
+    confirmedLanguage = detected.language;
+    log("language switch", detected.language, "confidence", detected.confidence.toFixed(2), "from", utterance);
+    if (!gemini || gemini.readyState !== 1) return;
+    gemini.send(JSON.stringify({
+      clientContent: {
+        turns: [{
+          role: "user",
+          parts: [{ text: `Язык пользователя подтвержден: ${getLanguageName(detected.language)} (${detected.language}). Отвечай только на этом языке, пока пользователь сам явно не переключится.` }],
+        }],
+        turnComplete: false,
+      },
+    }));
   };
 
   const checkSilence = () => {

@@ -505,6 +505,24 @@ function escXml(s: string) {
   return s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]!));
 }
 
+async function reportError(payload: {
+  source: string;
+  severity?: string;
+  message: string;
+  context?: unknown;
+  agent_id?: string;
+  call_sid?: string;
+  owner_id?: string;
+}) {
+  try {
+    await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/report-error`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE}` },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) { console.error("[bridge] reportError failed", e); }
+}
+
 // ───────── Audio codecs ─────────
 function mulawDecode(u: number): number {
   u = ~u & 0xff;

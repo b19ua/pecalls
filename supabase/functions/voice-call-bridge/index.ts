@@ -77,6 +77,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     gemini = new WebSocket(GEMINI_WS);
     gemini.onopen = async () => {
       const c = ctx || await ctxReady;
+      const langName: Record<string, string> = { "ru-RU": "Russian (русский)", "en-US": "English", "ro-RO": "Romanian (română)" };
+      const lang = langName[c.language] || "Russian (русский)";
+      const langDirective = `CRITICAL LANGUAGE RULE: You MUST speak ONLY in ${lang} at all times, regardless of what language the caller uses. Even if the caller speaks English or any other language, you ALWAYS reply in ${lang}. Never switch languages mid-conversation. Keep replies under 2 short sentences for natural phone dialog.\n\n`;
       gemini!.send(JSON.stringify({
         setup: {
           model,
@@ -84,11 +87,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
             responseModalities: ["AUDIO"],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } } },
           },
-          systemInstruction: { parts: [{ text: c.systemPrompt }] },
+          systemInstruction: { parts: [{ text: langDirective + c.systemPrompt }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          // Let Gemini's built-in VAD handle turn detection with defaults —
-          // overrides (esp. on native-audio models) can silently break it.
           realtimeInputConfig: {
             automaticActivityDetection: {
               startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",

@@ -77,9 +77,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     gemini = new WebSocket(GEMINI_WS);
     gemini.onopen = async () => {
       const c = ctx || await ctxReady;
-      const langName: Record<string, string> = { "ru-RU": "Russian (русский)", "en-US": "English", "ro-RO": "Romanian (română)" };
-      const lang = langName[c.language] || "Russian (русский)";
-      const langDirective = `CRITICAL LANGUAGE RULE: You MUST speak ONLY in ${lang} at all times, regardless of what language the caller uses. Even if the caller speaks English or any other language, you ALWAYS reply in ${lang}. Never switch languages mid-conversation. Keep replies under 2 short sentences for natural phone dialog.\n\n`;
+      const langDirective = `LANGUAGE RULE: Always reply in the SAME language the caller is currently speaking. If they switch language mid-call, switch with them. Default to ${c.language || "ru-RU"} only for the opening greeting before the caller has said anything. Keep replies under 2 short sentences for natural phone dialog.\n\n`;
       gemini!.send(JSON.stringify({
         setup: {
           model,

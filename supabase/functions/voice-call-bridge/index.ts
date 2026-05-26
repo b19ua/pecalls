@@ -10,12 +10,11 @@ const TWILIO_KEY = Deno.env.get("TWILIO_API_KEY") || "";
 const TWILIO_GATEWAY = "https://connector-gateway.lovable.dev/twilio";
 const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-// Stable half-cascade Live model first — native-audio preview models drop
-// turn-detection after the first reply on real phone calls. Keep native-audio
-// only as a fallback.
+// Only models that actually exist on the user's Gemini key for bidiGenerateContent.
+// Verified via /v1beta/models — no half-cascade live model is available here.
 const GEMINI_MODELS = [
-  "models/gemini-2.0-flash-live-001",
   "models/gemini-2.5-flash-native-audio-latest",
+  "models/gemini-2.5-flash-native-audio-preview-09-2025",
 ];
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
 const log = (...a: unknown[]) => console.log("[bridge]", ...a);

@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.agent-test-bridge]
 verify_jwt = false
+
+[functions.report-error]
+verify_jwt = false

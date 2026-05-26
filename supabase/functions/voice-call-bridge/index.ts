@@ -144,6 +144,14 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (ot) transcript.push({ role: "agent", text: ot, ts: new Date().toISOString() });
         } else if (msg.error) {
           log("gemini ERROR", JSON.stringify(msg.error));
+          void reportError({
+            source: "voice-call-bridge:gemini",
+            message: msg.error?.message || "Gemini error",
+            context: { error: msg.error, model: GEMINI_MODELS[geminiModelIndex] },
+            agent_id: ctx?.agentId,
+            call_sid: callSid,
+            owner_id: ctx?.ownerId,
+          });
         }
       } catch (e) {
         console.error("gemini parse", e);
@@ -153,7 +161,20 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     gemini.onclose = (e) => {
       log("gemini CLOSED", e.code, e.reason);
       geminiReady = false;
-      if (!greetingRequested && e.code === 1008 && geminiModelIndex < GEMINI_MODELS.length - 1 && twilio.readyState === 1) {
+      const fatalReason = (e.reason || "").toLowerCase();
+      const isPrepayment = e.code === 1011 || fatalReason.includes("prepayment") || fatalReason.includes("quota") || fatalReason.includes("billing");
+      if (isPrepayment) {
+        void reportError({
+          source: "voice-call-bridge:gemini",
+          severity: "critical",
+          message: `Gemini connection closed (${e.code}): ${e.reason || "no reason"}`,
+          context: { code: e.code, reason: e.reason, model: GEMINI_MODELS[geminiModelIndex] },
+          agent_id: ctx?.agentId,
+          call_sid: callSid,
+          owner_id: ctx?.ownerId,
+        });
+      }
+      if (!greetingRequested && (e.code === 1008 || e.code === 1011) && geminiModelIndex < GEMINI_MODELS.length - 1 && twilio.readyState === 1) {
         geminiModelIndex += 1;
         setTimeout(connectGemini, 150);
       }
@@ -482,6 +503,24 @@ async function generateSummary(
 
 function escXml(s: string) {
   return s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]!));
+}
+
+async function reportError(payload: {
+  source: string;
+  severity?: string;
+  message: string;
+  context?: unknown;
+  agent_id?: string;
+  call_sid?: string;
+  owner_id?: string;
+}) {
+  try {
+    await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/report-error`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE}` },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) { console.error("[bridge] reportError failed", e); }
 }
 
 // ───────── Audio codecs ─────────

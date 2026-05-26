@@ -10,12 +10,12 @@ const TWILIO_KEY = Deno.env.get("TWILIO_API_KEY") || "";
 const TWILIO_GATEWAY = "https://connector-gateway.lovable.dev/twilio";
 const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-// Order matters: native-audio-latest is the only stable native-audio model in v1beta today,
-// fall back to the half-cascade live model if it is unavailable.
+// Stable half-cascade Live model first — native-audio preview models drop
+// turn-detection after the first reply on real phone calls. Keep native-audio
+// only as a fallback.
 const GEMINI_MODELS = [
-  "models/gemini-2.5-flash-native-audio-latest",
   "models/gemini-2.0-flash-live-001",
-  "models/gemini-3.1-flash-live-preview",
+  "models/gemini-2.5-flash-native-audio-latest",
 ];
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
 const log = (...a: unknown[]) => console.log("[bridge]", ...a);
@@ -89,10 +89,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           realtimeInputConfig: {
-            automaticActivityDetection: {
-              startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
-              endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
-            },
+            automaticActivityDetection: {},
           },
         },
       }));

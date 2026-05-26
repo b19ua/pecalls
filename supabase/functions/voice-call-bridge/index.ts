@@ -388,7 +388,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const fb: Ctx = {
         agentId: id, ownerId: "",
         systemPrompt: "Ты вежливый ассистент. Отвечай кратко.",
-        voice: "Puck", language: "ru-RU", greeting: "Здравствуйте!",
+        voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
         handoffPhrases: [], handoffNumbers: [],
       };
@@ -403,14 +403,14 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 async function loadContext(agentId: string): Promise<Ctx> {
   const { data: agent } = await supa
     .from("agents")
-    .select("id, owner_id, system_prompt, voice, language, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers")
+    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers")
     .eq("id", agentId)
     .maybeSingle();
   if (!agent) {
     return {
       agentId, ownerId: "",
       systemPrompt: "Ты вежливый ассистент Premier Energy.",
-      voice: "Puck", language: "ru-RU", greeting: "Здравствуйте!",
+      voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
       handoffPhrases: [], handoffNumbers: [],
     };
@@ -421,6 +421,8 @@ async function loadContext(agentId: string): Promise<Ctx> {
     systemPrompt: agent.system_prompt,
     voice: agent.voice || "Puck",
     language: agent.language || "ru-RU",
+    model: agent.model || "gemini-2.5-flash-native-audio-latest",
+    temperature: Number(agent.temperature ?? 0.6),
     greeting: agent.greeting || "Здравствуйте!",
     recordCalls: !!agent.record_calls,
     handoffEnabled: !!agent.handoff_enabled,

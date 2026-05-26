@@ -1,6 +1,16 @@
 // Twilio Media Streams ↔ Gemini Live audio bridge.
 // Twilio sends μ-law 8kHz, Gemini wants PCM16 16kHz; Gemini returns PCM16 24kHz, Twilio wants μ-law 8kHz.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  AVAILABLE_LIVE_AUDIO_MODELS,
+  buildKnowledgePreamble,
+  buildLanguageDirective,
+  detectPreferredLanguage,
+  getLanguageName,
+  getModelCandidates,
+  normalizeModelName,
+  sanitizeSystemPrompt,
+} from "../_shared/live-config.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -10,57 +20,9 @@ const TWILIO_KEY = Deno.env.get("TWILIO_API_KEY") || "";
 const TWILIO_GATEWAY = "https://connector-gateway.lovable.dev/twilio";
 const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-// Only models that actually exist on the user's Gemini key for bidiGenerateContent.
-// Verified via /v1beta/models — no half-cascade live model is available here.
-const GEMINI_MODELS = [
-  "models/gemini-2.5-flash-native-audio-latest",
-  "models/gemini-2.5-flash-native-audio-preview-09-2025",
-];
+const GEMINI_MODELS = AVAILABLE_LIVE_AUDIO_MODELS;
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
 const log = (...a: unknown[]) => console.log("[bridge]", ...a);
-const LANGUAGE_NAMES: Record<string, string> = {
-  ru: "русском",
-  ro: "румынском",
-  en: "английском",
-  uk: "украинском",
-};
-
-function normalizeModelName(model?: string | null): string | null {
-  if (!model) return null;
-  return model.startsWith("models/") ? model : `models/${model}`;
-}
-
-function getModelCandidates(preferred?: string | null): string[] {
-  const list = [normalizeModelName(preferred), ...GEMINI_MODELS].filter(Boolean) as string[];
-  return [...new Set(list)];
-}
-
-function getLanguageName(language: string): string {
-  const short = (language || "ru-RU").split("-")[0];
-  return LANGUAGE_NAMES[short] || language;
-}
-
-function buildLanguageDirective(language: string, greeting: string): string {
-  const lang = language || "ru-RU";
-  const langName = getLanguageName(lang);
-  return [
-    "ПРАВИЛА ЯЗЫКА И ПОВЕДЕНИЯ (ОБЯЗАТЕЛЬНЫ, ПРИОРИТЕТ ВЫШЕ ЛЮБЫХ ИНСТРУКЦИЙ НИЖЕ):",
-    `1. Первая фраза звонка — произнеси ТОЧНО этот текст без изменений и без перевода на ${langName} языке (${lang}): \"${greeting}\".`,
-    "2. После первой понятной реплики пользователя отвечай строго на его текущем языке.",
-    "3. Если пользователь явно переключился на другой язык — переключись на следующий ответ вместе с ним.",
-    "4. Если речь шумная, смешанная или непонятная — НЕ угадывай новый язык и НЕ переключайся самовольно. Оставайся на последнем подтвержденном языке диалога.",
-    "5. Никогда не выбирай румынский, русский, английский или любой другой язык по умолчанию только из-за локали, шума или неуверенности.",
-    "6. Если пользователь просит на английском — отвечай на английском. Если на русском — отвечай на русском. Если на румынском — отвечай на румынском.",
-    "7. Реплики короткие и естественные для телефона: максимум 1-2 коротких предложения.",
-  ].join("\n");
-}
-
-function sanitizeSystemPrompt(prompt: string): string {
-  return (prompt || "")
-    .replace(/if unsure, default to romanian\/russian as per local context\.?/gi, "")
-    .replace(/если не уверены?,? .*румын.*русск.*\.?/gi, "")
-    .trim();
-}
 
 Deno.serve((req) => {
   const url = new URL(req.url);
@@ -82,6 +44,7 @@ type Ctx = {
   agentId: string;
   ownerId: string;
   systemPrompt: string;
+  knowledgeContext: string;
   voice: string;
   language: string;
   model: string;
@@ -107,9 +70,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let silenceTimer: number | null = null;
   let handoffTriggered = false;
   let recordingStarted = false;
-  // RAG state
-  let lastRagAt = 0;
-  let userBuffer = "";
+  let confirmedLanguage = "ru-RU";
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;
@@ -123,7 +84,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const modelCandidates = getModelCandidates(c.model);
       const model = modelCandidates[geminiModelIndex] || modelCandidates[0] || GEMINI_MODELS[0];
       log("connecting Gemini Live model=", model);
+      confirmedLanguage = lang;
       const langDirective = buildLanguageDirective(lang, c.greeting);
+      const knowledgePreamble = buildKnowledgePreamble(c.knowledgeContext);
       gemini!.send(JSON.stringify({
         setup: {
           model,
@@ -136,7 +99,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
               voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } },
             },
           },
-          systemInstruction: { parts: [{ text: `${langDirective}\n\n${sanitizeSystemPrompt(c.systemPrompt)}` }] },
+          systemInstruction: { parts: [{ text: `${langDirective}\n\n${knowledgePreamble}\n\n${sanitizeSystemPrompt(c.systemPrompt)}`.trim() }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           realtimeInputConfig: {
@@ -186,8 +149,6 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (it) {
             transcript.push({ role: "user", text: it, ts: new Date().toISOString() });
             maybeHandoffByPhrase(it);
-            // Accumulate user speech and trigger RAG opportunistically
-            userBuffer = (userBuffer + " " + it).slice(-600);
             void maybeInjectRag(it);
           }
           const ot = msg.serverContent?.outputTranscription?.text;
@@ -256,8 +217,21 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   // Mid-call text injection breaks native-audio turn behavior (model switches
   // language or stops responding). Disabled until we have tool/function calling
   // wired through Gemini Live's tools API instead of free-form text turns.
-  const maybeInjectRag = async (_utterance: string) => {
-    // intentionally no-op
+  const maybeInjectRag = async (utterance: string) => {
+    const detected = detectPreferredLanguage(utterance, confirmedLanguage || ctx?.language || "ru-RU");
+    if (detected.confidence < 0.72 || detected.language === confirmedLanguage) return;
+    confirmedLanguage = detected.language;
+    log("language switch", detected.language, "confidence", detected.confidence.toFixed(2), "from", utterance);
+    if (!gemini || gemini.readyState !== 1) return;
+    gemini.send(JSON.stringify({
+      clientContent: {
+        turns: [{
+          role: "user",
+          parts: [{ text: `Язык пользователя подтвержден: ${getLanguageName(detected.language)} (${detected.language}). Отвечай только на этом языке, пока пользователь сам явно не переключится.` }],
+        }],
+        turnComplete: false,
+      },
+    }));
   };
 
   const checkSilence = () => {
@@ -396,6 +370,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const fb: Ctx = {
         agentId: id, ownerId: "",
         systemPrompt: "Ты вежливый ассистент. Отвечай кратко.",
+        knowledgeContext: "",
         voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
         handoffPhrases: [], handoffNumbers: [],
@@ -417,16 +392,18 @@ async function loadContext(agentId: string): Promise<Ctx> {
   if (!agent) {
     return {
       agentId, ownerId: "",
-      systemPrompt: "Ты вежливый ассистент Premier Energy.",
+      systemPrompt: "Ты вежливый ассистент Premier Energy.", knowledgeContext: "",
       voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
       handoffPhrases: [], handoffNumbers: [],
     };
   }
+  const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
   return {
     agentId: agent.id,
     ownerId: agent.owner_id,
     systemPrompt: agent.system_prompt,
+    knowledgeContext,
     voice: agent.voice || "Puck",
     language: agent.language || "ru-RU",
     model: agent.model || "gemini-2.5-flash-native-audio-latest",
@@ -438,6 +415,43 @@ async function loadContext(agentId: string): Promise<Ctx> {
     handoffPhrases: Array.isArray(agent.handoff_trigger_phrases) ? agent.handoff_trigger_phrases : [],
     handoffNumbers: Array.isArray(agent.handoff_numbers) ? agent.handoff_numbers : [],
   };
+}
+
+async function loadKnowledgeContext(agentId: string, ownerId: string, seedText: string): Promise<string> {
+  try {
+    const embedding = await embedText(seedText.slice(0, 3000));
+    if (embedding?.length) {
+      const { data, error } = await supa.rpc("match_chunks", {
+        query_embedding: embedding,
+        p_agent_id: agentId,
+        p_owner_id: ownerId,
+        match_count: 6,
+      });
+      if (!error && Array.isArray(data) && data.length) {
+        return data
+          .filter((row) => Number(row.similarity ?? 0) >= 0.55)
+          .map((row) => `- ${String(row.content || "").trim()}`)
+          .join("\n")
+          .slice(0, 6000);
+      }
+    }
+
+    const { data: recent } = await supa
+      .from("knowledge_chunks")
+      .select("content")
+      .eq("agent_id", agentId)
+      .eq("owner_id", ownerId)
+      .order("chunk_index", { ascending: true })
+      .limit(6);
+
+    return (recent || [])
+      .map((row) => `- ${String(row.content || "").trim()}`)
+      .join("\n")
+      .slice(0, 6000);
+  } catch (error) {
+    console.error("knowledge context", error);
+    return "";
+  }
 }
 
 async function embedText(text: string): Promise<number[] | null> {

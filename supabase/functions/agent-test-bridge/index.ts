@@ -7,24 +7,23 @@
 //     - BINARY frames: raw Int16 PCM, 24 kHz, mono, little-endian (agent audio)
 //     - TEXT JSON: { type: "ready" } | { type: "transcript", role, text } | { type: "error", message }
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  AVAILABLE_LIVE_AUDIO_MODELS,
+  buildLanguageDirective,
+  detectPreferredLanguage,
+  getLanguageName,
+  getModelCandidates,
+  sanitizeSystemPrompt,
+} from "../_shared/live-config.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-const GEMINI_MODELS = [
-  "models/gemini-2.5-flash-native-audio-latest",
-  "models/gemini-2.5-flash-native-audio-preview-09-2025",
-];
+const GEMINI_MODELS = AVAILABLE_LIVE_AUDIO_MODELS;
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
 const log = (...a: unknown[]) => console.log("[test-bridge]", ...a);
-const LANGUAGE_NAMES: Record<string, string> = { ru: "Russian", ro: "Romanian", en: "English", uk: "Ukrainian" };
-
-function getLanguageName(language: string): string {
-  const short = (language || "ru-RU").split("-")[0];
-  return LANGUAGE_NAMES[short] || language;
-}
 
 type Ctx = { systemPrompt: string; voice: string; language: string; greeting: string };
 
@@ -74,6 +73,7 @@ async function handle(client: WebSocket, ctx: Ctx) {
   let modelIndex = 0;
   let greeted = false;
   let pending: string[] = [];
+  let confirmedLanguage = ctx.language || "ru-RU";
 
   const sendJSON = (obj: unknown) => {
     if (client.readyState === 1) client.send(JSON.stringify(obj));
@@ -83,21 +83,27 @@ async function handle(client: WebSocket, ctx: Ctx) {
   };
 
   const connectGemini = () => {
-    const model = GEMINI_MODELS[modelIndex] || GEMINI_MODELS[0];
+    const models = getModelCandidates("gemini-3.1-flash-live-preview");
+    const model = models[modelIndex] || GEMINI_MODELS[0];
     log("connect Gemini", model);
     gemini = new WebSocket(GEMINI_WS);
     gemini.onopen = () => {
+      const langDirective = buildLanguageDirective(ctx.language, ctx.greeting);
       gemini!.send(JSON.stringify({
         setup: {
           model,
           generationConfig: {
             responseModalities: ["AUDIO"],
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: ctx.voice } } },
+            speechConfig: {
+              languageCode: ctx.language,
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: ctx.voice } },
+            },
             thinkingConfig: { thinkingLevel: "minimal" },
           },
-          systemInstruction: { parts: [{ text: ctx.systemPrompt }] },
+          systemInstruction: { parts: [{ text: `${langDirective}\n\n${sanitizeSystemPrompt(ctx.systemPrompt)}` }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
+          realtimeInputConfig: { automaticActivityDetection: {} },
         },
       }));
     };
@@ -135,7 +141,19 @@ async function handle(client: WebSocket, ctx: Ctx) {
             }
           }
           const it = msg.serverContent?.inputTranscription?.text;
-          if (it) sendJSON({ type: "transcript", role: "user", text: it });
+          if (it) {
+            const detected = detectPreferredLanguage(it, confirmedLanguage);
+            if (detected.confidence >= 0.72 && detected.language !== confirmedLanguage) {
+              confirmedLanguage = detected.language;
+              gemini?.send(JSON.stringify({
+                clientContent: {
+                  turns: [{ role: "user", parts: [{ text: `User language confirmed: ${getLanguageName(detected.language)} (${detected.language}). Reply only in this language until the user clearly switches.` }] }],
+                  turnComplete: false,
+                },
+              }));
+            }
+            sendJSON({ type: "transcript", role: "user", text: it });
+          }
           const ot = msg.serverContent?.outputTranscription?.text;
           if (ot) sendJSON({ type: "transcript", role: "agent", text: ot });
         } else if (msg.error) {
@@ -150,7 +168,7 @@ async function handle(client: WebSocket, ctx: Ctx) {
     gemini.onclose = (e) => {
       log("gemini closed", e.code, e.reason);
       geminiReady = false;
-      if (!greeted && e.code === 1008 && modelIndex < GEMINI_MODELS.length - 1 && client.readyState === 1) {
+        if (!greeted && e.code === 1008 && modelIndex < GEMINI_MODELS.length - 1 && client.readyState === 1) {
         modelIndex += 1;
         setTimeout(connectGemini, 150);
       } else if (client.readyState === 1) {

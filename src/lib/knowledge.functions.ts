@@ -62,18 +62,25 @@ async function extractText(bytes: Uint8Array, mime: string, fileName: string): P
 }
 
 async function embedBatch(texts: string[]): Promise<number[][]> {
-  const apiKey = process.env.LOVABLE_API_KEY!;
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/embeddings", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "google/gemini-embedding-001",
-      input: texts,
-    }),
-  });
+  const apiKey = process.env.GEMINI_API_KEY!;
+  if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+  // Google batch embed endpoint
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requests: texts.map((t) => ({
+          model: "models/gemini-embedding-001",
+          content: { parts: [{ text: t }] },
+        })),
+      }),
+    },
+  );
   if (!res.ok) throw new Error(`Embedding failed: ${res.status} ${await res.text()}`);
   const json = await res.json();
-  return json.data.map((d: { embedding: number[] }) => d.embedding);
+  return (json.embeddings as { values: number[] }[]).map((e) => e.values);
 }
 
 export const processDocument = createServerFn({ method: "POST" })

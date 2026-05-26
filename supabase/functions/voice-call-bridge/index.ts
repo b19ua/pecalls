@@ -89,10 +89,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           realtimeInputConfig: {
-            automaticActivityDetection: {
-              startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
-              endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
-            },
+            automaticActivityDetection: {},
           },
         },
       }));

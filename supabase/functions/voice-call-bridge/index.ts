@@ -108,11 +108,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (!greetingRequested) {
             greetingRequested = true;
             const c = ctx!;
-            const langName: Record<string, string> = { "ru-RU": "Russian", "en-US": "English", "ro-RO": "Romanian" };
-            const lang = langName[c.language] || c.language;
             gemini!.send(JSON.stringify({
               realtimeInput: {
-                text: `The phone call has just connected. Speak immediately in ${lang}: greet warmly with "${c.greeting}", then ask one short open question. Keep replies under 2 sentences.`,
+                text: `[system] The phone call just connected. Say exactly this greeting now, then ask one short open question: "${c.greeting}"`,
               },
             }));
           }

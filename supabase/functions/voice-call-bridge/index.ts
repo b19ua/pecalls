@@ -171,9 +171,16 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           owner_id: ctx?.ownerId,
         });
       }
-      if (!greetingRequested && (e.code === 1008 || e.code === 1011) && geminiModelIndex < GEMINI_MODELS.length - 1 && twilio.readyState === 1) {
-        geminiModelIndex += 1;
-        setTimeout(connectGemini, 150);
+      // Reconnect mid-call too: native-audio models sometimes drop with 1011
+      // after a minute. Try same model once, then fall through to next.
+      if (twilio.readyState === 1 && (e.code === 1008 || e.code === 1011)) {
+        if (!greetingRequested && geminiModelIndex < GEMINI_MODELS.length - 1) {
+          geminiModelIndex += 1;
+        } else if (greetingRequested) {
+          // mid-call drop: re-trigger greeting so the resumed session speaks
+          greetingRequested = false;
+        }
+        setTimeout(connectGemini, 200);
       }
     };
   };

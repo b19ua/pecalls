@@ -1,0 +1,1 @@
+UPDATE public.agents SET model='gemini-2.5-flash-native-audio-latest' WHERE model NOT IN ('gemini-2.5-flash-native-audio-latest', 'gemini-2.5-flash-native-audio-preview-09-2025'); ALTER TABLE public.agents ALTER COLUMN model SET DEFAULT 'gemini-2.5-flash-native-audio-latest';

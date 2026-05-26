@@ -10,12 +10,11 @@ const TWILIO_KEY = Deno.env.get("TWILIO_API_KEY") || "";
 const TWILIO_GATEWAY = "https://connector-gateway.lovable.dev/twilio";
 const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-// Stable half-cascade Live model first — native-audio preview models drop
-// turn-detection after the first reply on real phone calls. Keep native-audio
-// only as a fallback.
+// Only models that actually exist on the user's Gemini key for bidiGenerateContent.
+// Verified via /v1beta/models — no half-cascade live model is available here.
 const GEMINI_MODELS = [
-  "models/gemini-2.0-flash-live-001",
   "models/gemini-2.5-flash-native-audio-latest",
+  "models/gemini-2.5-flash-native-audio-preview-09-2025",
 ];
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
 const log = (...a: unknown[]) => console.log("[bridge]", ...a);
@@ -77,13 +76,24 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     gemini = new WebSocket(GEMINI_WS);
     gemini.onopen = async () => {
       const c = ctx || await ctxReady;
-      const langDirective = `LANGUAGE RULE: Always reply in the SAME language the caller is currently speaking. If they switch language mid-call, switch with them. Default to ${c.language || "ru-RU"} only for the opening greeting before the caller has said anything. Keep replies under 2 short sentences for natural phone dialog.\n\n`;
+      const lang = c.language || "ru-RU";
+      const langShort = lang.split("-")[0];
+      const langName = ({ ru: "русском", ro: "румынском", en: "английском", uk: "украинском" } as Record<string, string>)[langShort] || lang;
+      const langDirective =
+        `ПРАВИЛО ЯЗЫКА (КРИТИЧЕСКИ ВАЖНО):\n` +
+        `1. Приветствие и первая фраза — ВСЕГДА на ${langName} языке (${lang}).\n` +
+        `2. Дальше отвечай на ТОМ ЖЕ языке, на котором говорит звонящий в данный момент. Если он переключился — переключайся вместе с ним.\n` +
+        `3. НИКОГДА не переключайся на английский или другой язык сам по себе, если звонящий не сделал этого первым.\n` +
+        `4. Отвечай короткими фразами (1-2 предложения) для естественного телефонного диалога.\n\n`;
       gemini!.send(JSON.stringify({
         setup: {
           model,
           generationConfig: {
             responseModalities: ["AUDIO"],
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } } },
+            speechConfig: {
+              languageCode: lang,
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } },
+            },
           },
           systemInstruction: { parts: [{ text: langDirective + c.systemPrompt }] },
           inputAudioTranscription: {},
@@ -103,9 +113,15 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (!greetingRequested) {
             greetingRequested = true;
             const c = ctx!;
+            // Use clientContent (turn-based) instead of realtimeInput.text — native-audio
+            // models reliably respond to clientContent turns but often ignore realtimeInput.text.
             gemini!.send(JSON.stringify({
-              realtimeInput: {
-                text: `[system] The phone call just connected. Say exactly this greeting now, then ask one short open question: "${c.greeting}"`,
+              clientContent: {
+                turns: [{
+                  role: "user",
+                  parts: [{ text: `Произнеси сейчас вслух именно это приветствие на ${langName} языке, ничего не добавляя от себя и не переводя: "${c.greeting}"` }],
+                }],
+                turnComplete: true,
               },
             }));
           }
@@ -192,60 +208,20 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   };
 
   // ───────── RAG ─────────
-  const maybeInjectRag = async (utterance: string) => {
-    if (!ctx || !gemini || gemini.readyState !== 1) return;
-    const now = Date.now();
-    if (now - lastRagAt < 4500) return; // throttle
-    const q = utterance.trim();
-    if (q.length < 8) return;
-    lastRagAt = now;
-    try {
-      const emb = await embedText(q);
-      if (!emb) return;
-      const { data } = await supa.rpc("match_chunks", {
-        query_embedding: emb as unknown as string,
-        p_agent_id: ctx.agentId,
-        p_owner_id: ctx.ownerId,
-        match_count: 4,
-      });
-      const hits = (data ?? []).filter((r: { similarity: number }) => r.similarity > 0.55);
-      if (!hits.length) return;
-      const ctxText = hits.map((h: { content: string }, i: number) => `[${i + 1}] ${h.content}`).join("\n\n");
-      log("RAG hits=", hits.length, "for:", q.slice(0, 60));
-      gemini.send(JSON.stringify({
-        realtimeInput: {
-          text: `[INTERNAL CONTEXT — do not read aloud. Use it to answer the caller's last question precisely. If the answer is not here, say you don't know.]\n\n${ctxText}`,
-        },
-      }));
-    } catch (e) { console.error("rag", e); }
+  // Mid-call text injection breaks native-audio turn behavior (model switches
+  // language or stops responding). Disabled until we have tool/function calling
+  // wired through Gemini Live's tools API instead of free-form text turns.
+  const maybeInjectRag = async (_utterance: string) => {
+    // intentionally no-op
   };
 
   const checkSilence = () => {
     if (twilio.readyState !== 1) return;
     const idleMs = Date.now() - lastUserAudioAt;
-    if (idleMs >= 20_000) {
-      try {
-        if (gemini && gemini.readyState === 1) {
-          gemini.send(JSON.stringify({
-            realtimeInput: { text: "[system] Line silent 20s. Say a brief polite goodbye and end the call." },
-          }));
-        }
-      } catch { /* noop */ }
-      setTimeout(() => { try { twilio.close(); } catch { /* noop */ } }, 4000);
+    // Just hang up after long silence — don't inject text mid-call, it disrupts the audio session.
+    if (idleMs >= 25_000) {
+      setTimeout(() => { try { twilio.close(); } catch { /* noop */ } }, 500);
       if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
-      return;
-    }
-    if (idleMs >= 8_000 && !silenceWarned) {
-      silenceWarned = true;
-      try {
-        if (gemini && gemini.readyState === 1) {
-          gemini.send(JSON.stringify({
-            realtimeInput: { text: "[system] Quiet ~8s. Politely re-engage in one short sentence." },
-          }));
-        }
-      } catch { /* noop */ }
-    } else if (idleMs < 4_000) {
-      silenceWarned = false;
     }
   };
 

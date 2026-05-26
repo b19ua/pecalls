@@ -1,0 +1,1 @@
+UPDATE public.agents SET model='gemini-2.0-flash-live-001' WHERE model LIKE '%native-audio%'; ALTER TABLE public.agents ALTER COLUMN model SET DEFAULT 'gemini-2.0-flash-live-001';

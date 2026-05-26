@@ -172,14 +172,12 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         });
       }
       // Reconnect mid-call too: native-audio models sometimes drop with 1011
-      // after a minute. Try same model once, then fall through to next.
+      // after ~1 minute. Skip greeting on resume so the caller doesn't hear it twice.
       if (twilio.readyState === 1 && (e.code === 1008 || e.code === 1011)) {
         if (!greetingRequested && geminiModelIndex < GEMINI_MODELS.length - 1) {
           geminiModelIndex += 1;
-        } else if (greetingRequested) {
-          // mid-call drop: re-trigger greeting so the resumed session speaks
-          greetingRequested = false;
         }
+        // keep greetingRequested=true on mid-call drop → resumed session stays silent until user speaks
         setTimeout(connectGemini, 200);
       }
     };

@@ -76,13 +76,24 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     gemini = new WebSocket(GEMINI_WS);
     gemini.onopen = async () => {
       const c = ctx || await ctxReady;
-      const langDirective = `LANGUAGE RULE: Always reply in the SAME language the caller is currently speaking. If they switch language mid-call, switch with them. Default to ${c.language || "ru-RU"} only for the opening greeting before the caller has said anything. Keep replies under 2 short sentences for natural phone dialog.\n\n`;
+      const lang = c.language || "ru-RU";
+      const langShort = lang.split("-")[0];
+      const langName = ({ ru: "русском", ro: "румынском", en: "английском", uk: "украинском" } as Record<string, string>)[langShort] || lang;
+      const langDirective =
+        `ПРАВИЛО ЯЗЫКА (КРИТИЧЕСКИ ВАЖНО):\n` +
+        `1. Приветствие и первая фраза — ВСЕГДА на ${langName} языке (${lang}).\n` +
+        `2. Дальше отвечай на ТОМ ЖЕ языке, на котором говорит звонящий в данный момент. Если он переключился — переключайся вместе с ним.\n` +
+        `3. НИКОГДА не переключайся на английский или другой язык сам по себе, если звонящий не сделал этого первым.\n` +
+        `4. Отвечай короткими фразами (1-2 предложения) для естественного телефонного диалога.\n\n`;
       gemini!.send(JSON.stringify({
         setup: {
           model,
           generationConfig: {
             responseModalities: ["AUDIO"],
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } } },
+            speechConfig: {
+              languageCode: lang,
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } },
+            },
           },
           systemInstruction: { parts: [{ text: langDirective + c.systemPrompt }] },
           inputAudioTranscription: {},
@@ -102,9 +113,15 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (!greetingRequested) {
             greetingRequested = true;
             const c = ctx!;
+            // Use clientContent (turn-based) instead of realtimeInput.text — native-audio
+            // models reliably respond to clientContent turns but often ignore realtimeInput.text.
             gemini!.send(JSON.stringify({
-              realtimeInput: {
-                text: `[system] The phone call just connected. Say exactly this greeting now, then ask one short open question: "${c.greeting}"`,
+              clientContent: {
+                turns: [{
+                  role: "user",
+                  parts: [{ text: `Произнеси сейчас вслух именно это приветствие на ${langName} языке, ничего не добавляя от себя и не переводя: "${c.greeting}"` }],
+                }],
+                turnComplete: true,
               },
             }));
           }

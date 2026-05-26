@@ -98,7 +98,6 @@ async function handle(client: WebSocket, ctx: Ctx) {
               languageCode: ctx.language,
               voiceConfig: { prebuiltVoiceConfig: { voiceName: ctx.voice } },
             },
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: ctx.voice } } },
             thinkingConfig: { thinkingLevel: "minimal" },
           },
           systemInstruction: { parts: [{ text: `${langDirective}\n\n${sanitizeSystemPrompt(ctx.systemPrompt)}` }] },

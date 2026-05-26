@@ -83,19 +83,16 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           generationConfig: {
             responseModalities: ["AUDIO"],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } } },
-            thinkingConfig: { thinkingLevel: "minimal" },
           },
           systemInstruction: { parts: [{ text: c.systemPrompt }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          // Tuned for low-latency natural dialog: fast end-of-turn detection,
-          // medium start sensitivity so user can interrupt the agent quickly.
+          // Let Gemini's built-in VAD handle turn detection with defaults —
+          // overrides (esp. on native-audio models) can silently break it.
           realtimeInputConfig: {
             automaticActivityDetection: {
               startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
               endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
-              prefixPaddingMs: 120,
-              silenceDurationMs: 350,
             },
           },
         },

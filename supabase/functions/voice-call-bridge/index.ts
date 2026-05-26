@@ -208,60 +208,20 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   };
 
   // ───────── RAG ─────────
-  const maybeInjectRag = async (utterance: string) => {
-    if (!ctx || !gemini || gemini.readyState !== 1) return;
-    const now = Date.now();
-    if (now - lastRagAt < 4500) return; // throttle
-    const q = utterance.trim();
-    if (q.length < 8) return;
-    lastRagAt = now;
-    try {
-      const emb = await embedText(q);
-      if (!emb) return;
-      const { data } = await supa.rpc("match_chunks", {
-        query_embedding: emb as unknown as string,
-        p_agent_id: ctx.agentId,
-        p_owner_id: ctx.ownerId,
-        match_count: 4,
-      });
-      const hits = (data ?? []).filter((r: { similarity: number }) => r.similarity > 0.55);
-      if (!hits.length) return;
-      const ctxText = hits.map((h: { content: string }, i: number) => `[${i + 1}] ${h.content}`).join("\n\n");
-      log("RAG hits=", hits.length, "for:", q.slice(0, 60));
-      gemini.send(JSON.stringify({
-        realtimeInput: {
-          text: `[INTERNAL CONTEXT — do not read aloud. Use it to answer the caller's last question precisely. If the answer is not here, say you don't know.]\n\n${ctxText}`,
-        },
-      }));
-    } catch (e) { console.error("rag", e); }
+  // Mid-call text injection breaks native-audio turn behavior (model switches
+  // language or stops responding). Disabled until we have tool/function calling
+  // wired through Gemini Live's tools API instead of free-form text turns.
+  const maybeInjectRag = async (_utterance: string) => {
+    // intentionally no-op
   };
 
   const checkSilence = () => {
     if (twilio.readyState !== 1) return;
     const idleMs = Date.now() - lastUserAudioAt;
-    if (idleMs >= 20_000) {
-      try {
-        if (gemini && gemini.readyState === 1) {
-          gemini.send(JSON.stringify({
-            realtimeInput: { text: "[system] Line silent 20s. Say a brief polite goodbye and end the call." },
-          }));
-        }
-      } catch { /* noop */ }
-      setTimeout(() => { try { twilio.close(); } catch { /* noop */ } }, 4000);
+    // Just hang up after long silence — don't inject text mid-call, it disrupts the audio session.
+    if (idleMs >= 25_000) {
+      setTimeout(() => { try { twilio.close(); } catch { /* noop */ } }, 500);
       if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
-      return;
-    }
-    if (idleMs >= 8_000 && !silenceWarned) {
-      silenceWarned = true;
-      try {
-        if (gemini && gemini.readyState === 1) {
-          gemini.send(JSON.stringify({
-            realtimeInput: { text: "[system] Quiet ~8s. Politely re-engage in one short sentence." },
-          }));
-        }
-      } catch { /* noop */ }
-    } else if (idleMs < 4_000) {
-      silenceWarned = false;
     }
   };
 

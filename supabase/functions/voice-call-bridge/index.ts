@@ -10,10 +10,11 @@ const TWILIO_KEY = Deno.env.get("TWILIO_API_KEY") || "";
 const TWILIO_GATEWAY = "https://connector-gateway.lovable.dev/twilio";
 const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-// Order matters: try lowest-latency native-audio dialog first, fall back to others.
+// Order matters: native-audio-latest is the only stable native-audio model in v1beta today,
+// fall back to the half-cascade live model if it is unavailable.
 const GEMINI_MODELS = [
-  "models/gemini-2.5-flash-preview-native-audio-dialog",
   "models/gemini-2.5-flash-native-audio-latest",
+  "models/gemini-2.0-flash-live-001",
   "models/gemini-3.1-flash-live-preview",
 ];
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;

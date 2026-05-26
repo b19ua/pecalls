@@ -10,10 +10,11 @@ const TWILIO_KEY = Deno.env.get("TWILIO_API_KEY") || "";
 const TWILIO_GATEWAY = "https://connector-gateway.lovable.dev/twilio";
 const supa = createClient(SUPABASE_URL, SERVICE_ROLE);
 
+// Order matters: try lowest-latency native-audio dialog first, fall back to others.
 const GEMINI_MODELS = [
-  "models/gemini-3.1-flash-live-preview",
-  "models/gemini-2.5-flash-native-audio-latest",
   "models/gemini-2.5-flash-preview-native-audio-dialog",
+  "models/gemini-2.5-flash-native-audio-latest",
+  "models/gemini-3.1-flash-live-preview",
 ];
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
 const log = (...a: unknown[]) => console.log("[bridge]", ...a);
@@ -86,15 +87,14 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           systemInstruction: { parts: [{ text: c.systemPrompt }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          // Make VAD less trigger-happy on background noise (street, TV, car, kids).
-          // Low start sensitivity = need clearer speech to interrupt the agent.
-          // Larger silenceDuration = wait longer before deciding user finished talking.
+          // Tuned for low-latency natural dialog: fast end-of-turn detection,
+          // medium start sensitivity so user can interrupt the agent quickly.
           realtimeInputConfig: {
             automaticActivityDetection: {
-              startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
-              endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
-              prefixPaddingMs: 300,
-              silenceDurationMs: 900,
+              startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
+              endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
+              prefixPaddingMs: 120,
+              silenceDurationMs: 350,
             },
           },
         },

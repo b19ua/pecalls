@@ -1,0 +1,1 @@
+UPDATE public.agents SET model = 'gemini-2.5-flash-preview-native-audio-dialog', silence_timeout_seconds = LEAST(silence_timeout_seconds, 2);

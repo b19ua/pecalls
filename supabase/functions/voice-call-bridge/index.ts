@@ -194,10 +194,11 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (ot) transcript.push({ role: "agent", text: ot, ts: new Date().toISOString() });
         } else if (msg.error) {
           log("gemini ERROR", JSON.stringify(msg.error));
+          const currentModel = getModelCandidates(ctx?.model)[geminiModelIndex] || getModelCandidates(ctx?.model)[0] || GEMINI_MODELS[0];
           void reportError({
             source: "voice-call-bridge:gemini",
             message: msg.error?.message || "Gemini error",
-            context: { error: msg.error, model },
+            context: { error: msg.error, model: currentModel },
             agent_id: ctx?.agentId,
             call_sid: callSid,
             owner_id: ctx?.ownerId,

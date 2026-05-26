@@ -370,6 +370,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const fb: Ctx = {
         agentId: id, ownerId: "",
         systemPrompt: "Ты вежливый ассистент. Отвечай кратко.",
+        knowledgeContext: "",
         voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
         handoffPhrases: [], handoffNumbers: [],
@@ -391,16 +392,18 @@ async function loadContext(agentId: string): Promise<Ctx> {
   if (!agent) {
     return {
       agentId, ownerId: "",
-      systemPrompt: "Ты вежливый ассистент Premier Energy.",
+      systemPrompt: "Ты вежливый ассистент Premier Energy.", knowledgeContext: "",
       voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
       handoffPhrases: [], handoffNumbers: [],
     };
   }
+  const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
   return {
     agentId: agent.id,
     ownerId: agent.owner_id,
     systemPrompt: agent.system_prompt,
+    knowledgeContext,
     voice: agent.voice || "Puck",
     language: agent.language || "ru-RU",
     model: agent.model || "gemini-2.5-flash-native-audio-latest",
@@ -412,6 +415,43 @@ async function loadContext(agentId: string): Promise<Ctx> {
     handoffPhrases: Array.isArray(agent.handoff_trigger_phrases) ? agent.handoff_trigger_phrases : [],
     handoffNumbers: Array.isArray(agent.handoff_numbers) ? agent.handoff_numbers : [],
   };
+}
+
+async function loadKnowledgeContext(agentId: string, ownerId: string, seedText: string): Promise<string> {
+  try {
+    const embedding = await embedText(seedText.slice(0, 3000));
+    if (embedding?.length) {
+      const { data, error } = await supa.rpc("match_chunks", {
+        query_embedding: embedding,
+        p_agent_id: agentId,
+        p_owner_id: ownerId,
+        match_count: 6,
+      });
+      if (!error && Array.isArray(data) && data.length) {
+        return data
+          .filter((row) => Number(row.similarity ?? 0) >= 0.55)
+          .map((row) => `- ${String(row.content || "").trim()}`)
+          .join("\n")
+          .slice(0, 6000);
+      }
+    }
+
+    const { data: recent } = await supa
+      .from("knowledge_chunks")
+      .select("content")
+      .eq("agent_id", agentId)
+      .eq("owner_id", ownerId)
+      .order("chunk_index", { ascending: true })
+      .limit(6);
+
+    return (recent || [])
+      .map((row) => `- ${String(row.content || "").trim()}`)
+      .join("\n")
+      .slice(0, 6000);
+  } catch (error) {
+    console.error("knowledge context", error);
+    return "";
+  }
 }
 
 async function embedText(text: string): Promise<number[] | null> {

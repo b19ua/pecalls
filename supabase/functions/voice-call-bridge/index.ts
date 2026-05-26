@@ -77,6 +77,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     gemini = new WebSocket(GEMINI_WS);
     gemini.onopen = async () => {
       const c = ctx || await ctxReady;
+      const langName: Record<string, string> = { "ru-RU": "Russian (русский)", "en-US": "English", "ro-RO": "Romanian (română)" };
+      const lang = langName[c.language] || "Russian (русский)";
+      const langDirective = `CRITICAL LANGUAGE RULE: You MUST speak ONLY in ${lang} at all times, regardless of what language the caller uses. Even if the caller speaks English or any other language, you ALWAYS reply in ${lang}. Never switch languages mid-conversation. Keep replies under 2 short sentences for natural phone dialog.\n\n`;
       gemini!.send(JSON.stringify({
         setup: {
           model,
@@ -84,11 +87,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
             responseModalities: ["AUDIO"],
             speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } } },
           },
-          systemInstruction: { parts: [{ text: c.systemPrompt }] },
+          systemInstruction: { parts: [{ text: langDirective + c.systemPrompt }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          // Let Gemini's built-in VAD handle turn detection with defaults —
-          // overrides (esp. on native-audio models) can silently break it.
           realtimeInputConfig: {
             automaticActivityDetection: {
               startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
@@ -107,11 +108,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (!greetingRequested) {
             greetingRequested = true;
             const c = ctx!;
-            const langName: Record<string, string> = { "ru-RU": "Russian", "en-US": "English", "ro-RO": "Romanian" };
-            const lang = langName[c.language] || c.language;
             gemini!.send(JSON.stringify({
               realtimeInput: {
-                text: `The phone call has just connected. Speak immediately in ${lang}: greet warmly with "${c.greeting}", then ask one short open question. Keep replies under 2 sentences.`,
+                text: `[system] The phone call just connected. Say exactly this greeting now, then ask one short open question: "${c.greeting}"`,
               },
             }));
           }
@@ -172,9 +171,14 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           owner_id: ctx?.ownerId,
         });
       }
-      if (!greetingRequested && (e.code === 1008 || e.code === 1011) && geminiModelIndex < GEMINI_MODELS.length - 1 && twilio.readyState === 1) {
-        geminiModelIndex += 1;
-        setTimeout(connectGemini, 150);
+      // Reconnect mid-call too: native-audio models sometimes drop with 1011
+      // after ~1 minute. Skip greeting on resume so the caller doesn't hear it twice.
+      if (twilio.readyState === 1 && (e.code === 1008 || e.code === 1011)) {
+        if (!greetingRequested && geminiModelIndex < GEMINI_MODELS.length - 1) {
+          geminiModelIndex += 1;
+        }
+        // keep greetingRequested=true on mid-call drop → resumed session stays silent until user speaks
+        setTimeout(connectGemini, 200);
       }
     };
   };

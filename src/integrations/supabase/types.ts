@@ -125,6 +125,27 @@ export type Database = {
         }
         Relationships: []
       }
+      app_settings: {
+        Row: {
+          admin_email: string | null
+          id: number
+          notify_on_errors: boolean
+          updated_at: string
+        }
+        Insert: {
+          admin_email?: string | null
+          id?: number
+          notify_on_errors?: boolean
+          updated_at?: string
+        }
+        Update: {
+          admin_email?: string | null
+          id?: number
+          notify_on_errors?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       calls: {
         Row: {
           agent_id: string | null
@@ -323,6 +344,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      error_logs: {
+        Row: {
+          agent_id: string | null
+          call_sid: string | null
+          context: Json | null
+          created_at: string
+          id: string
+          message: string
+          notified: boolean
+          owner_id: string | null
+          severity: string
+          source: string
+        }
+        Insert: {
+          agent_id?: string | null
+          call_sid?: string | null
+          context?: Json | null
+          created_at?: string
+          id?: string
+          message: string
+          notified?: boolean
+          owner_id?: string | null
+          severity?: string
+          source: string
+        }
+        Update: {
+          agent_id?: string | null
+          call_sid?: string | null
+          context?: Json | null
+          created_at?: string
+          id?: string
+          message?: string
+          notified?: boolean
+          owner_id?: string | null
+          severity?: string
+          source?: string
+        }
+        Relationships: []
       }
       knowledge_chunks: {
         Row: {

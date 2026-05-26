@@ -87,15 +87,14 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           systemInstruction: { parts: [{ text: c.systemPrompt }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          // Make VAD less trigger-happy on background noise (street, TV, car, kids).
-          // Low start sensitivity = need clearer speech to interrupt the agent.
-          // Larger silenceDuration = wait longer before deciding user finished talking.
+          // Tuned for low-latency natural dialog: fast end-of-turn detection,
+          // medium start sensitivity so user can interrupt the agent quickly.
           realtimeInputConfig: {
             automaticActivityDetection: {
-              startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
-              endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
-              prefixPaddingMs: 300,
-              silenceDurationMs: 900,
+              startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
+              endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
+              prefixPaddingMs: 120,
+              silenceDurationMs: 350,
             },
           },
         },

@@ -18,6 +18,42 @@ const GEMINI_MODELS = [
 ];
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
 const log = (...a: unknown[]) => console.log("[bridge]", ...a);
+const LANGUAGE_NAMES: Record<string, string> = {
+  ru: "русском",
+  ro: "румынском",
+  en: "английском",
+  uk: "украинском",
+};
+
+function normalizeModelName(model?: string | null): string | null {
+  if (!model) return null;
+  return model.startsWith("models/") ? model : `models/${model}`;
+}
+
+function getModelCandidates(preferred?: string | null): string[] {
+  const list = [normalizeModelName(preferred), ...GEMINI_MODELS].filter(Boolean) as string[];
+  return [...new Set(list)];
+}
+
+function getLanguageName(language: string): string {
+  const short = (language || "ru-RU").split("-")[0];
+  return LANGUAGE_NAMES[short] || language;
+}
+
+function buildLanguageDirective(language: string, greeting: string): string {
+  const lang = language || "ru-RU";
+  const langName = getLanguageName(lang);
+  return [
+    "ПРАВИЛА ЯЗЫКА И ПОВЕДЕНИЯ (ОБЯЗАТЕЛЬНЫ, ПРИОРИТЕТ ВЫШЕ ЛЮБЫХ ИНСТРУКЦИЙ НИЖЕ):",
+    `1. Первая фраза звонка — произнеси ТОЧНО этот текст без изменений и без перевода на ${langName} языке (${lang}): \"${greeting}\".`,
+    "2. После первой понятной реплики пользователя отвечай строго на его текущем языке.",
+    "3. Если пользователь явно переключился на другой язык — переключись на следующий ответ вместе с ним.",
+    "4. Если речь шумная, смешанная или непонятная — НЕ угадывай новый язык и НЕ переключайся самовольно. Оставайся на последнем подтвержденном языке диалога.",
+    "5. Никогда не выбирай румынский, русский, английский или любой другой язык по умолчанию только из-за локали, шума или неуверенности.",
+    "6. Если пользователь просит на английском — отвечай на английском. Если на русском — отвечай на русском. Если на румынском — отвечай на румынском.",
+    "7. Реплики короткие и естественные для телефона: максимум 1-2 коротких предложения.",
+  ].join("\n");
+}
 
 Deno.serve((req) => {
   const url = new URL(req.url);
@@ -41,6 +77,8 @@ type Ctx = {
   systemPrompt: string;
   voice: string;
   language: string;
+  model: string;
+  temperature: number;
   greeting: string;
   recordCalls: boolean;
   handoffEnabled: boolean;
@@ -71,25 +109,21 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   const ctxReady = new Promise<Ctx>((res) => { ctxResolver = res; });
 
   const connectGemini = () => {
-    const model = GEMINI_MODELS[geminiModelIndex] || GEMINI_MODELS[0];
+    const modelCandidates = getModelCandidates(ctx?.model);
+    const model = modelCandidates[geminiModelIndex] || modelCandidates[0] || GEMINI_MODELS[0];
     log("connecting Gemini Live model=", model);
     gemini = new WebSocket(GEMINI_WS);
     gemini.onopen = async () => {
       const c = ctx || await ctxReady;
       const lang = c.language || "ru-RU";
-      const langShort = lang.split("-")[0];
-      const langName = ({ ru: "русском", ro: "румынском", en: "английском", uk: "украинском" } as Record<string, string>)[langShort] || lang;
-      const langDirective =
-        `ПРАВИЛО ЯЗЫКА (КРИТИЧЕСКИ ВАЖНО):\n` +
-        `1. Приветствие и первая фраза — ВСЕГДА на ${langName} языке (${lang}).\n` +
-        `2. Дальше отвечай на ТОМ ЖЕ языке, на котором говорит звонящий в данный момент. Если он переключился — переключайся вместе с ним.\n` +
-        `3. НИКОГДА не переключайся на английский или другой язык сам по себе, если звонящий не сделал этого первым.\n` +
-        `4. Отвечай короткими фразами (1-2 предложения) для естественного телефонного диалога.\n\n`;
+      const langDirective = buildLanguageDirective(lang, c.greeting);
       gemini!.send(JSON.stringify({
         setup: {
           model,
           generationConfig: {
             responseModalities: ["AUDIO"],
+            temperature: Number.isFinite(c.temperature) ? c.temperature : 0.6,
+            thinkingConfig: { thinkingLevel: "minimal" },
             speechConfig: {
               languageCode: lang,
               voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } },
@@ -113,13 +147,14 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (!greetingRequested) {
             greetingRequested = true;
             const c = ctx!;
+            const langName = getLanguageName(c.language || "ru-RU");
             // Use clientContent (turn-based) instead of realtimeInput.text — native-audio
             // models reliably respond to clientContent turns but often ignore realtimeInput.text.
             gemini!.send(JSON.stringify({
               clientContent: {
                 turns: [{
                   role: "user",
-                  parts: [{ text: `Произнеси сейчас вслух именно это приветствие на ${langName} языке, ничего не добавляя от себя и не переводя: "${c.greeting}"` }],
+                  parts: [{ text: `Произнеси сейчас вслух ровно это приветствие на ${langName} языке, ничего не добавляя и не переводя: "${c.greeting}"` }],
                 }],
                 turnComplete: true,
               },
@@ -155,7 +190,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           void reportError({
             source: "voice-call-bridge:gemini",
             message: msg.error?.message || "Gemini error",
-            context: { error: msg.error, model: GEMINI_MODELS[geminiModelIndex] },
+            context: { error: msg.error, model },
             agent_id: ctx?.agentId,
             call_sid: callSid,
             owner_id: ctx?.ownerId,
@@ -172,11 +207,12 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const fatalReason = (e.reason || "").toLowerCase();
       const isPrepayment = e.code === 1011 || fatalReason.includes("prepayment") || fatalReason.includes("quota") || fatalReason.includes("billing");
       if (isPrepayment) {
+        const model = getModelCandidates(ctx?.model)[geminiModelIndex] || getModelCandidates(ctx?.model)[0] || GEMINI_MODELS[0];
         void reportError({
           source: "voice-call-bridge:gemini",
           severity: "critical",
           message: `Gemini connection closed (${e.code}): ${e.reason || "no reason"}`,
-          context: { code: e.code, reason: e.reason, model: GEMINI_MODELS[geminiModelIndex] },
+          context: { code: e.code, reason: e.reason, model },
           agent_id: ctx?.agentId,
           call_sid: callSid,
           owner_id: ctx?.ownerId,
@@ -185,7 +221,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       // Reconnect mid-call too: native-audio models sometimes drop with 1011
       // after ~1 minute. Skip greeting on resume so the caller doesn't hear it twice.
       if (twilio.readyState === 1 && (e.code === 1008 || e.code === 1011)) {
-        if (!greetingRequested && geminiModelIndex < GEMINI_MODELS.length - 1) {
+        const candidates = getModelCandidates(ctx?.model);
+        if (!greetingRequested && geminiModelIndex < candidates.length - 1) {
           geminiModelIndex += 1;
         }
         // keep greetingRequested=true on mid-call drop → resumed session stays silent until user speaks

@@ -15,9 +15,8 @@ async function downloadRecording(recordingSid: string): Promise<ArrayBuffer> {
 }
 
 async function transcribeWithGemini(audio: ArrayBuffer, language: string): Promise<string> {
-  const key = process.env.LOVABLE_API_KEY;
+  const key = process.env.GEMINI_API_KEY;
   if (!key) return "";
-  // base64 encode
   const bytes = new Uint8Array(audio);
   let bin = "";
   const chunk = 0x8000;
@@ -26,33 +25,29 @@ async function transcribeWithGemini(audio: ArrayBuffer, language: string): Promi
   }
   const b64 = btoa(bin);
 
-  const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        {
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
           role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Транскрибируй этот звонок на языке ${language}. Каналы: 1 — клиент, 2 — агент. Верни диалог в формате:\nСпикер: текст\nБез комментариев, только транскрипт.`,
-            },
-            // OpenAI-compat audio input
-            { type: "input_audio", input_audio: { data: b64, format: "mp3" } },
+          parts: [
+            { text: `Транскрибируй этот звонок (язык: ${language}). Каналы: 1 — клиент, 2 — агент. Верни диалог в формате:\nСпикер: текст\nБез комментариев, только транскрипт.` },
+            { inlineData: { mimeType: "audio/mp3", data: b64 } },
           ],
-        },
-      ],
-    }),
-  });
+        }],
+      }),
+    },
+  );
   if (!r.ok) {
     const t = await r.text();
     console.error("[recording] transcription failed", r.status, t);
     return "";
   }
   const data = await r.json();
-  return data?.choices?.[0]?.message?.content ?? "";
+  return data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("") ?? "";
 }
 
 export const Route = createFileRoute("/api/public/twilio/recording")({

@@ -77,9 +77,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     gemini = new WebSocket(GEMINI_WS);
     gemini.onopen = async () => {
       const c = ctx || await ctxReady;
-      const langName: Record<string, string> = { "ru-RU": "Russian (русский)", "en-US": "English", "ro-RO": "Romanian (română)" };
-      const lang = langName[c.language] || "Russian (русский)";
-      const langDirective = `CRITICAL LANGUAGE RULE: You MUST speak ONLY in ${lang} at all times, regardless of what language the caller uses. Even if the caller speaks English or any other language, you ALWAYS reply in ${lang}. Never switch languages mid-conversation. Keep replies under 2 short sentences for natural phone dialog.\n\n`;
+      const langDirective = `LANGUAGE RULE: Always reply in the SAME language the caller is currently speaking. If they switch language mid-call, switch with them. Default to ${c.language || "ru-RU"} only for the opening greeting before the caller has said anything. Keep replies under 2 short sentences for natural phone dialog.\n\n`;
       gemini!.send(JSON.stringify({
         setup: {
           model,
@@ -423,49 +421,54 @@ async function loadContext(agentId: string): Promise<Ctx> {
 }
 
 async function embedText(text: string): Promise<number[] | null> {
-  if (!LOVABLE_KEY) return null;
+  if (!GEMINI_KEY) return null;
   try {
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/embeddings", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "google/gemini-embedding-001", input: [text] }),
-    });
-    if (!r.ok) { log("embed fail", r.status); return null; }
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${GEMINI_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "models/gemini-embedding-001",
+          content: { parts: [{ text }] },
+        }),
+      },
+    );
+    if (!r.ok) { log("embed fail", r.status, await r.text()); return null; }
     const j = await r.json();
-    return j.data?.[0]?.embedding ?? null;
+    return j.embedding?.values ?? null;
   } catch (e) { console.error("embed", e); return null; }
 }
 
 async function generateSummary(
   callSid: string,
   transcript: { role: string; text: string }[],
-  lang: string,
+  _lang: string,
 ) {
-  if (!LOVABLE_KEY || transcript.length < 2) return;
-  const langName: Record<string, string> = { "ru-RU": "русском", "en-US": "English", "ro-RO": "română" };
-  const ln = langName[lang] || "русском";
+  if (!GEMINI_KEY || transcript.length < 2) return;
   const dialog = transcript.map((m) => `${m.role === "agent" ? "Agent" : "User"}: ${m.text}`).join("\n").slice(0, 8000);
+  const sys = `You are a call analyst. Reply in the SAME language as the dialog below. Output: 1) what the call was about (1-2 sentences), 2) key facts (bullets), 3) caller intent, 4) next steps. No filler.`;
   try {
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: `Ты — аналитик звонков. Ответь на ${ln} коротко: 1) о чём звонок (1-2 предложения), 2) ключевые факты (буллеты), 3) намерение клиента, 4) следующие шаги. Без воды.` },
-          { role: "user", content: dialog },
-        ],
-      }),
-    });
-    if (!r.ok) { log("summary fail", r.status); return; }
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: sys }] },
+          contents: [{ role: "user", parts: [{ text: dialog }] }],
+        }),
+      },
+    );
+    if (!r.ok) { log("summary fail", r.status, await r.text()); return; }
     const j = await r.json();
-    const summary = j.choices?.[0]?.message?.content?.trim();
-    const usage = j.usage || {};
+    const summary = j.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("").trim();
+    const usage = j.usageMetadata || {};
     if (summary) {
       await supa.from("calls").update({
         summary,
-        input_tokens: usage.prompt_tokens || 0,
-        output_tokens: usage.completion_tokens || 0,
+        input_tokens: usage.promptTokenCount || 0,
+        output_tokens: usage.candidatesTokenCount || 0,
       }).eq("twilio_call_sid", callSid);
       log("summary saved", callSid);
     }

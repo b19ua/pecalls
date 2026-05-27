@@ -153,7 +153,6 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (it) {
             transcript.push({ role: "user", text: it, ts: new Date().toISOString() });
             maybeHandoffByPhrase(it);
-            void maybeInjectRag(it);
           }
           const ot = msg.serverContent?.outputTranscription?.text;
           if (ot) transcript.push({ role: "agent", text: ot, ts: new Date().toISOString() });

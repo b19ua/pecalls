@@ -216,26 +216,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     }));
   };
 
-  // ───────── RAG ─────────
-  // Mid-call text injection breaks native-audio turn behavior (model switches
-  // language or stops responding). Disabled until we have tool/function calling
-  // wired through Gemini Live's tools API instead of free-form text turns.
-  const maybeInjectRag = async (utterance: string) => {
-    const detected = detectPreferredLanguage(utterance, confirmedLanguage || ctx?.language || "ru-RU");
-    if (detected.confidence < 0.72 || detected.language === confirmedLanguage) return;
-    confirmedLanguage = detected.language;
-    log("language switch", detected.language, "confidence", detected.confidence.toFixed(2), "from", utterance);
-    if (!gemini || gemini.readyState !== 1) return;
-    gemini.send(JSON.stringify({
-      clientContent: {
-        turns: [{
-          role: "user",
-          parts: [{ text: `Язык пользователя подтвержден: ${getLanguageName(detected.language)} (${detected.language}). Отвечай только на этом языке, пока пользователь сам явно не переключится.` }],
-        }],
-        turnComplete: false,
-      },
-    }));
-  };
+  // Language mirroring is handled by Gemini Live native-audio itself —
+  // mid-call text injection breaks turn behavior, so we don't do it here.
 
   const checkSilence = () => {
     if (twilio.readyState !== 1) return;

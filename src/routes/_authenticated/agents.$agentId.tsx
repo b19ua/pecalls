@@ -59,7 +59,7 @@ const DEFAULTS: AgentForm = {
   system_prompt: "Ты вежливый ассистент Premier Energy. Отвечай кратко и по делу.",
   voice: "Puck",
   language: "ru-RU",
-  model: "gemini-2.5-flash-native-audio-latest",
+  model: "gemini-3.1-flash-live-preview",
   temperature: 0.8,
   twilio_number_e164: "",
   is_active: true,

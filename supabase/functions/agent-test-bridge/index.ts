@@ -9,9 +9,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   AVAILABLE_LIVE_AUDIO_MODELS,
-  buildLanguageDirective,
-  detectPreferredLanguage,
-  getLanguageName,
+  buildPhoneInstructions,
   getModelCandidates,
   sanitizeSystemPrompt,
 } from "../_shared/live-config.ts";

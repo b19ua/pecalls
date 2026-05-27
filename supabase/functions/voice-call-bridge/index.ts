@@ -4,11 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   AVAILABLE_LIVE_AUDIO_MODELS,
   buildKnowledgePreamble,
-  buildLanguageDirective,
-  detectPreferredLanguage,
-  getLanguageName,
+  buildPhoneInstructions,
   getModelCandidates,
-  normalizeModelName,
   sanitizeSystemPrompt,
 } from "../_shared/live-config.ts";
 

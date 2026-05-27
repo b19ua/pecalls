@@ -1,0 +1,1 @@
+UPDATE public.agents SET model = 'gemini-3.1-flash-live-preview' WHERE model IN ('gemini-2.5-flash-native-audio-latest', 'gemini-2.5-flash-native-audio-preview-09-2025', 'gemini-2.0-flash-live-001') OR model IS NULL; ALTER TABLE public.agents ALTER COLUMN model SET DEFAULT 'gemini-3.1-flash-live-preview';

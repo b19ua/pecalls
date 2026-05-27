@@ -4,11 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   AVAILABLE_LIVE_AUDIO_MODELS,
   buildKnowledgePreamble,
-  buildLanguageDirective,
-  detectPreferredLanguage,
-  getLanguageName,
+  buildPhoneInstructions,
   getModelCandidates,
-  normalizeModelName,
   sanitizeSystemPrompt,
 } from "../_shared/live-config.ts";
 
@@ -70,7 +67,6 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let silenceTimer: number | null = null;
   let handoffTriggered = false;
   let recordingStarted = false;
-  let confirmedLanguage = "ru-RU";
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;
@@ -84,26 +80,36 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const modelCandidates = getModelCandidates(c.model);
       const model = modelCandidates[geminiModelIndex] || modelCandidates[0] || GEMINI_MODELS[0];
       log("connecting Gemini Live model=", model);
-      confirmedLanguage = lang;
-      const langDirective = buildLanguageDirective(lang, c.greeting);
+      const phoneInstr = buildPhoneInstructions(lang, c.greeting);
       const knowledgePreamble = buildKnowledgePreamble(c.knowledgeContext);
+      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr]
+        .filter(Boolean)
+        .join("\n\n");
+      // Lunara-proven payload shape (snake_case, NO languageCode lock).
       gemini!.send(JSON.stringify({
         setup: {
           model,
-          generationConfig: {
-            responseModalities: ["AUDIO"],
+          generation_config: {
+            response_modalities: ["AUDIO"],
             temperature: Number.isFinite(c.temperature) ? c.temperature : 0.6,
-            thinkingConfig: { thinkingLevel: "minimal" },
-            speechConfig: {
-              languageCode: lang,
-              voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice || "Puck" } },
+            max_output_tokens: 350,
+            candidate_count: 1,
+            speech_config: {
+              voice_config: { prebuilt_voice_config: { voice_name: c.voice || "Aoede" } },
             },
           },
-          systemInstruction: { parts: [{ text: `${langDirective}\n\n${knowledgePreamble}\n\n${sanitizeSystemPrompt(c.systemPrompt)}`.trim() }] },
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          realtimeInputConfig: {
-            automaticActivityDetection: {},
+          system_instruction: { parts: [{ text: sysText }] },
+          input_audio_transcription: {},
+          output_audio_transcription: {},
+          realtime_input_config: {
+            automatic_activity_detection: {
+              disabled: false,
+              start_of_speech_sensitivity: "START_SENSITIVITY_LOW",
+              end_of_speech_sensitivity: "END_SENSITIVITY_LOW",
+              prefix_padding_ms: 400,
+              silence_duration_ms: 1100,
+            },
+            activity_handling: "NO_INTERRUPTION",
           },
         },
       }));
@@ -117,16 +123,14 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (!greetingRequested) {
             greetingRequested = true;
             const c = ctx!;
-            const langName = getLanguageName(c.language || "ru-RU");
-            // Use clientContent (turn-based) instead of realtimeInput.text — native-audio
-            // models reliably respond to clientContent turns but often ignore realtimeInput.text.
+            // Lunara-style greeting trigger via client_content turn.
             gemini!.send(JSON.stringify({
-              clientContent: {
+              client_content: {
                 turns: [{
                   role: "user",
-                  parts: [{ text: `Произнеси сейчас вслух ровно это приветствие на ${langName} языке, ничего не добавляя и не переводя: "${c.greeting}"` }],
+                  parts: [{ text: `Greet the caller now. Say: "${String(c.greeting).slice(0, 200)}"` }],
                 }],
-                turnComplete: true,
+                turn_complete: true,
               },
             }));
           }
@@ -149,7 +153,6 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (it) {
             transcript.push({ role: "user", text: it, ts: new Date().toISOString() });
             maybeHandoffByPhrase(it);
-            void maybeInjectRag(it);
           }
           const ot = msg.serverContent?.outputTranscription?.text;
           if (ot) transcript.push({ role: "agent", text: ot, ts: new Date().toISOString() });
@@ -209,30 +212,12 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     const pcm16k = mulaw8kToPcm16k(mulawBytes);
     lastUserAudioAt = Date.now();
     gemini.send(JSON.stringify({
-      realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: bytesToB64(pcm16k) } },
+      realtime_input: { audio: { mime_type: "audio/pcm;rate=16000", data: bytesToB64(pcm16k) } },
     }));
   };
 
-  // ───────── RAG ─────────
-  // Mid-call text injection breaks native-audio turn behavior (model switches
-  // language or stops responding). Disabled until we have tool/function calling
-  // wired through Gemini Live's tools API instead of free-form text turns.
-  const maybeInjectRag = async (utterance: string) => {
-    const detected = detectPreferredLanguage(utterance, confirmedLanguage || ctx?.language || "ru-RU");
-    if (detected.confidence < 0.72 || detected.language === confirmedLanguage) return;
-    confirmedLanguage = detected.language;
-    log("language switch", detected.language, "confidence", detected.confidence.toFixed(2), "from", utterance);
-    if (!gemini || gemini.readyState !== 1) return;
-    gemini.send(JSON.stringify({
-      clientContent: {
-        turns: [{
-          role: "user",
-          parts: [{ text: `Язык пользователя подтвержден: ${getLanguageName(detected.language)} (${detected.language}). Отвечай только на этом языке, пока пользователь сам явно не переключится.` }],
-        }],
-        turnComplete: false,
-      },
-    }));
-  };
+  // Language mirroring is handled by Gemini Live native-audio itself —
+  // mid-call text injection breaks turn behavior, so we don't do it here.
 
   const checkSilence = () => {
     if (twilio.readyState !== 1) return;

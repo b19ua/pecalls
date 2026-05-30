@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_tools: {
+        Row: {
+          agent_id: string
+          config: Json
+          created_at: string
+          description: string
+          enabled: boolean
+          id: string
+          name: string
+          owner_id: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          config?: Json
+          created_at?: string
+          description?: string
+          enabled?: boolean
+          id?: string
+          name: string
+          owner_id: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          config?: Json
+          created_at?: string
+          description?: string
+          enabled?: boolean
+          id?: string
+          name?: string
+          owner_id?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       agents: {
         Row: {
           created_at: string

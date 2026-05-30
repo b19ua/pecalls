@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Save, Trash2, Loader2, PhoneCall } from "lucide-react";
+import { ArrowLeft, Save, Trash2, Loader2, PhoneCall, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { TestCallDialog } from "@/components/TestCallDialog";
 import { useI18n } from "@/lib/i18n";
@@ -455,6 +455,17 @@ function AgentEditor() {
             />
           </Field>
         </Section>
+
+        <Section title="Инструменты">
+          <p className="text-sm text-muted-foreground">
+            Подключите webhook и CRM-инструменты, которые ассистент будет использовать во время разговора
+            (узнать статус заказа, найти контакт, создать лид и т.д.).
+          </p>
+          <Button asChild variant="outline">
+            <Link to="/tools"><Wrench className="h-4 w-4 mr-1.5" /> Открыть инструменты</Link>
+          </Button>
+        </Section>
+
       </div>
 
       {!isNew && (

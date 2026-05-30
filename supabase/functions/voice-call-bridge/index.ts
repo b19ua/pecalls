@@ -37,6 +37,27 @@ Deno.serve((req) => {
   return response;
 });
 
+type ToolParam = { name: string; type: "string" | "number" | "boolean"; description?: string; required?: boolean };
+type ToolRow = {
+  id: string;
+  type: "webhook" | "crm_lookup" | "crm_write";
+  name: string;
+  description: string;
+  enabled: boolean;
+  config: Record<string, unknown> & {
+    url?: string;
+    base_url?: string;
+    path?: string;
+    method?: string;
+    auth_header_name?: string;
+    auth_header_value?: string;
+    parameters?: ToolParam[];
+    body_template?: string;
+    timeout_ms?: number;
+    response_hint?: string;
+  };
+};
+
 type Ctx = {
   agentId: string;
   ownerId: string;
@@ -52,7 +73,9 @@ type Ctx = {
   handoffDigit: string;
   handoffPhrases: string[];
   handoffNumbers: string[];
+  tools: ToolRow[];
 };
+
 
 async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let streamSid = "";
@@ -86,7 +109,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         .filter(Boolean)
         .join("\n\n");
       // Lunara-proven payload shape (snake_case, NO languageCode lock).
-      gemini!.send(JSON.stringify({
+      const toolDecls = buildToolDeclarations(c.tools);
+      const setupMsg: Record<string, unknown> = {
         setup: {
           model,
           generation_config: {
@@ -111,9 +135,12 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
             },
             activity_handling: "NO_INTERRUPTION",
           },
+          ...(toolDecls.length ? { tools: [{ function_declarations: toolDecls }] } : {}),
         },
-      }));
+      };
+      gemini!.send(JSON.stringify(setupMsg));
     };
+
     gemini.onmessage = async (ev) => {
       try {
         const text = typeof ev.data === "string" ? ev.data : await (ev.data as Blob).text();
@@ -167,7 +194,23 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
             call_sid: callSid,
             owner_id: ctx?.ownerId,
           });
+        } else if (msg.toolCall) {
+          const calls = msg.toolCall?.functionCalls || [];
+          for (const fc of calls) {
+            const tool = ctx?.tools.find((t) => t.name === fc.name);
+            const result = tool
+              ? await executeTool(tool, (fc.args || {}) as Record<string, unknown>)
+              : { error: `unknown tool ${fc.name}` };
+            try {
+              gemini!.send(JSON.stringify({
+                tool_response: {
+                  function_responses: [{ id: fc.id, name: fc.name, response: { result } }],
+                },
+              }));
+            } catch (e) { console.error("tool resp", e); }
+          }
         }
+
       } catch (e) {
         console.error("gemini parse", e);
       }
@@ -358,7 +401,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         knowledgeContext: "",
         voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
-        handoffPhrases: [], handoffNumbers: [],
+        handoffPhrases: [], handoffNumbers: [], tools: [],
       };
       ctx = fb;
       ctxResolver?.(fb);
@@ -380,10 +423,11 @@ async function loadContext(agentId: string): Promise<Ctx> {
       systemPrompt: "Ты вежливый ассистент Premier Energy.", knowledgeContext: "",
       voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
-      handoffPhrases: [], handoffNumbers: [],
+      handoffPhrases: [], handoffNumbers: [], tools: [],
     };
   }
   const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
+  const tools = await loadTools(agent.id, agent.owner_id);
   return {
     agentId: agent.id,
     ownerId: agent.owner_id,
@@ -399,8 +443,97 @@ async function loadContext(agentId: string): Promise<Ctx> {
     handoffDigit: agent.handoff_dtmf_digit || "0",
     handoffPhrases: Array.isArray(agent.handoff_trigger_phrases) ? agent.handoff_trigger_phrases : [],
     handoffNumbers: Array.isArray(agent.handoff_numbers) ? agent.handoff_numbers : [],
+    tools,
   };
 }
+
+async function loadTools(agentId: string, ownerId: string): Promise<ToolRow[]> {
+  try {
+    const { data } = await supa
+      .from("agent_tools")
+      .select("id, type, name, description, enabled, config")
+      .eq("agent_id", agentId)
+      .eq("owner_id", ownerId)
+      .eq("enabled", true);
+    return (data as ToolRow[]) ?? [];
+  } catch (e) { console.error("loadTools", e); return []; }
+}
+
+function buildToolDeclarations(tools: ToolRow[]) {
+  return tools.map((t) => {
+    const params = t.config.parameters ?? [];
+    const properties: Record<string, { type: string; description?: string }> = {};
+    const required: string[] = [];
+    for (const p of params) {
+      if (!p.name) continue;
+      properties[p.name] = { type: p.type || "string", description: p.description || undefined };
+      if (p.required) required.push(p.name);
+    }
+    return {
+      name: t.name,
+      description: [t.description, t.config.response_hint].filter(Boolean).join("\n"),
+      parameters: { type: "object", properties, required },
+    };
+  });
+}
+
+function fillTemplate(tmpl: string, args: Record<string, unknown>): string {
+  return tmpl.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) =>
+    args[k] !== undefined ? String(args[k]) : "");
+}
+
+async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promise<unknown> {
+  const cfg = tool.config;
+  const timeout = Math.min(Math.max(cfg.timeout_ms ?? 8000, 500), 20000);
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (cfg.auth_header_name && cfg.auth_header_value) {
+    headers[cfg.auth_header_name] = cfg.auth_header_value;
+  }
+  let url = "";
+  let method = (cfg.method || "POST").toUpperCase();
+  let body: string | undefined;
+
+  if (tool.type === "webhook") {
+    url = cfg.url || "";
+    if (method === "GET") {
+      const u = new URL(url);
+      for (const [k, v] of Object.entries(args)) u.searchParams.set(k, String(v));
+      url = u.toString();
+    } else {
+      body = JSON.stringify(args);
+    }
+  } else {
+    const base = (cfg.base_url || "").replace(/\/+$/, "");
+    const path = fillTemplate(cfg.path || "", args);
+    url = `${base}${path.startsWith("/") ? path : "/" + path}`;
+    if (method === "GET") {
+      const u = new URL(url);
+      for (const [k, v] of Object.entries(args)) {
+        if (!u.searchParams.has(k)) u.searchParams.set(k, String(v));
+      }
+      url = u.toString();
+    } else if (cfg.body_template) {
+      body = fillTemplate(cfg.body_template, args);
+    } else {
+      body = JSON.stringify(args);
+    }
+  }
+
+  try {
+    const ctl = new AbortController();
+    const tid = setTimeout(() => ctl.abort(), timeout);
+    const r = await fetch(url, { method, headers, body, signal: ctl.signal });
+    clearTimeout(tid);
+    const txt = await r.text();
+    let parsed: unknown = txt;
+    try { parsed = JSON.parse(txt); } catch { /* keep as text */ }
+    log("tool", tool.name, "→", r.status);
+    return { status: r.status, ok: r.ok, data: parsed };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 
 async function loadKnowledgeContext(agentId: string, ownerId: string, seedText: string): Promise<string> {
   try {

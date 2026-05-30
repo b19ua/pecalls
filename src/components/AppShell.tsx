@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Bot, PhoneCall, BookOpen, Megaphone, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio } from "lucide-react";
+import { LayoutDashboard, Bot, PhoneCall, BookOpen, Megaphone, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench } from "lucide-react";
 import { AppLogo } from "./AppLogo";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -12,6 +12,7 @@ import { ADMIN_SESSION_KEY } from "@/routes/login";
 const NAV = [
   { to: "/dashboard",  key: "nav.dashboard",  icon: LayoutDashboard },
   { to: "/agents",     key: "nav.agents",     icon: Bot },
+  { to: "/tools",      key: "nav.tools",      icon: Wrench },
   { to: "/numbers",    key: "nav.numbers",    icon: Phone },
   { to: "/calls",      key: "nav.calls",      icon: PhoneCall },
   { to: "/live",       key: "nav.live",       icon: Radio },

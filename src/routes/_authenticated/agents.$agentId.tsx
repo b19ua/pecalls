@@ -429,6 +429,17 @@ function AgentEditor() {
           )}
         </Section>
 
+        <Section title="Инструменты">
+          <p className="text-sm text-muted-foreground">
+            Подключите webhook и CRM-инструменты, которые ассистент будет использовать во время разговора
+            (узнать статус заказа, найти контакт, создать лид и т.д.).
+          </p>
+          <Button asChild variant="outline">
+            <Link to="/tools"><Wrench className="h-4 w-4 mr-1.5" /> Открыть инструменты</Link>
+          </Button>
+        </Section>
+
+
         <Section title={t("agent.section.handoff")}>
           <div className="flex items-center justify-between">
             <Label className="flex items-center gap-1.5">

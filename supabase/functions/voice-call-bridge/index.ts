@@ -109,7 +109,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         .filter(Boolean)
         .join("\n\n");
       // Lunara-proven payload shape (snake_case, NO languageCode lock).
-      gemini!.send(JSON.stringify({
+      const toolDecls = buildToolDeclarations(c.tools);
+      const setupMsg: Record<string, unknown> = {
         setup: {
           model,
           generation_config: {
@@ -134,9 +135,12 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
             },
             activity_handling: "NO_INTERRUPTION",
           },
+          ...(toolDecls.length ? { tools: [{ function_declarations: toolDecls }] } : {}),
         },
-      }));
+      };
+      gemini!.send(JSON.stringify(setupMsg));
     };
+
     gemini.onmessage = async (ev) => {
       try {
         const text = typeof ev.data === "string" ? ev.data : await (ev.data as Blob).text();

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedToolsRouteImport } from './routes/_authenticated/tools'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedNumbersRouteImport } from './routes/_authenticated/numbers'
 import { Route as AuthenticatedLiveRouteImport } from './routes/_authenticated/live'
@@ -41,6 +42,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedToolsRoute = AuthenticatedToolsRouteImport.update({
+  id: '/tools',
+  path: '/tools',
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/live': typeof AuthenticatedLiveRoute
   '/numbers': typeof AuthenticatedNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/tools': typeof AuthenticatedToolsRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/agents/': typeof AuthenticatedAgentsIndexRoute
@@ -152,6 +159,7 @@ export interface FileRoutesByTo {
   '/live': typeof AuthenticatedLiveRoute
   '/numbers': typeof AuthenticatedNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/tools': typeof AuthenticatedToolsRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/agents': typeof AuthenticatedAgentsIndexRoute
@@ -173,6 +181,7 @@ export interface FileRoutesById {
   '/_authenticated/live': typeof AuthenticatedLiveRoute
   '/_authenticated/numbers': typeof AuthenticatedNumbersRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/tools': typeof AuthenticatedToolsRoute
   '/_authenticated/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/_authenticated/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/_authenticated/agents/': typeof AuthenticatedAgentsIndexRoute
@@ -194,6 +203,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/numbers'
     | '/settings'
+    | '/tools'
     | '/agents/$agentId'
     | '/calls/$callId'
     | '/agents/'
@@ -212,6 +222,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/numbers'
     | '/settings'
+    | '/tools'
     | '/agents/$agentId'
     | '/calls/$callId'
     | '/agents'
@@ -232,6 +243,7 @@ export interface FileRouteTypes {
     | '/_authenticated/live'
     | '/_authenticated/numbers'
     | '/_authenticated/settings'
+    | '/_authenticated/tools'
     | '/_authenticated/agents/$agentId'
     | '/_authenticated/calls/$callId'
     | '/_authenticated/agents/'
@@ -271,6 +283,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/tools': {
+      id: '/_authenticated/tools'
+      path: '/tools'
+      fullPath: '/tools'
+      preLoaderRoute: typeof AuthenticatedToolsRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
@@ -414,6 +433,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedLiveRoute: typeof AuthenticatedLiveRoute
   AuthenticatedNumbersRoute: typeof AuthenticatedNumbersRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedToolsRoute: typeof AuthenticatedToolsRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -426,6 +446,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedLiveRoute: AuthenticatedLiveRoute,
   AuthenticatedNumbersRoute: AuthenticatedNumbersRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedToolsRoute: AuthenticatedToolsRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
@@ -443,3 +464,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

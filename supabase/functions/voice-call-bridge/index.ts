@@ -401,7 +401,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         knowledgeContext: "",
         voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
-        handoffPhrases: [], handoffNumbers: [],
+        handoffPhrases: [], handoffNumbers: [], tools: [],
       };
       ctx = fb;
       ctxResolver?.(fb);

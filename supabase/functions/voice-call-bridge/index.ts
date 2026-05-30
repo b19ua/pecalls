@@ -37,6 +37,27 @@ Deno.serve((req) => {
   return response;
 });
 
+type ToolParam = { name: string; type: "string" | "number" | "boolean"; description?: string; required?: boolean };
+type ToolRow = {
+  id: string;
+  type: "webhook" | "crm_lookup" | "crm_write";
+  name: string;
+  description: string;
+  enabled: boolean;
+  config: Record<string, unknown> & {
+    url?: string;
+    base_url?: string;
+    path?: string;
+    method?: string;
+    auth_header_name?: string;
+    auth_header_value?: string;
+    parameters?: ToolParam[];
+    body_template?: string;
+    timeout_ms?: number;
+    response_hint?: string;
+  };
+};
+
 type Ctx = {
   agentId: string;
   ownerId: string;
@@ -52,7 +73,9 @@ type Ctx = {
   handoffDigit: string;
   handoffPhrases: string[];
   handoffNumbers: string[];
+  tools: ToolRow[];
 };
+
 
 async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let streamSid = "";

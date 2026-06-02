@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PeRouteImport } from './routes/pe'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
@@ -29,6 +30,11 @@ import { Route as ApiPublicTwilioVoiceRouteImport } from './routes/api/public/tw
 import { Route as ApiPublicTwilioStatusRouteImport } from './routes/api/public/twilio/status'
 import { Route as ApiPublicTwilioRecordingRouteImport } from './routes/api/public/twilio/recording'
 
+const PeRoute = PeRouteImport.update({
+  id: '/pe',
+  path: '/pe',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -131,6 +137,7 @@ const ApiPublicTwilioRecordingRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/pe': typeof PeRoute
   '/agents': typeof AuthenticatedAgentsRouteWithChildren
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/calls': typeof AuthenticatedCallsRouteWithChildren
@@ -151,6 +158,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/pe': typeof PeRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/calls': typeof AuthenticatedCallsRouteWithChildren
   '/campaigns': typeof AuthenticatedCampaignsRoute
@@ -172,6 +180,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
+  '/pe': typeof PeRoute
   '/_authenticated/agents': typeof AuthenticatedAgentsRouteWithChildren
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/calls': typeof AuthenticatedCallsRouteWithChildren
@@ -194,6 +203,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/pe'
     | '/agents'
     | '/analytics'
     | '/calls'
@@ -214,6 +224,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/pe'
     | '/analytics'
     | '/calls'
     | '/campaigns'
@@ -234,6 +245,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/login'
+    | '/pe'
     | '/_authenticated/agents'
     | '/_authenticated/analytics'
     | '/_authenticated/calls'
@@ -256,6 +268,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
+  PeRoute: typeof PeRoute
   ApiPublicTwilioRecordingRoute: typeof ApiPublicTwilioRecordingRoute
   ApiPublicTwilioStatusRoute: typeof ApiPublicTwilioStatusRoute
   ApiPublicTwilioVoiceRoute: typeof ApiPublicTwilioVoiceRoute
@@ -263,6 +276,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/pe': {
+      id: '/pe'
+      path: '/pe'
+      fullPath: '/pe'
+      preLoaderRoute: typeof PeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -457,6 +477,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
+  PeRoute: PeRoute,
   ApiPublicTwilioRecordingRoute: ApiPublicTwilioRecordingRoute,
   ApiPublicTwilioStatusRoute: ApiPublicTwilioStatusRoute,
   ApiPublicTwilioVoiceRoute: ApiPublicTwilioVoiceRoute,

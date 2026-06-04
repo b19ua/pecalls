@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/AppLogo";
-import logoFull from "@/assets/logo.png";
+import logoPE from "@/assets/logo.png";
+import starnetAsset from "@/assets/starnet-logo.png.asset.json";
 import { toast } from "sonner";
 import { Loader2, Lock } from "lucide-react";
 import { verifyAdminLogin } from "@/lib/admin-auth.functions";
@@ -13,12 +15,46 @@ import { supabase } from "@/integrations/supabase/client";
 
 export const ADMIN_SESSION_KEY = "pe_admin_session";
 
+const searchSchema = z.object({
+  c: z.enum(["pe", "sn"]).optional(),
+});
+
 export const Route = createFileRoute("/login")({
+  validateSearch: (s) => searchSchema.parse(s),
   component: LoginPage,
 });
 
+type ClientId = "pe" | "sn";
+
+const CLIENTS: Record<ClientId, {
+  name: string;
+  logo: string;
+  logoClass: string;
+  tagline: string;
+  description: string;
+}> = {
+  pe: {
+    name: "Premier Energy",
+    logo: logoPE,
+    logoClass: "w-2/3",
+    tagline: "Next-generation AI calling",
+    description:
+      "Automated voice assistant platform powered by Gemini Live and Twilio. Inbound, outbound, RAG knowledge, human handoff — all in one place.",
+  },
+  sn: {
+    name: "StarNet",
+    logo: starnetAsset.url,
+    logoClass: "w-1/2",
+    tagline: "AI voice support for every subscriber",
+    description:
+      "StarNet's AI calling workspace on Lunara. Handle inbound support, run outbound campaigns and connect agents to your internal systems.",
+  },
+};
+
 function LoginPage() {
   const navigate = useNavigate();
+  const { c } = Route.useSearch();
+  const client = CLIENTS[(c ?? "pe") as ClientId];
   const login = useServerFn(verifyAdminLogin);
   const [username, setUsername] = useState("Admin");
   const [password, setPassword] = useState("");
@@ -46,42 +82,48 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
-      <div className="hidden lg:flex flex-col p-10 bg-gradient-hero text-sidebar-foreground relative overflow-hidden">
+      <div className="hidden lg:flex flex-col p-10 bg-sidebar text-sidebar-foreground relative overflow-hidden">
         <div
-          className="absolute inset-0 opacity-20"
+          className="absolute inset-0 opacity-40"
           style={{
             backgroundImage:
-              "radial-gradient(circle at 20% 30%, oklch(0.7 0.18 152) 0%, transparent 50%), radial-gradient(circle at 80% 70%, oklch(0.6 0.15 180) 0%, transparent 50%)",
+              "radial-gradient(circle at 20% 30%, oklch(0.75 0.2 152) 0%, transparent 50%), radial-gradient(circle at 80% 70%, oklch(0.65 0.18 220) 0%, transparent 55%)",
           }}
         />
+        <div className="absolute inset-0 bg-gradient-to-br from-black/40 via-transparent to-black/60 pointer-events-none" />
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center">
-          <img
-            src={logoFull}
-            alt="Premier Energy AI Calls"
-            className="w-2/3 h-auto object-contain drop-shadow-lg"
-          />
+          <div className="bg-white/95 rounded-2xl p-8 shadow-2xl w-2/3 flex items-center justify-center">
+            <img
+              src={client.logo}
+              alt={client.name}
+              className={`${client.logoClass} h-auto object-contain`}
+            />
+          </div>
           <div className="max-w-md mx-auto text-center mt-8">
-            <h2 className="font-display text-4xl font-bold leading-tight">
-              Next-generation AI calling
+            <h2 className="font-display text-4xl font-bold leading-tight text-white drop-shadow">
+              {client.tagline}
             </h2>
-            <p className="mt-4 text-sidebar-foreground/70 text-[15px] leading-relaxed">
-              Automated voice assistant platform powered by Gemini Live and Twilio.
-              Inbound, outbound, RAG knowledge, human handoff — all in one place.
+            <p className="mt-4 text-white/90 text-[15px] leading-relaxed">
+              {client.description}
             </p>
           </div>
         </div>
-        <div className="relative z-10 text-xs text-sidebar-foreground/50 mt-8 text-center">
-          © {new Date().getFullYear()} Premier Energy. All rights reserved.
+        <div className="relative z-10 text-xs text-white/70 mt-8 text-center">
+          © {new Date().getFullYear()} {client.name}. All rights reserved.
         </div>
       </div>
 
       <div className="flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-md">
-          <div className="lg:hidden mb-8">
-            <AppLogo size="md" />
+          <div className="lg:hidden mb-8 flex items-center justify-center">
+            {c === "sn" ? (
+              <img src={starnetAsset.url} alt="StarNet" className="h-12 w-auto" />
+            ) : (
+              <AppLogo size="md" />
+            )}
           </div>
           <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-3 py-1 text-xs font-semibold">
-            <Lock className="h-3.5 w-3.5" /> Admin panel
+            <Lock className="h-3.5 w-3.5" /> {client.name} workspace
           </div>
           <h1 className="font-display text-3xl font-bold tracking-tight mt-3">
             Sign in to the platform

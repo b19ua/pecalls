@@ -256,3 +256,24 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
     </div>
   );
 }
+
+function PartnerCard({ name, slug, to }: { name: string; slug: string; to: string }) {
+  return (
+    <Card className="bg-gradient-card shadow-soft border-border/60">
+      <CardContent className="p-5">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-primary/15 flex items-center justify-center">
+            <Building2 className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <div className="font-semibold">{name}</div>
+            <div className="text-xs text-muted-foreground">{slug}</div>
+          </div>
+        </div>
+        <Button asChild variant="outline" size="sm" className="mt-4 w-full">
+          <Link to={to}>Open login <ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}

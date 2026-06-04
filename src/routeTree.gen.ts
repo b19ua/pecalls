@@ -9,6 +9,8 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SnRouteImport } from './routes/sn'
+import { Route as PmRouteImport } from './routes/pm'
 import { Route as PeRouteImport } from './routes/pe'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
@@ -30,6 +32,16 @@ import { Route as ApiPublicTwilioVoiceRouteImport } from './routes/api/public/tw
 import { Route as ApiPublicTwilioStatusRouteImport } from './routes/api/public/twilio/status'
 import { Route as ApiPublicTwilioRecordingRouteImport } from './routes/api/public/twilio/recording'
 
+const SnRoute = SnRouteImport.update({
+  id: '/sn',
+  path: '/sn',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PmRoute = PmRouteImport.update({
+  id: '/pm',
+  path: '/pm',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PeRoute = PeRouteImport.update({
   id: '/pe',
   path: '/pe',
@@ -138,6 +150,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/pe': typeof PeRoute
+  '/pm': typeof PmRoute
+  '/sn': typeof SnRoute
   '/agents': typeof AuthenticatedAgentsRouteWithChildren
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/calls': typeof AuthenticatedCallsRouteWithChildren
@@ -159,6 +173,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/pe': typeof PeRoute
+  '/pm': typeof PmRoute
+  '/sn': typeof SnRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/calls': typeof AuthenticatedCallsRouteWithChildren
   '/campaigns': typeof AuthenticatedCampaignsRoute
@@ -181,6 +197,8 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/pe': typeof PeRoute
+  '/pm': typeof PmRoute
+  '/sn': typeof SnRoute
   '/_authenticated/agents': typeof AuthenticatedAgentsRouteWithChildren
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/calls': typeof AuthenticatedCallsRouteWithChildren
@@ -204,6 +222,8 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/pe'
+    | '/pm'
+    | '/sn'
     | '/agents'
     | '/analytics'
     | '/calls'
@@ -225,6 +245,8 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/pe'
+    | '/pm'
+    | '/sn'
     | '/analytics'
     | '/calls'
     | '/campaigns'
@@ -246,6 +268,8 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/login'
     | '/pe'
+    | '/pm'
+    | '/sn'
     | '/_authenticated/agents'
     | '/_authenticated/analytics'
     | '/_authenticated/calls'
@@ -269,6 +293,8 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
   PeRoute: typeof PeRoute
+  PmRoute: typeof PmRoute
+  SnRoute: typeof SnRoute
   ApiPublicTwilioRecordingRoute: typeof ApiPublicTwilioRecordingRoute
   ApiPublicTwilioStatusRoute: typeof ApiPublicTwilioStatusRoute
   ApiPublicTwilioVoiceRoute: typeof ApiPublicTwilioVoiceRoute
@@ -276,6 +302,20 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sn': {
+      id: '/sn'
+      path: '/sn'
+      fullPath: '/sn'
+      preLoaderRoute: typeof SnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pm': {
+      id: '/pm'
+      path: '/pm'
+      fullPath: '/pm'
+      preLoaderRoute: typeof PmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/pe': {
       id: '/pe'
       path: '/pe'
@@ -478,6 +518,8 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
   PeRoute: PeRoute,
+  PmRoute: PmRoute,
+  SnRoute: SnRoute,
   ApiPublicTwilioRecordingRoute: ApiPublicTwilioRecordingRoute,
   ApiPublicTwilioStatusRoute: ApiPublicTwilioStatusRoute,
   ApiPublicTwilioVoiceRoute: ApiPublicTwilioVoiceRoute,

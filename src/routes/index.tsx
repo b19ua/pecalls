@@ -257,7 +257,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   );
 }
 
-function PartnerCard({ name, slug, to }: { name: string; slug: string; to: string }) {
+function PartnerCard({ name, slug, to }: { name: string; slug: string; to: "/pm" | "/sn" }) {
   return (
     <Card className="bg-gradient-card shadow-soft border-border/60">
       <CardContent className="p-5">

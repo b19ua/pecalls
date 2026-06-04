@@ -45,7 +45,7 @@ function LandingPage() {
             <a href="#clients" className="hover:text-foreground transition-colors">Clients</a>
           </nav>
           <Button asChild size="sm" variant="outline">
-            <Link to="/pe">Client login</Link>
+            <a href="#clients">Client login</a>
           </Button>
         </div>
       </header>
@@ -73,16 +73,16 @@ function LandingPage() {
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg" className="bg-gradient-primary shadow-elegant">
-              <Link to="/pe">
-                Premier Energy login <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
+              <a href="#features">
+                See what it does <ArrowRight className="ml-2 h-4 w-4" />
+              </a>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <a href="#features">See what it does</a>
+              <a href="#how">How it works</a>
             </Button>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            Each client has a dedicated login URL. All workspaces run on the same Lunara platform.
+            Each client has a dedicated login URL — see <a href="#clients" className="underline">Our partners</a> below.
           </p>
         </div>
       </section>
@@ -175,30 +175,16 @@ function LandingPage() {
       <section id="clients" className="border-t border-border/60 py-16 sm:py-24">
         <div className="max-w-6xl mx-auto px-5 sm:px-8">
           <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight">
-            One platform, dedicated entrance for every client
+            Our partners
           </h2>
           <p className="mt-3 text-muted-foreground max-w-2xl">
-            Each client gets their own branded login URL on <code className="px-1 py-0.5 rounded bg-muted text-foreground">lunara.now</code>.
+            Each partner gets their own branded login URL on <code className="px-1 py-0.5 rounded bg-muted text-foreground">lunara.now</code>.
             All entrances lead into the same shared Lunara workspace.
           </p>
 
           <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Card className="bg-gradient-card shadow-soft border-border/60">
-              <CardContent className="p-5">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-primary/15 flex items-center justify-center">
-                    <Building2 className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <div className="font-semibold">Premier Energy</div>
-                    <div className="text-xs text-muted-foreground">lunara.now/pe</div>
-                  </div>
-                </div>
-                <Button asChild variant="outline" size="sm" className="mt-4 w-full">
-                  <Link to="/pe">Open login <ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
-                </Button>
-              </CardContent>
-            </Card>
+            <PartnerCard name="Premier Energy" slug="lunara.now/pm" to="/pm" />
+            <PartnerCard name="StarNet" slug="lunara.now/sn" to="/sn" />
 
             <Card className="bg-gradient-card shadow-soft border-dashed border-border/60">
               <CardContent className="p-5 opacity-70">
@@ -212,7 +198,7 @@ function LandingPage() {
                   </div>
                 </div>
                 <div className="mt-4 text-xs text-muted-foreground">
-                  New client URLs are added on request.
+                  New partner URLs are added on request.
                 </div>
               </CardContent>
             </Card>
@@ -228,13 +214,8 @@ function LandingPage() {
             Ready to put AI on your phone lines?
           </h2>
           <p className="mt-3 text-muted-foreground">
-            If you already have a client account, sign in to your dedicated workspace.
+            If you already have a partner account, head to <a href="#clients" className="underline">Our partners</a> to sign in.
           </p>
-          <div className="mt-6 flex justify-center">
-            <Button asChild size="lg" className="bg-gradient-primary shadow-elegant">
-              <Link to="/pe">Sign in to Premier Energy</Link>
-            </Button>
-          </div>
         </div>
       </section>
 

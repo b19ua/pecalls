@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { useServerFn } from "@tanstack/react-start";
+import { getRecordingSignedUrl } from "@/lib/calls.functions";
 
 export const Route = createFileRoute("/_authenticated/calls/$callId")({ component: CallDetail });
 

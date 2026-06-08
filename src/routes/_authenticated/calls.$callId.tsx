@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { useServerFn } from "@tanstack/react-start";
+import { getRecordingSignedUrl } from "@/lib/calls.functions";
 
 export const Route = createFileRoute("/_authenticated/calls/$callId")({ component: CallDetail });
 
@@ -16,12 +18,17 @@ function CallDetail() {
   const { callId } = useParams({ from: "/_authenticated/calls/$callId" });
   const [call, setCall] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const getUrl = useServerFn(getRecordingSignedUrl);
 
   useEffect(() => {
     supabase.from("calls").select("*").eq("id", callId).single().then(({ data }) => {
       setCall(data); setLoading(false);
+      if (data?.recording_path || data?.recording_url) {
+        getUrl({ data: { callId } }).then((r) => setAudioUrl(r.url)).catch(() => {});
+      }
     });
-  }, [callId]);
+  }, [callId, getUrl]);
 
   if (loading) return <div className="p-8 flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}</div>;
   if (!call) return <div className="p-8">{t("calls.empty.title")}</div>;
@@ -44,11 +51,11 @@ function CallDetail() {
         <Stat label={t("call.cost")} value={`$${Number(call.cost_usd ?? 0).toFixed(4)}`} />
       </div>
 
-      {call.recording_url && (
+      {(call.recording_path || call.recording_url) && (
         <Card className="bg-gradient-card shadow-soft mb-5">
           <CardContent className="p-5">
             <h3 className="font-display text-lg font-semibold mb-3">{t("call.recording")}</h3>
-            <audio controls src={call.recording_url} className="w-full" />
+            {audioUrl ? <audio controls src={audioUrl} className="w-full" /> : <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}</div>}
           </CardContent>
         </Card>
       )}

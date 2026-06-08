@@ -144,6 +144,8 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
             .update({
               recording_path: storagePath,
               recording_url: `${recordingUrl}.mp3`,
+              recording_status: "ready",
+              recording_error: null,
               ...(duration ? { duration_seconds: duration } : {}),
               ...(transcript
                 ? { transcript: [{ source: "gemini", text: transcript, at: new Date().toISOString() }] }
@@ -154,7 +156,11 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
           console.error("[recording] processing failed", e);
           await supabaseAdmin
             .from("calls")
-            .update({ recording_url: `${recordingUrl}.mp3` })
+            .update({
+              recording_url: `${recordingUrl}.mp3`,
+              recording_status: "failed",
+              recording_error: String(e).slice(0, 500),
+            })
             .eq("id", call.id);
         }
 

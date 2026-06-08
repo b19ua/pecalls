@@ -1,34 +1,60 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, AlertCircle, CheckCircle2, Mic } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useServerFn } from "@tanstack/react-start";
 import { getRecordingSignedUrl } from "@/lib/calls.functions";
+import { retryRecordingFn } from "@/lib/twilio-recording.functions";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/calls/$callId")({ component: CallDetail });
 
 type TranscriptItem = { role: "agent" | "user" | "system"; text: string; ts?: string };
 
 function CallDetail() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { callId } = useParams({ from: "/_authenticated/calls/$callId" });
   const [call, setCall] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const getUrl = useServerFn(getRecordingSignedUrl);
+  const retry = useServerFn(retryRecordingFn);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
     supabase.from("calls").select("*").eq("id", callId).single().then(({ data }) => {
       setCall(data); setLoading(false);
       if (data?.recording_path || data?.recording_url) {
         getUrl({ data: { callId } }).then((r) => setAudioUrl(r.url)).catch(() => {});
+      } else {
+        setAudioUrl(null);
       }
     });
-  }, [callId, getUrl]);
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [callId]);
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    try {
+      const r = await retry({ data: { callId } });
+      if (r.ok) {
+        toast.success(lang === "ru" ? "Запись запрошена у Twilio" : lang === "ro" ? "Înregistrare cerută" : "Recording requested");
+        setTimeout(load, 1500);
+      } else {
+        toast.error(r.error ?? "Failed");
+      }
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   if (loading) return <div className="p-8 flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}</div>;
   if (!call) return <div className="p-8">{t("calls.empty.title")}</div>;
@@ -51,14 +77,17 @@ function CallDetail() {
         <Stat label={t("call.cost")} value={`$${Number(call.cost_usd ?? 0).toFixed(4)}`} />
       </div>
 
-      {(call.recording_path || call.recording_url) && (
-        <Card className="bg-gradient-card shadow-soft mb-5">
-          <CardContent className="p-5">
-            <h3 className="font-display text-lg font-semibold mb-3">{t("call.recording")}</h3>
-            {audioUrl ? <audio controls src={audioUrl} className="w-full" /> : <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}</div>}
-          </CardContent>
-        </Card>
-      )}
+      <RecordingStatusCard
+        call={call}
+        audioUrl={audioUrl}
+        onRetry={handleRetry}
+        retrying={retrying}
+        lang={lang}
+        t={t}
+      />
+
+
+
 
       <Card className="bg-gradient-card shadow-soft">
         <CardContent className="p-5">
@@ -100,6 +129,101 @@ function Stat({ label, value }: { label: string; value: string | number }) {
       <CardContent className="p-3 sm:p-4">
         <div className="text-[11px] sm:text-xs text-muted-foreground">{label}</div>
         <div className="font-display text-lg sm:text-2xl font-bold">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecordingStatusCard({
+  call, audioUrl, onRetry, retrying, lang, t,
+}: {
+  call: any; audioUrl: string | null; onRetry: () => void; retrying: boolean;
+  lang: "ru" | "ro" | "en"; t: (k: string) => string;
+}) {
+  const status: string = call.recording_status ?? (call.recording_path || call.recording_url ? "ready" : "pending");
+  const has = !!(call.recording_path || call.recording_url) && !!audioUrl;
+
+  const tr = (ru: string, ro: string, en: string) =>
+    lang === "ru" ? ru : lang === "ro" ? ro : en;
+
+  const labelByStatus: Record<string, { label: string; icon: React.ReactNode; tone: string }> = {
+    pending: {
+      label: tr("Запись не запрошена", "Înregistrare necerută", "Recording not requested"),
+      icon: <Mic className="h-4 w-4" />, tone: "text-muted-foreground",
+    },
+    requested: {
+      label: tr("Запрос отправлен в Twilio…", "Cerere trimisă către Twilio…", "Requesting from Twilio…"),
+      icon: <Loader2 className="h-4 w-4 animate-spin" />, tone: "text-muted-foreground",
+    },
+    recording: {
+      label: tr("Идёт запись звонка", "Înregistrare în curs", "Recording in progress"),
+      icon: <Mic className="h-4 w-4" />, tone: "text-primary",
+    },
+    ready: {
+      label: tr("Запись готова", "Înregistrare gata", "Recording ready"),
+      icon: <CheckCircle2 className="h-4 w-4" />, tone: "text-success",
+    },
+    failed: {
+      label: tr("Ошибка записи", "Eroare la înregistrare", "Recording failed"),
+      icon: <AlertCircle className="h-4 w-4" />, tone: "text-destructive",
+    },
+  };
+  const meta = labelByStatus[status] ?? labelByStatus.pending;
+  const isLive = call.status === "in_progress";
+  const canRetry = status === "failed" || status === "pending" || (status === "requested" && !isLive);
+
+  return (
+    <Card className="bg-gradient-card shadow-soft mb-5">
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <h3 className="font-display text-lg font-semibold">{t("call.recording")}</h3>
+          <div className={`flex items-center gap-2 text-sm ${meta.tone}`}>
+            {meta.icon}<span>{meta.label}</span>
+          </div>
+        </div>
+
+        {has ? (
+          <audio controls src={audioUrl!} className="w-full" />
+        ) : status === "ready" ? (
+          <div className="text-sm text-muted-foreground flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">
+            {status === "failed"
+              ? tr(
+                  "Twilio не подтвердил старт записи. Можно попробовать ещё раз.",
+                  "Twilio nu a confirmat înregistrarea. Încearcă din nou.",
+                  "Twilio did not confirm the recording start. You can retry.",
+                )
+              : status === "requested" || status === "recording"
+              ? tr(
+                  "Файл появится сразу после завершения звонка.",
+                  "Fișierul va apărea după încheierea apelului.",
+                  "The file will appear right after the call ends.",
+                )
+              : tr(
+                  "Для этого звонка запись не запрашивалась.",
+                  "Pentru acest apel nu s-a cerut înregistrare.",
+                  "No recording was requested for this call.",
+                )}
+          </div>
+        )}
+
+        {call.recording_error && (
+          <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive break-words">
+            {call.recording_error}
+          </div>
+        )}
+
+        {canRetry && (
+          <div className="mt-3">
+            <Button size="sm" variant="outline" onClick={onRetry} disabled={retrying}>
+              {retrying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              {tr("Запросить запись повторно", "Re-cere înregistrarea", "Retry recording")}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

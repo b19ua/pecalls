@@ -39,10 +39,17 @@ Reject requests with clock skew > 5 minutes.
 | Method | Path                       | Purpose                                                                  |
 | ------ | -------------------------- | ------------------------------------------------------------------------ |
 | GET    | `/health`                  | Liveness — returns `{ ok: true }`.                                       |
-| POST   | `/calls/ingest`            | Lunara hands off a finished call. Body: `{ call_id, twilio_call_sid, recording_sid, recording_url, duration_seconds, language }`. Gateway downloads MP3, transcribes, stores. |
-| GET    | `/calls/:id`               | Returns `{ audio_url, transcript[], summary }`. Used by Lunara UI.       |
-| GET    | `/calls/:id/audio-url`     | Returns `{ audio_url }` — short-lived signed link to MP3.                |
+| POST   | `/calls/ingest`            | Lunara hands off a finished call. Body: `{ call_id, twilio_call_sid, recording_sid, recording_url, duration_seconds, language }`. Gateway downloads MP3 **with Twilio credentials** (see `TWILIO_*` in `.env`), transcribes, stores. |
+| GET    | `/calls/:id`               | Returns `{ audio_url, transcript[], summary }`. Used by Lunara UI when the gateway is reachable from end-user browsers. |
+| GET    | `/calls/:id/audio-url`     | Returns `{ audio_url }` — short-lived signed link to MP3 (browser-direct path). |
+| GET    | `/calls/:id/audio`         | Streams the raw MP3 bytes. Used by Lunara as a proxy when the gateway is **not** reachable from browsers (VPN-only). Enable **Proxy audio** in the Data residency tab. |
 | DELETE | `/calls/:id`               | Hard-delete (optional retention job).                                    |
+
+## Recording security & retention
+
+- **Twilio download auth** — `TWILIO_ACCOUNT_SID` + `TWILIO_API_KEY_SID/SECRET` (or auth token) are required so the gateway downloads recordings with HTTP Basic Auth. Do **not** mark Twilio recordings public — they would be readable by anyone who guesses the URL.
+- **Zero-retention on Twilio** — when **Purge recordings from Twilio after ingest** is on (default), Lunara cloud sends `DELETE /Recordings/<sid>.json` to Twilio after the gateway ACKs `POST /calls/ingest`. The file then lives only on your infrastructure.
+- **VPN deployments** — if the gateway has no public hostname, enable **Proxy audio through Lunara** in the Data residency tab. The browser will fetch audio from Lunara, which streams bytes from `/calls/:id/audio` over the HMAC-signed channel.
 
 ## Deploy
 

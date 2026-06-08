@@ -92,7 +92,7 @@ export const getCallContentFn = createServerFn({ method: "POST" })
     if (!call || call.owner_id !== userId) throw new Error("Not found");
 
     if (call.data_residency === "self_hosted") {
-      const { getResidencyConfig, callGateway, isSelfHosted } = await import("@/lib/data-residency.server");
+      const { getResidencyConfig, callGateway, isSelfHosted, signAudioToken } = await import("@/lib/data-residency.server");
       const cfg = await getResidencyConfig(userId);
       if (!isSelfHosted(cfg)) {
         return { audioUrl: null, transcript: [], summary: null, source: "self_hosted_offline" as const };
@@ -106,8 +106,13 @@ export const getCallContentFn = createServerFn({ method: "POST" })
       if (!res.ok) {
         return { audioUrl: null, transcript: [], summary: null, source: "self_hosted_error" as const, error: res.error };
       }
+      // If proxy mode is enabled (gateway not reachable from the user's browser, e.g. VPN-only),
+      // hand the browser our own proxy URL — the server streams bytes from the gateway.
+      const audioUrl = cfg.proxy_audio
+        ? `/api/audio/${call.id}?o=${userId}&t=${signAudioToken(call.id, userId, 3600)}`
+        : res.data.audio_url;
       return {
-        audioUrl: res.data.audio_url,
+        audioUrl,
         transcript: (Array.isArray(res.data.transcript) ? res.data.transcript : []) as TranscriptItem[],
         summary: res.data.summary ?? null,
         source: "self_hosted" as const,

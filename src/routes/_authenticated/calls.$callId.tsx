@@ -11,6 +11,8 @@ import { getRecordingSignedUrl } from "@/lib/calls.functions";
 import { retryRecordingFn } from "@/lib/twilio-recording.functions";
 import { toast } from "sonner";
 import { getCallContentFn } from "@/lib/data-residency.functions";
+import { formatCallTranscript, downloadTextFile } from "@/lib/transcript-export";
+import { Download } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/calls/$callId")({ component: CallDetail });
 
@@ -110,7 +112,24 @@ function CallDetail() {
 
       <Card className="bg-gradient-card shadow-soft">
         <CardContent className="p-5">
-          <h3 className="font-display text-lg font-semibold mb-3">{t("call.transcript")}</h3>
+          <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+            <h3 className="font-display text-lg font-semibold">{t("call.transcript")}</h3>
+            {transcript.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const locale = lang === "ru" ? "ru-RU" : lang === "ro" ? "ro-RO" : "en-US";
+                  const text = formatCallTranscript(call, locale);
+                  const date = new Date(call.created_at).toISOString().slice(0, 10);
+                  downloadTextFile(`transcript-${date}-${call.id.slice(0, 8)}.txt`, text);
+                }}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {lang === "ru" ? "Скачать транскрипцию" : lang === "ro" ? "Descarcă transcrierea" : "Download transcript"}
+              </Button>
+            )}
+          </div>
           {transcript.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("call.transcript.empty")}</p>
           ) : (

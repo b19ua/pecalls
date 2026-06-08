@@ -7,10 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PhoneCall, PhoneIncoming, PhoneOutgoing, Download, Search, Play, Pause, X } from "lucide-react";
+import { PhoneCall, PhoneIncoming, PhoneOutgoing, Download, Search, Play, Pause, X, FileText } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/lib/i18n";
 import { useServerFn } from "@tanstack/react-start";
 import { getRecordingSignedUrl } from "@/lib/calls.functions";
+import { formatManyTranscripts, downloadTextFile } from "@/lib/transcript-export";
 
 export const Route = createFileRoute("/_authenticated/calls")({ component: CallsPage });
 
@@ -115,6 +117,25 @@ function CallsPage() {
     a.click();
     URL.revokeObjectURL(a.href);
   };
+  const exportTranscripts = (period: "day" | "week" | "month" | "all") => {
+    const now = Date.now();
+    const cutoff = period === "day" ? now - 86400000
+      : period === "week" ? now - 7 * 86400000
+      : period === "month" ? now - 30 * 86400000
+      : 0;
+    const subset = calls.filter((c) => +new Date(c.created_at) >= cutoff);
+    if (!subset.length) return;
+    const titleMap = {
+      day: lang === "ru" ? "Транскрипции за день" : lang === "ro" ? "Transcrieri pe zi" : "Transcripts — last 24h",
+      week: lang === "ru" ? "Транскрипции за неделю" : lang === "ro" ? "Transcrieri pe săptămână" : "Transcripts — last 7 days",
+      month: lang === "ru" ? "Транскрипции за месяц" : lang === "ro" ? "Transcrieri pe lună" : "Transcripts — last 30 days",
+      all: lang === "ru" ? "Все транскрипции" : lang === "ro" ? "Toate transcrierile" : "All transcripts",
+    };
+    const text = formatManyTranscripts(subset, titleMap[period], locale);
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTextFile(`transcripts-${period}-${date}.txt`, text);
+  };
+
 
   const togglePlay = async (c: Call) => {
     if (playingId === c.id) {
@@ -155,9 +176,38 @@ function CallsPage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
         <PageHeader title={t("calls.title")} description={t("calls.subtitle")} />
-        <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length}>
-          <Download className="h-4 w-4 mr-1.5" /> CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={!calls.length}>
+                <FileText className="h-4 w-4 mr-1.5" />
+                {lang === "ru" ? "Транскрипции" : lang === "ro" ? "Transcrieri" : "Transcripts"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>
+                {lang === "ru" ? "Скачать за период" : lang === "ro" ? "Descarcă pe perioadă" : "Download by period"}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => exportTranscripts("day")}>
+                {lang === "ru" ? "За день" : lang === "ro" ? "Pe zi" : "Last 24 hours"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportTranscripts("week")}>
+                {lang === "ru" ? "За неделю" : lang === "ro" ? "Pe săptămână" : "Last 7 days"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportTranscripts("month")}>
+                {lang === "ru" ? "За месяц" : lang === "ro" ? "Pe lună" : "Last 30 days"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => exportTranscripts("all")}>
+                {lang === "ru" ? "Все звонки" : lang === "ro" ? "Toate apelurile" : "All calls"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length}>
+            <Download className="h-4 w-4 mr-1.5" /> CSV
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-2 mb-4">

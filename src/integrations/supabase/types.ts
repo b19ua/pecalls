@@ -253,7 +253,9 @@ export type Database = {
           metadata: Json
           output_tokens: number
           owner_id: string
+          recording_error: string | null
           recording_path: string | null
+          recording_status: string | null
           recording_url: string | null
           started_at: string | null
           status: Database["public"]["Enums"]["call_status"]
@@ -280,7 +282,9 @@ export type Database = {
           metadata?: Json
           output_tokens?: number
           owner_id: string
+          recording_error?: string | null
           recording_path?: string | null
+          recording_status?: string | null
           recording_url?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["call_status"]
@@ -307,7 +311,9 @@ export type Database = {
           metadata?: Json
           output_tokens?: number
           owner_id?: string
+          recording_error?: string | null
           recording_path?: string | null
+          recording_status?: string | null
           recording_url?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["call_status"]

@@ -35,6 +35,8 @@ function DataResidencyPage() {
   const [enabled, setEnabled] = useState(false);
   const [gatewayUrl, setGatewayUrl] = useState("");
   const [secret, setSecret] = useState("");
+  const [purgeTwilio, setPurgeTwilio] = useState(true);
+  const [proxyAudio, setProxyAudio] = useState(false);
   const [lastPing, setLastPing] = useState<{ at: string | null; ok: boolean | null; error: string | null }>({ at: null, ok: null, error: null });
 
   useEffect(() => {
@@ -43,6 +45,8 @@ function DataResidencyPage() {
       setEnabled(!!cfg.enabled);
       setGatewayUrl(cfg.gateway_url ?? "");
       setSecret(cfg.hmac_secret ?? "");
+      setPurgeTwilio(cfg.purge_twilio_after_ingest ?? true);
+      setProxyAudio(cfg.proxy_audio ?? false);
       setLastPing({ at: cfg.last_ping_at ?? null, ok: cfg.last_ping_ok ?? null, error: cfg.last_ping_error ?? null });
       setLoading(false);
     });
@@ -55,7 +59,13 @@ function DataResidencyPage() {
     }
     setSaving(true);
     try {
-      await save({ data: { mode, enabled, gateway_url: gatewayUrl || null, hmac_secret: secret || null } });
+      await save({ data: {
+        mode, enabled,
+        gateway_url: gatewayUrl || null,
+        hmac_secret: secret || null,
+        purge_twilio_after_ingest: purgeTwilio,
+        proxy_audio: proxyAudio,
+      } });
       toast.success("Saved");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");

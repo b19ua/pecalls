@@ -74,17 +74,17 @@ export async function startTwilioRecording(callSid: string): Promise<StartRecord
       .eq("twilio_call_sid", callSid);
 
     // Best-effort: also surface in the global error_logs feed.
-    await supabaseAdmin
-      .from("error_logs")
-      .insert({
+    try {
+      await supabaseAdmin.from("error_logs").insert({
         source: "twilio.recording.start",
         severity: "error",
         message: error,
         call_sid: callSid,
         context: { status: res.status },
-      })
-      .then(() => {})
-      .catch(() => {});
+      });
+    } catch {
+      /* best-effort logging */
+    }
 
     return { ok: false, status: res.status, error };
   }

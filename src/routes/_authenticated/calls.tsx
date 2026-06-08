@@ -176,9 +176,38 @@ function CallsPage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
         <PageHeader title={t("calls.title")} description={t("calls.subtitle")} />
-        <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length}>
-          <Download className="h-4 w-4 mr-1.5" /> CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={!calls.length}>
+                <FileText className="h-4 w-4 mr-1.5" />
+                {lang === "ru" ? "Транскрипции" : lang === "ro" ? "Transcrieri" : "Transcripts"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>
+                {lang === "ru" ? "Скачать за период" : lang === "ro" ? "Descarcă pe perioadă" : "Download by period"}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => exportTranscripts("day")}>
+                {lang === "ru" ? "За день" : lang === "ro" ? "Pe zi" : "Last 24 hours"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportTranscripts("week")}>
+                {lang === "ru" ? "За неделю" : lang === "ro" ? "Pe săptămână" : "Last 7 days"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportTranscripts("month")}>
+                {lang === "ru" ? "За месяц" : lang === "ro" ? "Pe lună" : "Last 30 days"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => exportTranscripts("all")}>
+                {lang === "ru" ? "Все звонки" : lang === "ro" ? "Toate apelurile" : "All calls"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length}>
+            <Download className="h-4 w-4 mr-1.5" /> CSV
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-2 mb-4">

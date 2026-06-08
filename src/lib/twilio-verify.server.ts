@@ -1,5 +1,19 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
+function hostVariants(request: Request) {
+  const u = new URL(request.url);
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || u.host;
+  const proto = request.headers.get("x-forwarded-proto") || u.protocol.replace(":", "");
+  const publicBase = process.env.PUBLIC_APP_URL?.replace(/\/$/, "");
+  const variants = new Set<string>();
+
+  variants.add(`${proto}://${host}${u.pathname}${u.search}`);
+  variants.add(`${u.protocol.replace(":", "")}://${u.host}${u.pathname}${u.search}`);
+  if (publicBase) variants.add(`${publicBase}${u.pathname}${u.search}`);
+
+  return Array.from(variants);
+}
+
 /**
  * Validates an incoming Twilio webhook request signature.
  * Twilio computes: HMAC-SHA1(authToken, fullUrl + sortedFormParams).
@@ -15,24 +29,19 @@ export async function verifyTwilioRequest(request: Request, form: FormData): Pro
   const sig = request.headers.get("x-twilio-signature");
   if (!sig) return false;
 
-  // Reconstruct the full URL Twilio used to sign. Honour x-forwarded-* if present.
-  const proto = request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.replace(":", "");
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || new URL(request.url).host;
-  const u = new URL(request.url);
-  const fullUrl = `${proto}://${host}${u.pathname}${u.search}`;
-
   const params: Record<string, string> = {};
   for (const [k, v] of form.entries()) params[k] = String(v);
   const sortedKeys = Object.keys(params).sort();
-  let data = fullUrl;
-  for (const k of sortedKeys) data += k + params[k];
-
-  const expected = createHmac("sha1", token).update(data).digest("base64");
   try {
     const a = Buffer.from(sig);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length) return false;
-    return timingSafeEqual(a, b);
+    for (const fullUrl of hostVariants(request)) {
+      let data = fullUrl;
+      for (const k of sortedKeys) data += k + params[k];
+      const expected = createHmac("sha1", token).update(data).digest("base64");
+      const b = Buffer.from(expected);
+      if (a.length === b.length && timingSafeEqual(a, b)) return true;
+    }
+    return false;
   } catch {
     return false;
   }

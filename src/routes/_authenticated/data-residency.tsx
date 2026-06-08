@@ -35,6 +35,8 @@ function DataResidencyPage() {
   const [enabled, setEnabled] = useState(false);
   const [gatewayUrl, setGatewayUrl] = useState("");
   const [secret, setSecret] = useState("");
+  const [purgeTwilio, setPurgeTwilio] = useState(true);
+  const [proxyAudio, setProxyAudio] = useState(false);
   const [lastPing, setLastPing] = useState<{ at: string | null; ok: boolean | null; error: string | null }>({ at: null, ok: null, error: null });
 
   useEffect(() => {
@@ -43,6 +45,8 @@ function DataResidencyPage() {
       setEnabled(!!cfg.enabled);
       setGatewayUrl(cfg.gateway_url ?? "");
       setSecret(cfg.hmac_secret ?? "");
+      setPurgeTwilio(cfg.purge_twilio_after_ingest ?? true);
+      setProxyAudio(cfg.proxy_audio ?? false);
       setLastPing({ at: cfg.last_ping_at ?? null, ok: cfg.last_ping_ok ?? null, error: cfg.last_ping_error ?? null });
       setLoading(false);
     });
@@ -55,7 +59,13 @@ function DataResidencyPage() {
     }
     setSaving(true);
     try {
-      await save({ data: { mode, enabled, gateway_url: gatewayUrl || null, hmac_secret: secret || null } });
+      await save({ data: {
+        mode, enabled,
+        gateway_url: gatewayUrl || null,
+        hmac_secret: secret || null,
+        purge_twilio_after_ingest: purgeTwilio,
+        proxy_audio: proxyAudio,
+      } });
       toast.success("Saved");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
@@ -122,6 +132,22 @@ function DataResidencyPage() {
                 <Label htmlFor="sec">HMAC shared secret</Label>
                 <Input id="sec" type="password" placeholder="≥ 16 chars" value={secret} onChange={(e) => setSecret(e.target.value)} />
                 <p className="text-xs text-muted-foreground mt-1">Used to sign every request with SHA-256 HMAC. Store the same value on the gateway side as <code>LUNARA_HMAC_SECRET</code>.</p>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="pr-4">
+                  <Label>Purge recordings from Twilio after ingest</Label>
+                  <p className="text-xs text-muted-foreground mt-1">Once your gateway confirms it has the file, Lunara sends Twilio a DELETE so no audio remains on the carrier side (zero-retention).</p>
+                </div>
+                <Switch checked={purgeTwilio} onCheckedChange={setPurgeTwilio} />
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="pr-4">
+                  <Label>Proxy audio through Lunara (VPN-friendly)</Label>
+                  <p className="text-xs text-muted-foreground mt-1">Enable if your gateway is only reachable from our servers (e.g. behind VPN). The browser will pull audio from Lunara, which streams bytes from your gateway over the trusted channel. Off = browser hits the gateway directly (faster, but requires a public hostname).</p>
+                </div>
+                <Switch checked={proxyAudio} onCheckedChange={setProxyAudio} />
               </div>
 
               <div className="rounded-lg border p-3 text-xs flex items-start gap-2">

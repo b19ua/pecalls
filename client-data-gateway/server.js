@@ -147,6 +147,22 @@ app.get("/calls/:id/audio-url", verify, async (req, res) => {
   res.json({ audio_url });
 });
 
+// Binary audio stream — used by Lunara cloud as a proxy when this gateway is
+// not reachable from end-user browsers (VPN-only deployments).
+app.get("/calls/:id/audio", verify, async (req, res) => {
+  const { rows } = await pool.query(`SELECT storage_key FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
+  if (!rows[0]?.storage_key) return res.status(404).json({ error: "not found" });
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: rows[0].storage_key }));
+    res.setHeader("content-type", obj.ContentType ?? "audio/mpeg");
+    if (obj.ContentLength) res.setHeader("content-length", String(obj.ContentLength));
+    obj.Body.pipe(res);
+  } catch (e) {
+    console.error("[audio stream]", e);
+    res.status(502).json({ error: "stream failed" });
+  }
+});
+
 app.delete("/calls/:id", verify, async (req, res) => {
   const { rows } = await pool.query(`SELECT storage_key FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
   if (rows[0]?.storage_key) {

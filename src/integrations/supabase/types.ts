@@ -452,6 +452,8 @@ export type Database = {
           last_ping_ok: boolean | null
           mode: string
           owner_id: string
+          proxy_audio: boolean
+          purge_twilio_after_ingest: boolean
           updated_at: string
         }
         Insert: {
@@ -465,6 +467,8 @@ export type Database = {
           last_ping_ok?: boolean | null
           mode?: string
           owner_id: string
+          proxy_audio?: boolean
+          purge_twilio_after_ingest?: boolean
           updated_at?: string
         }
         Update: {
@@ -478,6 +482,8 @@ export type Database = {
           last_ping_ok?: boolean | null
           mode?: string
           owner_id?: string
+          proxy_audio?: boolean
+          purge_twilio_after_ingest?: boolean
           updated_at?: string
         }
         Relationships: []

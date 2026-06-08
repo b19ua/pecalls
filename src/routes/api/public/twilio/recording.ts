@@ -68,7 +68,6 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
           return new Response("ok");
         }
 
-        // Look up the call to get owner/agent
         const { data: call } = await supabaseAdmin
           .from("calls")
           .select("id, owner_id, agent_id, agents(language)")
@@ -80,16 +79,18 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
           return new Response("ok");
         }
 
-        // Branch on data residency mode for this owner
-        const { getResidencyConfig, callGateway, isSelfHosted } = await import("@/lib/data-residency.server");
+        const {
+          getResidencyConfig,
+          callGateway,
+          isSelfHosted,
+          deleteTwilioRecording,
+        } = await import("@/lib/data-residency.server");
         const cfg = await getResidencyConfig(call.owner_id);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const lang = ((call as any).agents?.language as string) || "ru-RU";
 
         if (isSelfHosted(cfg)) {
-          // Hand off: do NOT download or store audio/transcript in our cloud.
-          // The client's Data Gateway pulls audio from Twilio (with credentials we send) and
-          // runs its own transcription pipeline.
+          // Hand off to client's gateway. Gateway pulls audio from Twilio with its own creds.
           const handoff = await callGateway(cfg, "POST", "/calls/ingest", {
             call_id: call.id,
             twilio_call_sid: callSid,
@@ -106,14 +107,26 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
               ...(duration ? { duration_seconds: duration } : {}),
             })
             .eq("id", call.id);
+
           if (!handoff.ok) {
             console.error("[recording] gateway handoff failed", handoff.status, handoff.error);
+            return new Response("ok");
+          }
+
+          // Zero-retention: after gateway ACK, delete the recording from Twilio.
+          // Done synchronously so any failure is logged, but does not affect the webhook response.
+          if (cfg.purge_twilio_after_ingest !== false) {
+            const del = await deleteTwilioRecording(recordingSid);
+            if (!del.ok) {
+              console.error("[recording] twilio delete failed", del.status, del.error);
+            }
           }
           return new Response("ok");
         }
 
         // Cloud mode: download from Twilio and store in Supabase Storage.
         let storagePath: string | null = null;
+        let uploadOk = false;
         try {
           const audio = await downloadRecording(recordingSid);
           const path = `${call.owner_id}/${call.id}/${recordingSid}.mp3`;
@@ -122,6 +135,7 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
             .upload(path, new Uint8Array(audio), { contentType: "audio/mpeg", upsert: true });
           if (upErr) throw upErr;
           storagePath = path;
+          uploadOk = true;
 
           const transcript = await transcribeWithGemini(audio, lang);
 
@@ -142,6 +156,12 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
             .from("calls")
             .update({ recording_url: `${recordingUrl}.mp3` })
             .eq("id", call.id);
+        }
+
+        // Zero-retention for cloud mode: only delete from Twilio after our copy is safe.
+        if (uploadOk && cfg?.purge_twilio_after_ingest === true) {
+          const del = await deleteTwilioRecording(recordingSid);
+          if (!del.ok) console.error("[recording] twilio delete failed", del.status, del.error);
         }
 
         return new Response("ok");

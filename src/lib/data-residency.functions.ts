@@ -7,6 +7,8 @@ const ConfigInput = z.object({
   gateway_url: z.string().url().max(500).nullable().optional(),
   hmac_secret: z.string().min(16).max(256).nullable().optional(),
   enabled: z.boolean(),
+  purge_twilio_after_ingest: z.boolean().optional(),
+  proxy_audio: z.boolean().optional(),
 });
 
 export const getResidencyConfigFn = createServerFn({ method: "GET" })
@@ -15,11 +17,12 @@ export const getResidencyConfigFn = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const { data } = await supabase
       .from("data_residency_configs")
-      .select("mode, gateway_url, hmac_secret, enabled, last_ping_at, last_ping_ok, last_ping_error")
+      .select("mode, gateway_url, hmac_secret, enabled, purge_twilio_after_ingest, proxy_audio, last_ping_at, last_ping_ok, last_ping_error")
       .eq("owner_id", userId)
       .maybeSingle();
     return data ?? {
       mode: "cloud", gateway_url: null, hmac_secret: null, enabled: false,
+      purge_twilio_after_ingest: true, proxy_audio: false,
       last_ping_at: null, last_ping_ok: null, last_ping_error: null,
     };
   });
@@ -35,6 +38,8 @@ export const saveResidencyConfigFn = createServerFn({ method: "POST" })
       gateway_url: data.gateway_url ?? null,
       hmac_secret: data.hmac_secret ?? null,
       enabled: data.enabled,
+      ...(typeof data.purge_twilio_after_ingest === "boolean" ? { purge_twilio_after_ingest: data.purge_twilio_after_ingest } : {}),
+      ...(typeof data.proxy_audio === "boolean" ? { proxy_audio: data.proxy_audio } : {}),
     };
     const { error } = await supabase
       .from("data_residency_configs")
@@ -87,7 +92,7 @@ export const getCallContentFn = createServerFn({ method: "POST" })
     if (!call || call.owner_id !== userId) throw new Error("Not found");
 
     if (call.data_residency === "self_hosted") {
-      const { getResidencyConfig, callGateway, isSelfHosted } = await import("@/lib/data-residency.server");
+      const { getResidencyConfig, callGateway, isSelfHosted, signAudioToken } = await import("@/lib/data-residency.server");
       const cfg = await getResidencyConfig(userId);
       if (!isSelfHosted(cfg)) {
         return { audioUrl: null, transcript: [], summary: null, source: "self_hosted_offline" as const };
@@ -101,8 +106,13 @@ export const getCallContentFn = createServerFn({ method: "POST" })
       if (!res.ok) {
         return { audioUrl: null, transcript: [], summary: null, source: "self_hosted_error" as const, error: res.error };
       }
+      // If proxy mode is enabled (gateway not reachable from the user's browser, e.g. VPN-only),
+      // hand the browser our own proxy URL — the server streams bytes from the gateway.
+      const audioUrl = cfg.proxy_audio
+        ? `/api/audio/${call.id}?o=${userId}&t=${signAudioToken(call.id, userId, 3600)}`
+        : res.data.audio_url;
       return {
-        audioUrl: res.data.audio_url,
+        audioUrl,
         transcript: (Array.isArray(res.data.transcript) ? res.data.transcript : []) as TranscriptItem[],
         summary: res.data.summary ?? null,
         source: "self_hosted" as const,

@@ -51,11 +51,11 @@ function CallDetail() {
         <Stat label={t("call.cost")} value={`$${Number(call.cost_usd ?? 0).toFixed(4)}`} />
       </div>
 
-      {call.recording_url && (
+      {(call.recording_path || call.recording_url) && (
         <Card className="bg-gradient-card shadow-soft mb-5">
           <CardContent className="p-5">
             <h3 className="font-display text-lg font-semibold mb-3">{t("call.recording")}</h3>
-            <audio controls src={call.recording_url} className="w-full" />
+            {audioUrl ? <audio controls src={audioUrl} className="w-full" /> : <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}</div>}
           </CardContent>
         </Card>
       )}

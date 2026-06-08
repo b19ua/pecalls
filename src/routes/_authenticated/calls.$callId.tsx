@@ -18,12 +18,17 @@ function CallDetail() {
   const { callId } = useParams({ from: "/_authenticated/calls/$callId" });
   const [call, setCall] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const getUrl = useServerFn(getRecordingSignedUrl);
 
   useEffect(() => {
     supabase.from("calls").select("*").eq("id", callId).single().then(({ data }) => {
       setCall(data); setLoading(false);
+      if (data?.recording_path || data?.recording_url) {
+        getUrl({ data: { callId } }).then((r) => setAudioUrl(r.url)).catch(() => {});
+      }
     });
-  }, [callId]);
+  }, [callId, getUrl]);
 
   if (loading) return <div className="p-8 flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}</div>;
   if (!call) return <div className="p-8">{t("calls.empty.title")}</div>;

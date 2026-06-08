@@ -116,7 +116,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           generation_config: {
             response_modalities: ["AUDIO"],
             temperature: Number.isFinite(c.temperature) ? c.temperature : 0.6,
-            max_output_tokens: 350,
+            max_output_tokens: 2048,
             candidate_count: 1,
             speech_config: {
               voice_config: { prebuilt_voice_config: { voice_name: c.voice || "Aoede" } },
@@ -322,7 +322,11 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   const startRecording = async () => {
     if (recordingStarted || !callSid || !LOVABLE_KEY || !TWILIO_KEY) return;
     recordingStarted = true;
+    const publicBase = Deno.env.get("PUBLIC_APP_URL") || "https://pecalls.lovable.app";
     try {
+      await supa.from("calls")
+        .update({ recording_status: "requested", recording_error: null })
+        .eq("twilio_call_sid", callSid);
       const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}/Recordings.json`, {
         method: "POST",
         headers: {
@@ -332,12 +336,37 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         },
         body: new URLSearchParams({
           RecordingChannels: "dual",
-          RecordingStatusCallback: `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/voice-call-bridge`,
+          RecordingStatusCallback: `${publicBase.replace(/\/$/, "")}/api/public/twilio/recording`,
+          RecordingStatusCallbackMethod: "POST",
+          RecordingStatusCallbackEvent: "completed",
         }),
       });
-      if (!r.ok) log("record REST failed", r.status, await r.text());
-      else log("recording started for", callSid);
-    } catch (e) { console.error("record REST", e); }
+      if (!r.ok) {
+        const body = await r.text();
+        log("record REST failed", r.status, body);
+        await supa.from("calls")
+          .update({ recording_status: "failed", recording_error: `Twilio ${r.status}: ${body.slice(0, 400)}` })
+          .eq("twilio_call_sid", callSid);
+        void reportError({
+          source: "voice-call-bridge:recording",
+          severity: "error",
+          message: `Twilio ${r.status}: ${body.slice(0, 400)}`,
+          context: { status: r.status },
+          call_sid: callSid,
+          owner_id: ctx?.ownerId,
+        });
+      } else {
+        await supa.from("calls")
+          .update({ recording_status: "recording" })
+          .eq("twilio_call_sid", callSid);
+        log("recording started for", callSid);
+      }
+    } catch (e) {
+      console.error("record REST", e);
+      await supa.from("calls")
+        .update({ recording_status: "failed", recording_error: String(e).slice(0, 400) })
+        .eq("twilio_call_sid", callSid);
+    }
   };
 
   twilio.onmessage = (ev) => {

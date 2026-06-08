@@ -112,17 +112,9 @@ export const Route = createFileRoute("/api/public/twilio/voice")({
           : "";
         const bridgeWs = process.env.GEMINI_BRIDGE_WS_URL || defaultBridge;
 
-        // Start dual-channel recording. TwiML must return promptly so Twilio
-        // can connect the media stream — we don't await. The helper persists
-        // status/error on the call row so the UI can show it and offer retry.
-        if (callSid && agent.record_calls) {
-          import("@/lib/twilio-recording.server")
-            .then(({ startTwilioRecording }) => startTwilioRecording(callSid))
-            .then((r) => {
-              if (!r.ok) console.error("[voice] start recording failed", r.status, r.error);
-            })
-            .catch((e) => console.error("[voice] start recording threw", e));
-        }
+        // Recording is started inside the voice-call-bridge edge function
+        // once the Twilio Media Stream is connected. Doing it here as well
+        // would race and conflict with the bridge's request.
 
         if (bridgeWs) {
           const streamUrl = `${bridgeWs.replace(/\/$/, "")}?agent_id=${agent.id}&call_sid=${callSid}`;

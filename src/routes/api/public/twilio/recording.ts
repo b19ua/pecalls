@@ -33,13 +33,9 @@ async function verifyRecordingWithTwilio(recordingSid: string, callSid: string) 
 async function transcribeWithGemini(audio: ArrayBuffer, language: string): Promise<string> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return "";
-  const bytes = new Uint8Array(audio);
-  let bin = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  const b64 = btoa(bin);
+  
+  // Use Buffer for efficient base64 encoding in Node.js/Bun
+  const b64 = Buffer.from(audio).toString("base64");
 
   const r = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
@@ -99,13 +95,6 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
 
         if (!call) {
           console.warn("[recording] call not found", callSid);
-          const bySid = await fetch(`${GATEWAY}/Recordings/${recordingSid}.mp3`, {
-            headers: {
-              Authorization: `Bearer ${process.env.LOVABLE_API_KEY!}`,
-              "X-Connection-Api-Key": process.env.TWILIO_API_KEY!,
-            },
-          }).catch(() => null);
-          console.warn("[recording] lookup miss, recording reachable=", !!bySid?.ok);
           return new Response("ok");
         }
 
@@ -129,11 +118,14 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
             duration_seconds: duration,
             language: lang,
           });
+          
           await supabaseAdmin
             .from("calls")
             .update({
               data_residency: "self_hosted",
               external_call_ref: call.id,
+              recording_status: "ready", // Mark as ready after handoff
+              recording_url: `${recordingUrl}.mp3`,
               ...(duration ? { duration_seconds: duration } : {}),
             })
             .eq("id", call.id);
@@ -144,7 +136,6 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
           }
 
           // Zero-retention: after gateway ACK, delete the recording from Twilio.
-          // Done synchronously so any failure is logged, but does not affect the webhook response.
           if (cfg.purge_twilio_after_ingest !== false) {
             const del = await deleteTwilioRecording(recordingSid);
             if (!del.ok) {
@@ -205,7 +196,6 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
             .eq("id", call.id);
         }
 
-        // Zero-retention for cloud mode: only delete from Twilio after our copy is safe.
         if (uploadOk && cfg?.purge_twilio_after_ingest === true) {
           const del = await deleteTwilioRecording(recordingSid);
           if (!del.ok) console.error("[recording] twilio delete failed", del.status, del.error);

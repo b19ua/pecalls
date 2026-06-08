@@ -7,6 +7,8 @@ const ConfigInput = z.object({
   gateway_url: z.string().url().max(500).nullable().optional(),
   hmac_secret: z.string().min(16).max(256).nullable().optional(),
   enabled: z.boolean(),
+  purge_twilio_after_ingest: z.boolean().optional(),
+  proxy_audio: z.boolean().optional(),
 });
 
 export const getResidencyConfigFn = createServerFn({ method: "GET" })
@@ -15,11 +17,12 @@ export const getResidencyConfigFn = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const { data } = await supabase
       .from("data_residency_configs")
-      .select("mode, gateway_url, hmac_secret, enabled, last_ping_at, last_ping_ok, last_ping_error")
+      .select("mode, gateway_url, hmac_secret, enabled, purge_twilio_after_ingest, proxy_audio, last_ping_at, last_ping_ok, last_ping_error")
       .eq("owner_id", userId)
       .maybeSingle();
     return data ?? {
       mode: "cloud", gateway_url: null, hmac_secret: null, enabled: false,
+      purge_twilio_after_ingest: true, proxy_audio: false,
       last_ping_at: null, last_ping_ok: null, last_ping_error: null,
     };
   });
@@ -35,6 +38,8 @@ export const saveResidencyConfigFn = createServerFn({ method: "POST" })
       gateway_url: data.gateway_url ?? null,
       hmac_secret: data.hmac_secret ?? null,
       enabled: data.enabled,
+      ...(typeof data.purge_twilio_after_ingest === "boolean" ? { purge_twilio_after_ingest: data.purge_twilio_after_ingest } : {}),
+      ...(typeof data.proxy_audio === "boolean" ? { proxy_audio: data.proxy_audio } : {}),
     };
     const { error } = await supabase
       .from("data_residency_configs")

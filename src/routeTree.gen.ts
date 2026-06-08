@@ -28,6 +28,7 @@ import { Route as AuthenticatedCallsRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated/agents'
 import { Route as AuthenticatedAgentsIndexRouteImport } from './routes/_authenticated/agents.index'
+import { Route as ApiAudioCallIdRouteImport } from './routes/api/audio.$callId'
 import { Route as AuthenticatedCallsCallIdRouteImport } from './routes/_authenticated/calls.$callId'
 import { Route as AuthenticatedAgentsAgentIdRouteImport } from './routes/_authenticated/agents.$agentId'
 import { Route as ApiPublicTwilioVoiceRouteImport } from './routes/api/public/twilio/voice'
@@ -131,6 +132,11 @@ const AuthenticatedAgentsIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedAgentsRoute,
   } as any)
+const ApiAudioCallIdRoute = ApiAudioCallIdRouteImport.update({
+  id: '/api/audio/$callId',
+  path: '/api/audio/$callId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedCallsCallIdRoute =
   AuthenticatedCallsCallIdRouteImport.update({
     id: '/$callId',
@@ -185,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/tools': typeof AuthenticatedToolsRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
+  '/api/audio/$callId': typeof ApiAudioCallIdRoute
   '/agents/': typeof AuthenticatedAgentsIndexRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/twilio/recording': typeof ApiPublicTwilioRecordingRoute
@@ -210,6 +217,7 @@ export interface FileRoutesByTo {
   '/tools': typeof AuthenticatedToolsRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
+  '/api/audio/$callId': typeof ApiAudioCallIdRoute
   '/agents': typeof AuthenticatedAgentsIndexRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/twilio/recording': typeof ApiPublicTwilioRecordingRoute
@@ -238,6 +246,7 @@ export interface FileRoutesById {
   '/_authenticated/tools': typeof AuthenticatedToolsRoute
   '/_authenticated/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/_authenticated/calls/$callId': typeof AuthenticatedCallsCallIdRoute
+  '/api/audio/$callId': typeof ApiAudioCallIdRoute
   '/_authenticated/agents/': typeof AuthenticatedAgentsIndexRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/twilio/recording': typeof ApiPublicTwilioRecordingRoute
@@ -266,6 +275,7 @@ export interface FileRouteTypes {
     | '/tools'
     | '/agents/$agentId'
     | '/calls/$callId'
+    | '/api/audio/$callId'
     | '/agents/'
     | '/api/public/crm/calls'
     | '/api/public/twilio/recording'
@@ -291,6 +301,7 @@ export interface FileRouteTypes {
     | '/tools'
     | '/agents/$agentId'
     | '/calls/$callId'
+    | '/api/audio/$callId'
     | '/agents'
     | '/api/public/crm/calls'
     | '/api/public/twilio/recording'
@@ -318,6 +329,7 @@ export interface FileRouteTypes {
     | '/_authenticated/tools'
     | '/_authenticated/agents/$agentId'
     | '/_authenticated/calls/$callId'
+    | '/api/audio/$callId'
     | '/_authenticated/agents/'
     | '/api/public/crm/calls'
     | '/api/public/twilio/recording'
@@ -332,6 +344,7 @@ export interface RootRouteChildren {
   PeRoute: typeof PeRoute
   PmRoute: typeof PmRoute
   SnRoute: typeof SnRoute
+  ApiAudioCallIdRoute: typeof ApiAudioCallIdRoute
   ApiPublicCrmCallsRoute: typeof ApiPublicCrmCallsRoute
   ApiPublicTwilioRecordingRoute: typeof ApiPublicTwilioRecordingRoute
   ApiPublicTwilioStatusRoute: typeof ApiPublicTwilioStatusRoute
@@ -473,6 +486,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgentsIndexRouteImport
       parentRoute: typeof AuthenticatedAgentsRoute
     }
+    '/api/audio/$callId': {
+      id: '/api/audio/$callId'
+      path: '/api/audio/$callId'
+      fullPath: '/api/audio/$callId'
+      preLoaderRoute: typeof ApiAudioCallIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/calls/$callId': {
       id: '/_authenticated/calls/$callId'
       path: '/$callId'
@@ -583,6 +603,7 @@ const rootRouteChildren: RootRouteChildren = {
   PeRoute: PeRoute,
   PmRoute: PmRoute,
   SnRoute: SnRoute,
+  ApiAudioCallIdRoute: ApiAudioCallIdRoute,
   ApiPublicCrmCallsRoute: ApiPublicCrmCallsRoute,
   ApiPublicTwilioRecordingRoute: ApiPublicTwilioRecordingRoute,
   ApiPublicTwilioStatusRoute: ApiPublicTwilioStatusRoute,
@@ -591,3 +612,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

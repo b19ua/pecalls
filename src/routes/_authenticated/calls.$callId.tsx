@@ -10,6 +10,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { getRecordingSignedUrl } from "@/lib/calls.functions";
 import { retryRecordingFn } from "@/lib/twilio-recording.functions";
 import { toast } from "sonner";
+import { getCallContentFn } from "@/lib/data-residency.functions";
 
 export const Route = createFileRoute("/_authenticated/calls/$callId")({ component: CallDetail });
 
@@ -22,19 +23,36 @@ function CallDetail() {
   const [loading, setLoading] = useState(true);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [contentLoading, setContentLoading] = useState(false);
   const getUrl = useServerFn(getRecordingSignedUrl);
   const retry = useServerFn(retryRecordingFn);
+  const getContent = useServerFn(getCallContentFn);
 
-  const load = () => {
+  const load = async () => {
     setLoading(true);
-    supabase.from("calls").select("*").eq("id", callId).single().then(({ data }) => {
-      setCall(data); setLoading(false);
+    setContentLoading(true);
+    const { data } = await supabase.from("calls").select("*").eq("id", callId).single();
+    setCall(data);
+    setLoading(false);
+    try {
+      const content = await getContent({ data: { callId } });
+      setAudioUrl(content.audioUrl);
+      if (data) {
+        setCall({
+          ...data,
+          transcript: Array.isArray(content.transcript) && content.transcript.length ? content.transcript : data.transcript,
+          summary: content.summary ?? data.summary,
+        });
+      }
+    } catch {
       if (data?.recording_path || data?.recording_url) {
         getUrl({ data: { callId } }).then((r) => setAudioUrl(r.url)).catch(() => {});
       } else {
         setAudioUrl(null);
       }
-    });
+    } finally {
+      setContentLoading(false);
+    }
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [callId]);
@@ -82,6 +100,7 @@ function CallDetail() {
         audioUrl={audioUrl}
         onRetry={handleRetry}
         retrying={retrying}
+        contentLoading={contentLoading}
         lang={lang}
         t={t}
       />
@@ -135,9 +154,10 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 }
 
 function RecordingStatusCard({
-  call, audioUrl, onRetry, retrying, lang, t,
+  call, audioUrl, onRetry, retrying, contentLoading, lang, t,
 }: {
   call: any; audioUrl: string | null; onRetry: () => void; retrying: boolean;
+  contentLoading: boolean;
   lang: "ru" | "ro" | "en"; t: (k: string) => string;
 }) {
   const status: string = call.recording_status ?? (call.recording_path || call.recording_url ? "ready" : "pending");
@@ -183,10 +203,20 @@ function RecordingStatusCard({
         </div>
 
         {has ? (
-          <audio controls src={audioUrl!} className="w-full" />
+          <div className="space-y-3">
+            <audio controls src={audioUrl!} className="w-full" />
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" asChild>
+                <a href={audioUrl!} target="_blank" rel="noreferrer">{tr("Открыть файл", "Deschide fișierul", "Open file")}</a>
+              </Button>
+              <Button size="sm" asChild>
+                <a href={audioUrl!} download>{tr("Скачать запись", "Descarcă înregistrarea", "Download recording")}</a>
+              </Button>
+            </div>
+          </div>
         ) : status === "ready" ? (
           <div className="text-sm text-muted-foreground flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}
+            <Loader2 className="h-4 w-4 animate-spin" /> {contentLoading ? t("common.loading") : tr("Файл ещё обрабатывается", "Fișierul încă se pregătește", "The file is still being prepared")}
           </div>
         ) : (
           <div className="text-sm text-muted-foreground">

@@ -322,7 +322,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   const startRecording = async () => {
     if (recordingStarted || !callSid || !LOVABLE_KEY || !TWILIO_KEY) return;
     recordingStarted = true;
-    const publicBase = Deno.env.get("PUBLIC_APP_URL") || "https://pecalls.lovable.app";
+    const publicBase = Deno.env.get("PUBLIC_APP_URL") || "https://project--d7e8c4a9-917e-4bb2-a113-6e70fdf150da.lovable.app";
     try {
       await supa.from("calls")
         .update({ recording_status: "requested", recording_error: null })

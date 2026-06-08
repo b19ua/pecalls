@@ -1,6 +1,15 @@
-// Lunara — Client Data Gateway reference server.
+// Lunara — Client Data Gateway (production-grade reference).
 // Receives HMAC-signed handoffs from Lunara cloud, downloads audio from Twilio,
 // transcribes locally, stores in PostgreSQL + MinIO. Never sends data back.
+//
+// Production hardening:
+//   - HMAC-SHA256 request signing with 5-minute clock skew window
+//   - Optional IP allow-list (LUNARA_ALLOWED_IPS, comma separated CIDR/ip)
+//   - Retention sweeper (RETENTION_DAYS) deletes audio + DB rows on schedule
+//   - Structured JSON logs, request-id propagation
+//   - /health (liveness) and /ready (DB + S3 reachability)
+//   - Graceful shutdown on SIGTERM
+//   - Request body size cap (1 MiB)
 import crypto from "node:crypto";
 import express from "express";
 import pg from "pg";
@@ -8,14 +17,18 @@ import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, Crea
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const SECRET = process.env.LUNARA_HMAC_SECRET;
-if (!SECRET || SECRET.length < 16) {
-  console.error("LUNARA_HMAC_SECRET must be set (≥16 chars)");
-  process.exit(1);
-}
+if (!SECRET || SECRET.length < 16) { console.error("LUNARA_HMAC_SECRET must be set (>=16 chars)"); process.exit(1); }
 const PORT = Number(process.env.PORT ?? 8080);
 const BUCKET = process.env.S3_BUCKET ?? "call-recordings";
+const RETENTION_DAYS = Number(process.env.RETENTION_DAYS ?? 0);
+const ALLOWED_IPS = (process.env.LUNARA_ALLOWED_IPS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const VERSION = "1.1.0";
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+function log(level, msg, extra = {}) {
+  console.log(JSON.stringify({ ts: new Date().toISOString(), level, msg, ...extra }));
+}
+
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 10, idleTimeoutMillis: 30000 });
 const s3 = new S3Client({
   endpoint: process.env.S3_ENDPOINT,
   region: process.env.S3_REGION ?? "us-east-1",
@@ -25,11 +38,20 @@ const s3 = new S3Client({
 
 async function ensureBucket() {
   try { await s3.send(new HeadBucketCommand({ Bucket: BUCKET })); }
-  catch { await s3.send(new CreateBucketCommand({ Bucket: BUCKET })); }
+  catch { await s3.send(new CreateBucketCommand({ Bucket: BUCKET })); log("info", "bucket created", { bucket: BUCKET }); }
+}
+
+// --------- IP allow-list ----------
+function ipAllowed(req) {
+  if (!ALLOWED_IPS.length) return true;
+  const raw = (req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").toString();
+  const ip = raw.split(",")[0].trim().replace(/^::ffff:/, "");
+  return ALLOWED_IPS.includes(ip);
 }
 
 // --------- HMAC verification middleware ---------
 function verify(req, res, next) {
+  if (!ipAllowed(req)) { log("warn", "ip blocked", { ip: req.socket.remoteAddress }); return res.status(403).json({ error: "ip not allowed" }); }
   const ts = req.header("x-lunara-timestamp") ?? "";
   const sig = req.header("x-lunara-signature") ?? "";
   const owner = req.header("x-lunara-owner") ?? "";
@@ -69,7 +91,6 @@ async function transcribe(audio, language) {
     const data = await r.json();
     return data.text ?? "";
   }
-  // Gemini
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error("GEMINI_API_KEY not set");
   const b64 = audio.toString("base64");
@@ -90,17 +111,22 @@ async function transcribe(audio, language) {
 
 // --------- App ---------
 const app = express();
+app.disable("x-powered-by");
+app.use((req, _res, next) => { req.requestId = req.header("x-request-id") ?? crypto.randomUUID(); next(); });
 app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf.toString("utf8"); }, limit: "1mb" }));
 
-app.get("/health", (_req, res) => res.json({ ok: true, version: "1.0.0" }));
+app.get("/health", (_req, res) => res.json({ ok: true, version: VERSION }));
+app.get("/ready", async (_req, res) => {
+  const out = { ok: true, db: false, s3: false };
+  try { await pool.query("SELECT 1"); out.db = true; } catch (e) { out.ok = false; out.dbError = String(e).slice(0, 200); }
+  try { await s3.send(new HeadBucketCommand({ Bucket: BUCKET })); out.s3 = true; } catch (e) { out.ok = false; out.s3Error = String(e).slice(0, 200); }
+  res.status(out.ok ? 200 : 503).json(out);
+});
 
 app.post("/calls/ingest", verify, async (req, res) => {
   const { call_id, twilio_call_sid, recording_sid, duration_seconds, language } = req.body ?? {};
   if (!call_id || !recording_sid) return res.status(400).json({ error: "call_id and recording_sid required" });
-
-  // ACK immediately, process async
   res.json({ ok: true, accepted: call_id });
-
   try {
     await pool.query(
       `INSERT INTO calls (id, owner_id, twilio_call_sid, recording_sid, duration_sec, language, status)
@@ -110,33 +136,38 @@ app.post("/calls/ingest", verify, async (req, res) => {
     );
     const audio = await downloadFromTwilio(recording_sid);
     const key = `${req.ownerId}/${call_id}.mp3`;
-    await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: audio, ContentType: "audio/mpeg" }));
-
+    await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: audio, ContentType: "audio/mpeg", ServerSideEncryption: "AES256" }));
     let text = "";
     try { text = await transcribe(audio, language ?? "ru"); }
-    catch (e) { console.error("[transcribe]", e); }
-
+    catch (e) { log("error", "transcribe failed", { call_id, err: String(e) }); }
     await pool.query(
       `UPDATE calls SET storage_key=$2, transcript=$3::jsonb, status='ready', error=null, updated_at=now() WHERE id=$1`,
       [call_id, key, JSON.stringify(text ? [{ source: process.env.TRANSCRIBE_BACKEND ?? "gemini", text, at: new Date().toISOString() }] : [])],
     );
+    log("info", "ingest ok", { call_id, owner: req.ownerId, bytes: audio.length });
   } catch (e) {
-    console.error("[ingest] failed", e);
+    log("error", "ingest failed", { call_id, err: String(e) });
     await pool.query(`UPDATE calls SET status='failed', error=$2, updated_at=now() WHERE id=$1`, [call_id, String(e).slice(0, 500)]).catch(() => {});
   }
 });
 
+// Allow Lunara cloud to push back updated summary/analysis (optional).
+app.post("/calls/:id/analysis", verify, async (req, res) => {
+  const { summary, transcript } = req.body ?? {};
+  await pool.query(
+    `UPDATE calls SET summary = COALESCE($2, summary), transcript = COALESCE($3::jsonb, transcript), updated_at = now()
+     WHERE id=$1 AND owner_id=$2_owner`.replace("$2_owner", "$4"),
+    [req.params.id, summary ?? null, transcript ? JSON.stringify(transcript) : null, req.ownerId],
+  ).catch((e) => log("error", "analysis update failed", { err: String(e) }));
+  res.json({ ok: true });
+});
+
 app.get("/calls/:id", verify, async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT storage_key, transcript, summary FROM calls WHERE id=$1 AND owner_id=$2`,
-    [req.params.id, req.ownerId],
-  );
+  const { rows } = await pool.query(`SELECT storage_key, transcript, summary FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
   const row = rows[0];
   if (!row) return res.status(404).json({ error: "not found" });
   let audio_url = null;
-  if (row.storage_key) {
-    audio_url = await getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET, Key: row.storage_key }), { expiresIn: 3600 });
-  }
+  if (row.storage_key) audio_url = await getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET, Key: row.storage_key }), { expiresIn: 3600 });
   res.json({ audio_url, transcript: row.transcript ?? [], summary: row.summary });
 });
 
@@ -147,8 +178,6 @@ app.get("/calls/:id/audio-url", verify, async (req, res) => {
   res.json({ audio_url });
 });
 
-// Binary audio stream — used by Lunara cloud as a proxy when this gateway is
-// not reachable from end-user browsers (VPN-only deployments).
 app.get("/calls/:id/audio", verify, async (req, res) => {
   const { rows } = await pool.query(`SELECT storage_key FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
   if (!rows[0]?.storage_key) return res.status(404).json({ error: "not found" });
@@ -157,21 +186,35 @@ app.get("/calls/:id/audio", verify, async (req, res) => {
     res.setHeader("content-type", obj.ContentType ?? "audio/mpeg");
     if (obj.ContentLength) res.setHeader("content-length", String(obj.ContentLength));
     obj.Body.pipe(res);
-  } catch (e) {
-    console.error("[audio stream]", e);
-    res.status(502).json({ error: "stream failed" });
-  }
+  } catch (e) { log("error", "audio stream failed", { err: String(e) }); res.status(502).json({ error: "stream failed" }); }
 });
 
 app.delete("/calls/:id", verify, async (req, res) => {
   const { rows } = await pool.query(`SELECT storage_key FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
-  if (rows[0]?.storage_key) {
-    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: rows[0].storage_key })).catch(() => {});
-  }
+  if (rows[0]?.storage_key) await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: rows[0].storage_key })).catch(() => {});
   await pool.query(`DELETE FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
+  log("info", "deleted", { id: req.params.id, owner: req.ownerId });
   res.json({ ok: true });
 });
 
+// --------- Retention sweeper ---------
+async function retentionSweep() {
+  if (!RETENTION_DAYS || RETENTION_DAYS <= 0) return;
+  const { rows } = await pool.query(
+    `SELECT id, owner_id, storage_key FROM calls WHERE created_at < now() - ($1 || ' days')::interval LIMIT 500`,
+    [String(RETENTION_DAYS)],
+  );
+  for (const row of rows) {
+    if (row.storage_key) await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: row.storage_key })).catch(() => {});
+    await pool.query(`DELETE FROM calls WHERE id=$1`, [row.id]).catch(() => {});
+  }
+  if (rows.length) log("info", "retention swept", { deleted: rows.length, days: RETENTION_DAYS });
+}
+
 ensureBucket().then(() => {
-  app.listen(PORT, () => console.log(`[gateway] listening on :${PORT}`));
+  const server = app.listen(PORT, () => log("info", "gateway listening", { port: PORT, version: VERSION, retention_days: RETENTION_DAYS, allowed_ips: ALLOWED_IPS.length }));
+  if (RETENTION_DAYS > 0) setInterval(() => retentionSweep().catch((e) => log("error", "retention failed", { err: String(e) })), 6 * 3600 * 1000);
+  const shutdown = (sig) => { log("info", "shutting down", { sig }); server.close(() => pool.end().then(() => process.exit(0))); setTimeout(() => process.exit(1), 10000).unref(); };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 });

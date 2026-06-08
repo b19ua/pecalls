@@ -238,6 +238,10 @@ export type Database = {
       calls: {
         Row: {
           agent_id: string | null
+          analyzed_at: string | null
+          competitor_mentioned: boolean
+          competitor_names: string[]
+          complaint_flag: boolean
           cost_usd: number
           created_at: string
           data_residency: string
@@ -257,16 +261,23 @@ export type Database = {
           recording_path: string | null
           recording_status: string | null
           recording_url: string | null
+          sentiment: string | null
+          sentiment_score: number | null
           started_at: string | null
           status: Database["public"]["Enums"]["call_status"]
           summary: string | null
           to_number: string | null
+          topics: string[]
           transcript: Json
           twilio_call_sid: string | null
           updated_at: string
         }
         Insert: {
           agent_id?: string | null
+          analyzed_at?: string | null
+          competitor_mentioned?: boolean
+          competitor_names?: string[]
+          complaint_flag?: boolean
           cost_usd?: number
           created_at?: string
           data_residency?: string
@@ -286,16 +297,23 @@ export type Database = {
           recording_path?: string | null
           recording_status?: string | null
           recording_url?: string | null
+          sentiment?: string | null
+          sentiment_score?: number | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["call_status"]
           summary?: string | null
           to_number?: string | null
+          topics?: string[]
           transcript?: Json
           twilio_call_sid?: string | null
           updated_at?: string
         }
         Update: {
           agent_id?: string | null
+          analyzed_at?: string | null
+          competitor_mentioned?: boolean
+          competitor_names?: string[]
+          complaint_flag?: boolean
           cost_usd?: number
           created_at?: string
           data_residency?: string
@@ -315,10 +333,13 @@ export type Database = {
           recording_path?: string | null
           recording_status?: string | null
           recording_url?: string | null
+          sentiment?: string | null
+          sentiment_score?: number | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["call_status"]
           summary?: string | null
           to_number?: string | null
+          topics?: string[]
           transcript?: Json
           twilio_call_sid?: string | null
           updated_at?: string

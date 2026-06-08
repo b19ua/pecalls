@@ -1,0 +1,27 @@
+import pg from "pg";
+const { Client } = pg;
+
+const sql = `
+CREATE TABLE IF NOT EXISTS calls (
+  id              TEXT PRIMARY KEY,
+  owner_id        TEXT NOT NULL,
+  twilio_call_sid TEXT,
+  recording_sid   TEXT,
+  storage_key     TEXT,
+  duration_sec    INTEGER NOT NULL DEFAULT 0,
+  language        TEXT,
+  transcript      JSONB  NOT NULL DEFAULT '[]'::jsonb,
+  summary         TEXT,
+  status          TEXT   NOT NULL DEFAULT 'pending',
+  error           TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS calls_owner_created ON calls(owner_id, created_at DESC);
+`;
+
+const c = new Client({ connectionString: process.env.DATABASE_URL });
+await c.connect();
+await c.query(sql);
+await c.end();
+console.log("[migrate] done");

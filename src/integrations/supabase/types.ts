@@ -190,9 +190,11 @@ export type Database = {
           agent_id: string | null
           cost_usd: number
           created_at: string
+          data_residency: string
           direction: Database["public"]["Enums"]["call_direction"]
           duration_seconds: number
           ended_at: string | null
+          external_call_ref: string | null
           from_number: string | null
           handoff_at: string | null
           handoff_to: string | null
@@ -215,9 +217,11 @@ export type Database = {
           agent_id?: string | null
           cost_usd?: number
           created_at?: string
+          data_residency?: string
           direction: Database["public"]["Enums"]["call_direction"]
           duration_seconds?: number
           ended_at?: string | null
+          external_call_ref?: string | null
           from_number?: string | null
           handoff_at?: string | null
           handoff_to?: string | null
@@ -240,9 +244,11 @@ export type Database = {
           agent_id?: string | null
           cost_usd?: number
           created_at?: string
+          data_residency?: string
           direction?: Database["public"]["Enums"]["call_direction"]
           duration_seconds?: number
           ended_at?: string | null
+          external_call_ref?: string | null
           from_number?: string | null
           handoff_at?: string | null
           handoff_to?: string | null
@@ -383,6 +389,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      data_residency_configs: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          gateway_url: string | null
+          hmac_secret: string | null
+          id: string
+          last_ping_at: string | null
+          last_ping_error: string | null
+          last_ping_ok: boolean | null
+          mode: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          gateway_url?: string | null
+          hmac_secret?: string | null
+          id?: string
+          last_ping_at?: string | null
+          last_ping_error?: string | null
+          last_ping_ok?: boolean | null
+          mode?: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          gateway_url?: string | null
+          hmac_secret?: string | null
+          id?: string
+          last_ping_at?: string | null
+          last_ping_error?: string | null
+          last_ping_ok?: boolean | null
+          mode?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       error_logs: {
         Row: {

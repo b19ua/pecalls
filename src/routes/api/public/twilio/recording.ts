@@ -80,7 +80,39 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
           return new Response("ok");
         }
 
-        // Download from Twilio and store in Supabase
+        // Branch on data residency mode for this owner
+        const { getResidencyConfig, callGateway, isSelfHosted } = await import("@/lib/data-residency.server");
+        const cfg = await getResidencyConfig(call.owner_id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const lang = ((call as any).agents?.language as string) || "ru-RU";
+
+        if (isSelfHosted(cfg)) {
+          // Hand off: do NOT download or store audio/transcript in our cloud.
+          // The client's Data Gateway pulls audio from Twilio (with credentials we send) and
+          // runs its own transcription pipeline.
+          const handoff = await callGateway(cfg, "POST", "/calls/ingest", {
+            call_id: call.id,
+            twilio_call_sid: callSid,
+            recording_sid: recordingSid,
+            recording_url: `${recordingUrl}.mp3`,
+            duration_seconds: duration,
+            language: lang,
+          });
+          await supabaseAdmin
+            .from("calls")
+            .update({
+              data_residency: "self_hosted",
+              external_call_ref: call.id,
+              ...(duration ? { duration_seconds: duration } : {}),
+            })
+            .eq("id", call.id);
+          if (!handoff.ok) {
+            console.error("[recording] gateway handoff failed", handoff.status, handoff.error);
+          }
+          return new Response("ok");
+        }
+
+        // Cloud mode: download from Twilio and store in Supabase Storage.
         let storagePath: string | null = null;
         try {
           const audio = await downloadRecording(recordingSid);
@@ -91,9 +123,6 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
           if (upErr) throw upErr;
           storagePath = path;
 
-          // Transcribe (best-effort, don't block)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const lang = ((call as any).agents?.language as string) || "ru-RU";
           const transcript = await transcribeWithGemini(audio, lang);
 
           await supabaseAdmin

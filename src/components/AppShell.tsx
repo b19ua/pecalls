@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Bot, PhoneCall, BookOpen, Megaphone, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench } from "lucide-react";
+import { LayoutDashboard, Bot, PhoneCall, BookOpen, Megaphone, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench, Server } from "lucide-react";
 import { AppLogo } from "./AppLogo";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -19,6 +19,7 @@ const NAV = [
   { to: "/analytics",  key: "nav.analytics",  icon: BarChart3 },
   { to: "/knowledge",  key: "nav.knowledge",  icon: BookOpen },
   { to: "/campaigns",  key: "nav.campaigns",  icon: Megaphone },
+  { to: "/data-residency", key: "nav.residency", icon: Server },
   { to: "/settings",   key: "nav.settings",   icon: Settings },
 ] as const;
 

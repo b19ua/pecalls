@@ -77,7 +77,6 @@ function CallDetail() {
         <Stat label={t("call.cost")} value={`$${Number(call.cost_usd ?? 0).toFixed(4)}`} />
       </div>
 
-      {(call.recording_path || call.recording_url) && (
       <RecordingStatusCard
         call={call}
         audioUrl={audioUrl}
@@ -86,6 +85,8 @@ function CallDetail() {
         lang={lang}
         t={t}
       />
+
+
 
 
       <Card className="bg-gradient-card shadow-soft">

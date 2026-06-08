@@ -11,6 +11,8 @@ import { getRecordingSignedUrl } from "@/lib/calls.functions";
 import { retryRecordingFn } from "@/lib/twilio-recording.functions";
 import { toast } from "sonner";
 import { getCallContentFn } from "@/lib/data-residency.functions";
+import { formatCallTranscript, downloadTextFile } from "@/lib/transcript-export";
+import { Download } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/calls/$callId")({ component: CallDetail });
 

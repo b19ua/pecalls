@@ -76,7 +76,7 @@ export const analyzeCallFn = createServerFn({ method: "POST" })
     if (!text.trim()) return { ok: false as const, error: "Transcript is empty" };
 
     const a = await analyzeOnce(text, call.summary);
-    const updates: Record<string, unknown> = {
+    const { error: uerr } = await supabase.from("calls").update({
       sentiment: a.sentiment,
       sentiment_score: a.sentiment_score,
       complaint_flag: a.complaint_flag,
@@ -84,9 +84,8 @@ export const analyzeCallFn = createServerFn({ method: "POST" })
       competitor_names: a.competitor_names,
       topics: a.topics,
       analyzed_at: new Date().toISOString(),
-    };
-    if (!call.summary && a.short_summary) updates.summary = a.short_summary;
-    const { error: uerr } = await supabase.from("calls").update(updates).eq("id", call.id);
+      ...(!call.summary && a.short_summary ? { summary: a.short_summary } : {}),
+    }).eq("id", call.id);
     if (uerr) throw new Error(uerr.message);
     return { ok: true as const, analysis: a };
   });

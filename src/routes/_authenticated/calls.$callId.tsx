@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -146,7 +146,7 @@ function RecordingStatusCard({
   const tr = (ru: string, ro: string, en: string) =>
     lang === "ru" ? ru : lang === "ro" ? ro : en;
 
-  const labelByStatus: Record<string, { label: string; icon: JSX.Element; tone: string }> = {
+  const labelByStatus: Record<string, { label: string; icon: React.ReactNode; tone: string }> = {
     pending: {
       label: tr("Запись не запрошена", "Înregistrare necerută", "Recording not requested"),
       icon: <Mic className="h-4 w-4" />, tone: "text-muted-foreground",

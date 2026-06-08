@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Copy, KeyRound, Loader2, Plug, Trash2, Ban, Check } from "lucide-react";
+import { Copy, KeyRound, Loader2, Trash2, Ban, Check } from "lucide-react";
 import { listApiKeys, createApiKey, revokeApiKey, deleteApiKey } from "@/lib/api-keys.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
@@ -113,8 +113,7 @@ function CrmPage() {
     <div className="container max-w-6xl py-6 space-y-6">
       <PageHeader
         title={t("crm.title")}
-        subtitle={t("crm.subtitle")}
-        icon={Plug}
+        description={t("crm.subtitle")}
       />
 
       {/* Create */}

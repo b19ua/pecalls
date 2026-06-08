@@ -63,7 +63,7 @@ function publicBaseUrl(_req: Request) {
   // Always use the stable published project URL for Twilio webhooks.
   const override = process.env.PUBLIC_APP_URL;
   if (override) return override.replace(/\/$/, "");
-  return "https://project--d7e8c4a9-917e-4bb2-a113-6e70fdf150da.lovable.app";
+  return "https://pecalls.lovable.app";
 }
 
 /** Sync Twilio numbers from account into our cache table */

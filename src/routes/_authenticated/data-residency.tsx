@@ -134,6 +134,22 @@ function DataResidencyPage() {
                 <p className="text-xs text-muted-foreground mt-1">Used to sign every request with SHA-256 HMAC. Store the same value on the gateway side as <code>LUNARA_HMAC_SECRET</code>.</p>
               </div>
 
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="pr-4">
+                  <Label>Purge recordings from Twilio after ingest</Label>
+                  <p className="text-xs text-muted-foreground mt-1">Once your gateway confirms it has the file, Lunara sends Twilio a DELETE so no audio remains on the carrier side (zero-retention).</p>
+                </div>
+                <Switch checked={purgeTwilio} onCheckedChange={setPurgeTwilio} />
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="pr-4">
+                  <Label>Proxy audio through Lunara (VPN-friendly)</Label>
+                  <p className="text-xs text-muted-foreground mt-1">Enable if your gateway is only reachable from our servers (e.g. behind VPN). The browser will pull audio from Lunara, which streams bytes from your gateway over the trusted channel. Off = browser hits the gateway directly (faster, but requires a public hostname).</p>
+                </div>
+                <Switch checked={proxyAudio} onCheckedChange={setProxyAudio} />
+              </div>
+
               <div className="rounded-lg border p-3 text-xs flex items-start gap-2">
                 <ShieldCheck className="h-4 w-4 mt-0.5 text-primary shrink-0" />
                 <div>

@@ -133,3 +133,101 @@ function Stat({ label, value }: { label: string; value: string | number }) {
     </Card>
   );
 }
+
+function RecordingStatusCard({
+  call, audioUrl, onRetry, retrying, lang, t,
+}: {
+  call: any; audioUrl: string | null; onRetry: () => void; retrying: boolean;
+  lang: "ru" | "ro" | "en"; t: (k: string) => string;
+}) {
+  const status: string = call.recording_status ?? (call.recording_path || call.recording_url ? "ready" : "pending");
+  const has = !!(call.recording_path || call.recording_url) && !!audioUrl;
+
+  const tr = (ru: string, ro: string, en: string) =>
+    lang === "ru" ? ru : lang === "ro" ? ro : en;
+
+  const labelByStatus: Record<string, { label: string; icon: JSX.Element; tone: string }> = {
+    pending: {
+      label: tr("Запись не запрошена", "Înregistrare necerută", "Recording not requested"),
+      icon: <Mic className="h-4 w-4" />, tone: "text-muted-foreground",
+    },
+    requested: {
+      label: tr("Запрос отправлен в Twilio…", "Cerere trimisă către Twilio…", "Requesting from Twilio…"),
+      icon: <Loader2 className="h-4 w-4 animate-spin" />, tone: "text-muted-foreground",
+    },
+    recording: {
+      label: tr("Идёт запись звонка", "Înregistrare în curs", "Recording in progress"),
+      icon: <Mic className="h-4 w-4" />, tone: "text-primary",
+    },
+    ready: {
+      label: tr("Запись готова", "Înregistrare gata", "Recording ready"),
+      icon: <CheckCircle2 className="h-4 w-4" />, tone: "text-success",
+    },
+    failed: {
+      label: tr("Ошибка записи", "Eroare la înregistrare", "Recording failed"),
+      icon: <AlertCircle className="h-4 w-4" />, tone: "text-destructive",
+    },
+  };
+  const meta = labelByStatus[status] ?? labelByStatus.pending;
+  const isLive = call.status === "in_progress";
+  const canRetry = status === "failed" || status === "pending" || (status === "requested" && !isLive);
+
+  return (
+    <Card className="bg-gradient-card shadow-soft mb-5">
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <h3 className="font-display text-lg font-semibold">{t("call.recording")}</h3>
+          <div className={`flex items-center gap-2 text-sm ${meta.tone}`}>
+            {meta.icon}<span>{meta.label}</span>
+          </div>
+        </div>
+
+        {has ? (
+          <audio controls src={audioUrl!} className="w-full" />
+        ) : status === "ready" ? (
+          <div className="text-sm text-muted-foreground flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">
+            {status === "failed"
+              ? tr(
+                  "Twilio не подтвердил старт записи. Можно попробовать ещё раз.",
+                  "Twilio nu a confirmat înregistrarea. Încearcă din nou.",
+                  "Twilio did not confirm the recording start. You can retry.",
+                )
+              : status === "requested" || status === "recording"
+              ? tr(
+                  "Файл появится сразу после завершения звонка.",
+                  "Fișierul va apărea după încheierea apelului.",
+                  "The file will appear right after the call ends.",
+                )
+              : tr(
+                  "Для этого звонка запись не запрашивалась.",
+                  "Pentru acest apel nu s-a cerut înregistrare.",
+                  "No recording was requested for this call.",
+                )}
+          </div>
+        )}
+
+        {call.recording_error && (
+          <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive break-words">
+            {call.recording_error}
+          </div>
+        )}
+
+        {canRetry && (
+          <div className="mt-3">
+            <Button size="sm" variant="outline" onClick={onRetry} disabled={retrying}>
+              {retrying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              {tr("Запросить запись повторно", "Re-cere înregistrarea", "Retry recording")}
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+  );
+}

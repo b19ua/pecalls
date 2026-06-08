@@ -4,10 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, AlertCircle, CheckCircle2, Mic } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useServerFn } from "@tanstack/react-start";
 import { getRecordingSignedUrl } from "@/lib/calls.functions";
+import { retryRecordingFn } from "@/lib/twilio-recording.functions";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/calls/$callId")({ component: CallDetail });
 
@@ -19,16 +21,40 @@ function CallDetail() {
   const [call, setCall] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const getUrl = useServerFn(getRecordingSignedUrl);
+  const retry = useServerFn(retryRecordingFn);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
     supabase.from("calls").select("*").eq("id", callId).single().then(({ data }) => {
       setCall(data); setLoading(false);
       if (data?.recording_path || data?.recording_url) {
         getUrl({ data: { callId } }).then((r) => setAudioUrl(r.url)).catch(() => {});
+      } else {
+        setAudioUrl(null);
       }
     });
-  }, [callId, getUrl]);
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [callId]);
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    try {
+      const r = await retry({ data: { callId } });
+      if (r.ok) {
+        toast.success(lang === "ru" ? "Запись запрошена у Twilio" : lang === "ro" ? "Înregistrare cerută" : "Recording requested");
+        setTimeout(load, 1500);
+      } else {
+        toast.error(r.error ?? "Failed");
+      }
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   if (loading) return <div className="p-8 flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}</div>;
   if (!call) return <div className="p-8">{t("calls.empty.title")}</div>;

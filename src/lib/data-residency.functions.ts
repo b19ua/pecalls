@@ -64,10 +64,19 @@ export const pingResidencyGatewayFn = createServerFn({ method: "POST" })
   });
 
 /** Returns audio URL + transcript for a single call, sourced from cloud or client gateway. */
+type TranscriptItem = { role?: string; source?: string; text?: string; at?: string };
+type CallContent = {
+  audioUrl: string | null;
+  transcript: TranscriptItem[];
+  summary: string | null;
+  source: "cloud" | "self_hosted" | "self_hosted_offline" | "self_hosted_error";
+  error?: string;
+};
+
 export const getCallContentFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ callId: z.string().uuid() }).parse(d))
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data, context }): Promise<CallContent> => {
     const { supabase, userId } = context;
     const { data: call, error } = await supabase
       .from("calls")

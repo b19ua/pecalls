@@ -117,6 +117,25 @@ function CallsPage() {
     a.click();
     URL.revokeObjectURL(a.href);
   };
+  const exportTranscripts = (period: "day" | "week" | "month" | "all") => {
+    const now = Date.now();
+    const cutoff = period === "day" ? now - 86400000
+      : period === "week" ? now - 7 * 86400000
+      : period === "month" ? now - 30 * 86400000
+      : 0;
+    const subset = calls.filter((c) => +new Date(c.created_at) >= cutoff);
+    if (!subset.length) return;
+    const titleMap = {
+      day: lang === "ru" ? "Транскрипции за день" : lang === "ro" ? "Transcrieri pe zi" : "Transcripts — last 24h",
+      week: lang === "ru" ? "Транскрипции за неделю" : lang === "ro" ? "Transcrieri pe săptămână" : "Transcripts — last 7 days",
+      month: lang === "ru" ? "Транскрипции за месяц" : lang === "ro" ? "Transcrieri pe lună" : "Transcripts — last 30 days",
+      all: lang === "ru" ? "Все транскрипции" : lang === "ro" ? "Toate transcrierile" : "All transcripts",
+    };
+    const text = formatManyTranscripts(subset, titleMap[period], locale);
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTextFile(`transcripts-${period}-${date}.txt`, text);
+  };
+
 
   const togglePlay = async (c: Call) => {
     if (playingId === c.id) {

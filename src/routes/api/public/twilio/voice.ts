@@ -112,33 +112,16 @@ export const Route = createFileRoute("/api/public/twilio/voice")({
           : "";
         const bridgeWs = process.env.GEMINI_BRIDGE_WS_URL || defaultBridge;
 
-        // Start dual-channel recording for this in-progress call (fire-and-forget).
-        // Works for both PSTN and SIP inbound. Outbound also goes through this webhook
-        // and Twilio will treat the second Recordings.create as a no-op if Record=true was set.
+        // Start dual-channel recording. TwiML must return promptly so Twilio
+        // can connect the media stream — we don't await. The helper persists
+        // status/error on the call row so the UI can show it and offer retry.
         if (callSid && agent.record_calls) {
-          const lov = process.env.LOVABLE_API_KEY;
-          const tw = process.env.TWILIO_API_KEY;
-          const base =
-            process.env.PUBLIC_APP_URL?.replace(/\/$/, "") ||
-            "https://project--d7e8c4a9-917e-4bb2-a113-6e70fdf150da.lovable.app";
-          if (lov && tw) {
-            const params = new URLSearchParams({
-              RecordingChannels: "dual",
-              RecordingStatusCallback: `${base}/api/public/twilio/recording`,
-              RecordingStatusCallbackMethod: "POST",
-              RecordingStatusCallbackEvent: "completed",
-            });
-            // Don't await — TwiML must return promptly so Twilio can connect the stream.
-            fetch(`https://connector-gateway.lovable.dev/twilio/Calls/${callSid}/Recordings.json`, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${lov}`,
-                "X-Connection-Api-Key": tw,
-                "Content-Type": "application/x-www-form-urlencoded",
-              },
-              body: params,
-            }).catch((e) => console.error("[voice] start recording failed", e));
-          }
+          import("@/lib/twilio-recording.server")
+            .then(({ startTwilioRecording }) => startTwilioRecording(callSid))
+            .then((r) => {
+              if (!r.ok) console.error("[voice] start recording failed", r.status, r.error);
+            })
+            .catch((e) => console.error("[voice] start recording threw", e));
         }
 
         if (bridgeWs) {

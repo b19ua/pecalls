@@ -103,7 +103,7 @@ export const getCallContentFn = createServerFn({ method: "POST" })
       }
       return {
         audioUrl: res.data.audio_url,
-        transcript: Array.isArray(res.data.transcript) ? res.data.transcript : [],
+        transcript: (Array.isArray(res.data.transcript) ? res.data.transcript : []) as TranscriptItem[],
         summary: res.data.summary ?? null,
         source: "self_hosted" as const,
       };
@@ -118,7 +118,7 @@ export const getCallContentFn = createServerFn({ method: "POST" })
     }
     return {
       audioUrl,
-      transcript: Array.isArray(call.transcript) ? call.transcript : [],
+      transcript: (Array.isArray(call.transcript) ? call.transcript : []) as TranscriptItem[],
       summary: call.summary,
       source: "cloud" as const,
     };

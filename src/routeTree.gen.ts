@@ -20,6 +20,7 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedNumbersRouteImport } from './routes/_authenticated/numbers'
 import { Route as AuthenticatedLiveRouteImport } from './routes/_authenticated/live'
 import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
+import { Route as AuthenticatedDataResidencyRouteImport } from './routes/_authenticated/data-residency'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCampaignsRouteImport } from './routes/_authenticated/campaigns'
 import { Route as AuthenticatedCallsRouteImport } from './routes/_authenticated/calls'
@@ -86,6 +87,12 @@ const AuthenticatedKnowledgeRoute = AuthenticatedKnowledgeRouteImport.update({
   path: '/knowledge',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedDataResidencyRoute =
+  AuthenticatedDataResidencyRouteImport.update({
+    id: '/data-residency',
+    path: '/data-residency',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -157,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/calls': typeof AuthenticatedCallsRouteWithChildren
   '/campaigns': typeof AuthenticatedCampaignsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/data-residency': typeof AuthenticatedDataResidencyRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/live': typeof AuthenticatedLiveRoute
   '/numbers': typeof AuthenticatedNumbersRoute
@@ -179,6 +187,7 @@ export interface FileRoutesByTo {
   '/calls': typeof AuthenticatedCallsRouteWithChildren
   '/campaigns': typeof AuthenticatedCampaignsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/data-residency': typeof AuthenticatedDataResidencyRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/live': typeof AuthenticatedLiveRoute
   '/numbers': typeof AuthenticatedNumbersRoute
@@ -204,6 +213,7 @@ export interface FileRoutesById {
   '/_authenticated/calls': typeof AuthenticatedCallsRouteWithChildren
   '/_authenticated/campaigns': typeof AuthenticatedCampaignsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/data-residency': typeof AuthenticatedDataResidencyRoute
   '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRoute
   '/_authenticated/live': typeof AuthenticatedLiveRoute
   '/_authenticated/numbers': typeof AuthenticatedNumbersRoute
@@ -229,6 +239,7 @@ export interface FileRouteTypes {
     | '/calls'
     | '/campaigns'
     | '/dashboard'
+    | '/data-residency'
     | '/knowledge'
     | '/live'
     | '/numbers'
@@ -251,6 +262,7 @@ export interface FileRouteTypes {
     | '/calls'
     | '/campaigns'
     | '/dashboard'
+    | '/data-residency'
     | '/knowledge'
     | '/live'
     | '/numbers'
@@ -275,6 +287,7 @@ export interface FileRouteTypes {
     | '/_authenticated/calls'
     | '/_authenticated/campaigns'
     | '/_authenticated/dashboard'
+    | '/_authenticated/data-residency'
     | '/_authenticated/knowledge'
     | '/_authenticated/live'
     | '/_authenticated/numbers'
@@ -377,6 +390,13 @@ declare module '@tanstack/react-router' {
       path: '/knowledge'
       fullPath: '/knowledge'
       preLoaderRoute: typeof AuthenticatedKnowledgeRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/data-residency': {
+      id: '/_authenticated/data-residency'
+      path: '/data-residency'
+      fullPath: '/data-residency'
+      preLoaderRoute: typeof AuthenticatedDataResidencyRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/dashboard': {
@@ -489,6 +509,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCallsRoute: typeof AuthenticatedCallsRouteWithChildren
   AuthenticatedCampaignsRoute: typeof AuthenticatedCampaignsRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDataResidencyRoute: typeof AuthenticatedDataResidencyRoute
   AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRoute
   AuthenticatedLiveRoute: typeof AuthenticatedLiveRoute
   AuthenticatedNumbersRoute: typeof AuthenticatedNumbersRoute
@@ -502,6 +523,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCallsRoute: AuthenticatedCallsRouteWithChildren,
   AuthenticatedCampaignsRoute: AuthenticatedCampaignsRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDataResidencyRoute: AuthenticatedDataResidencyRoute,
   AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRoute,
   AuthenticatedLiveRoute: AuthenticatedLiveRoute,
   AuthenticatedNumbersRoute: AuthenticatedNumbersRoute,

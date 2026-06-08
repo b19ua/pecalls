@@ -155,9 +155,12 @@ app.post("/calls/ingest", verify, async (req, res) => {
 app.post("/calls/:id/analysis", verify, async (req, res) => {
   const { summary, transcript } = req.body ?? {};
   await pool.query(
-    `UPDATE calls SET summary = COALESCE($2, summary), transcript = COALESCE($3::jsonb, transcript), updated_at = now()
-     WHERE id=$1 AND owner_id=$2_owner`.replace("$2_owner", "$4"),
-    [req.params.id, summary ?? null, transcript ? JSON.stringify(transcript) : null, req.ownerId],
+    `UPDATE calls
+       SET summary    = COALESCE($1, summary),
+           transcript = COALESCE($2::jsonb, transcript),
+           updated_at = now()
+     WHERE id = $3 AND owner_id = $4`,
+    [summary ?? null, transcript ? JSON.stringify(transcript) : null, req.params.id, req.ownerId],
   ).catch((e) => log("error", "analysis update failed", { err: String(e) }));
   res.json({ ok: true });
 });

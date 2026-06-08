@@ -55,14 +55,16 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
     handlers: {
       POST: async ({ request }) => {
         const form = await request.formData();
-        if (!(await verifyTwilioRequest(request, form))) {
-          return new Response("Invalid signature", { status: 403 });
-        }
         const callSid = String(form.get("CallSid") ?? "");
         const recordingSid = String(form.get("RecordingSid") ?? "");
         const recordingUrl = String(form.get("RecordingUrl") ?? "");
         const status = String(form.get("RecordingStatus") ?? "");
         const duration = Number(form.get("RecordingDuration") ?? 0);
+
+        if (!(await verifyTwilioRequest(request, form))) {
+          console.error("[recording] invalid signature", { callSid, recordingSid, url: request.url });
+          return new Response("Invalid signature", { status: 403 });
+        }
 
         if (!callSid || !recordingSid || status !== "completed") {
           return new Response("ok");
@@ -76,6 +78,13 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
 
         if (!call) {
           console.warn("[recording] call not found", callSid);
+          const bySid = await fetch(`${GATEWAY}/Recordings/${recordingSid}.mp3`, {
+            headers: {
+              Authorization: `Bearer ${process.env.LOVABLE_API_KEY!}`,
+              "X-Connection-Api-Key": process.env.TWILIO_API_KEY!,
+            },
+          }).catch(() => null);
+          console.warn("[recording] lookup miss, recording reachable=", !!bySid?.ok);
           return new Response("ok");
         }
 

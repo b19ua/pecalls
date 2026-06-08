@@ -1,0 +1,161 @@
+// Lunara — Client Data Gateway reference server.
+// Receives HMAC-signed handoffs from Lunara cloud, downloads audio from Twilio,
+// transcribes locally, stores in PostgreSQL + MinIO. Never sends data back.
+import crypto from "node:crypto";
+import express from "express";
+import pg from "pg";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, CreateBucketCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
+const SECRET = process.env.LUNARA_HMAC_SECRET;
+if (!SECRET || SECRET.length < 16) {
+  console.error("LUNARA_HMAC_SECRET must be set (≥16 chars)");
+  process.exit(1);
+}
+const PORT = Number(process.env.PORT ?? 8080);
+const BUCKET = process.env.S3_BUCKET ?? "call-recordings";
+
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const s3 = new S3Client({
+  endpoint: process.env.S3_ENDPOINT,
+  region: process.env.S3_REGION ?? "us-east-1",
+  forcePathStyle: true,
+  credentials: { accessKeyId: process.env.S3_ACCESS_KEY, secretAccessKey: process.env.S3_SECRET_KEY },
+});
+
+async function ensureBucket() {
+  try { await s3.send(new HeadBucketCommand({ Bucket: BUCKET })); }
+  catch { await s3.send(new CreateBucketCommand({ Bucket: BUCKET })); }
+}
+
+// --------- HMAC verification middleware ---------
+function verify(req, res, next) {
+  const ts = req.header("x-lunara-timestamp") ?? "";
+  const sig = req.header("x-lunara-signature") ?? "";
+  const owner = req.header("x-lunara-owner") ?? "";
+  if (!ts || !sig || !owner) return res.status(401).json({ error: "missing signature headers" });
+  const drift = Math.abs(Math.floor(Date.now() / 1000) - Number(ts));
+  if (!Number.isFinite(drift) || drift > 300) return res.status(401).json({ error: "stale timestamp" });
+  const body = req.rawBody ?? "";
+  const expected = crypto.createHmac("sha256", SECRET).update(`${ts}\n${req.method}\n${req.path}\n${body}`).digest("hex");
+  const a = Buffer.from(sig); const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: "bad signature" });
+  req.ownerId = owner;
+  next();
+}
+
+// --------- Twilio download ---------
+async function downloadFromTwilio(recordingSid) {
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const keySid = process.env.TWILIO_API_KEY_SID;
+  const keySecret = process.env.TWILIO_API_KEY_SECRET;
+  if (!sid || !keySid || !keySecret) throw new Error("Twilio creds not configured");
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Recordings/${recordingSid}.mp3`;
+  const auth = Buffer.from(`${keySid}:${keySecret}`).toString("base64");
+  const r = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
+  if (!r.ok) throw new Error(`Twilio download failed: ${r.status}`);
+  return Buffer.from(await r.arrayBuffer());
+}
+
+// --------- Transcription backends ---------
+async function transcribe(audio, language) {
+  const backend = process.env.TRANSCRIBE_BACKEND ?? "gemini";
+  if (backend === "whisper") {
+    const url = `${process.env.WHISPER_URL}/asr?task=transcribe&language=${encodeURIComponent((language ?? "ru").slice(0, 2))}&output=json`;
+    const fd = new FormData();
+    fd.append("audio_file", new Blob([audio], { type: "audio/mpeg" }), "call.mp3");
+    const r = await fetch(url, { method: "POST", body: fd });
+    if (!r.ok) throw new Error(`whisper ${r.status}`);
+    const data = await r.json();
+    return data.text ?? "";
+  }
+  // Gemini
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("GEMINI_API_KEY not set");
+  const b64 = audio.toString("base64");
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [
+        { text: `Transcribe this call (language: ${language}). Format: "Speaker: text" lines, no commentary.` },
+        { inlineData: { mimeType: "audio/mp3", data: b64 } },
+      ] }],
+    }),
+  });
+  if (!r.ok) throw new Error(`gemini ${r.status}`);
+  const data = await r.json();
+  return data?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+}
+
+// --------- App ---------
+const app = express();
+app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf.toString("utf8"); }, limit: "1mb" }));
+
+app.get("/health", (_req, res) => res.json({ ok: true, version: "1.0.0" }));
+
+app.post("/calls/ingest", verify, async (req, res) => {
+  const { call_id, twilio_call_sid, recording_sid, duration_seconds, language } = req.body ?? {};
+  if (!call_id || !recording_sid) return res.status(400).json({ error: "call_id and recording_sid required" });
+
+  // ACK immediately, process async
+  res.json({ ok: true, accepted: call_id });
+
+  try {
+    await pool.query(
+      `INSERT INTO calls (id, owner_id, twilio_call_sid, recording_sid, duration_sec, language, status)
+       VALUES ($1,$2,$3,$4,$5,$6,'processing')
+       ON CONFLICT (id) DO UPDATE SET status='processing', recording_sid=EXCLUDED.recording_sid, updated_at=now()`,
+      [call_id, req.ownerId, twilio_call_sid ?? null, recording_sid, duration_seconds ?? 0, language ?? null],
+    );
+    const audio = await downloadFromTwilio(recording_sid);
+    const key = `${req.ownerId}/${call_id}.mp3`;
+    await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: audio, ContentType: "audio/mpeg" }));
+
+    let text = "";
+    try { text = await transcribe(audio, language ?? "ru"); }
+    catch (e) { console.error("[transcribe]", e); }
+
+    await pool.query(
+      `UPDATE calls SET storage_key=$2, transcript=$3::jsonb, status='ready', error=null, updated_at=now() WHERE id=$1`,
+      [call_id, key, JSON.stringify(text ? [{ source: process.env.TRANSCRIBE_BACKEND ?? "gemini", text, at: new Date().toISOString() }] : [])],
+    );
+  } catch (e) {
+    console.error("[ingest] failed", e);
+    await pool.query(`UPDATE calls SET status='failed', error=$2, updated_at=now() WHERE id=$1`, [call_id, String(e).slice(0, 500)]).catch(() => {});
+  }
+});
+
+app.get("/calls/:id", verify, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT storage_key, transcript, summary FROM calls WHERE id=$1 AND owner_id=$2`,
+    [req.params.id, req.ownerId],
+  );
+  const row = rows[0];
+  if (!row) return res.status(404).json({ error: "not found" });
+  let audio_url = null;
+  if (row.storage_key) {
+    audio_url = await getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET, Key: row.storage_key }), { expiresIn: 3600 });
+  }
+  res.json({ audio_url, transcript: row.transcript ?? [], summary: row.summary });
+});
+
+app.get("/calls/:id/audio-url", verify, async (req, res) => {
+  const { rows } = await pool.query(`SELECT storage_key FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
+  if (!rows[0]?.storage_key) return res.json({ audio_url: null });
+  const audio_url = await getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET, Key: rows[0].storage_key }), { expiresIn: 3600 });
+  res.json({ audio_url });
+});
+
+app.delete("/calls/:id", verify, async (req, res) => {
+  const { rows } = await pool.query(`SELECT storage_key FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
+  if (rows[0]?.storage_key) {
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: rows[0].storage_key })).catch(() => {});
+  }
+  await pool.query(`DELETE FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
+  res.json({ ok: true });
+});
+
+ensureBucket().then(() => {
+  app.listen(PORT, () => console.log(`[gateway] listening on :${PORT}`));
+});

@@ -1,0 +1,16 @@
+{
+  "name": "lunara-client-data-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "migrate": "node migrate.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.665.0",
+    "@aws-sdk/s3-request-presigner": "^3.665.0",
+    "express": "^4.21.0",
+    "pg": "^8.13.0"
+  }
+}

@@ -7,10 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PhoneCall, PhoneIncoming, PhoneOutgoing, Download, Search, Play, Pause, X } from "lucide-react";
+import { PhoneCall, PhoneIncoming, PhoneOutgoing, Download, Search, Play, Pause, X, FileText } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/lib/i18n";
 import { useServerFn } from "@tanstack/react-start";
 import { getRecordingSignedUrl } from "@/lib/calls.functions";
+import { formatManyTranscripts, downloadTextFile } from "@/lib/transcript-export";
 
 export const Route = createFileRoute("/_authenticated/calls")({ component: CallsPage });
 

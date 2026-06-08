@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_authenticated/calls/$callId")({ componen
 type TranscriptItem = { role: "agent" | "user" | "system"; text: string; ts?: string };
 
 function CallDetail() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { callId } = useParams({ from: "/_authenticated/calls/$callId" });
   const [call, setCall] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -78,13 +78,15 @@ function CallDetail() {
       </div>
 
       {(call.recording_path || call.recording_url) && (
-        <Card className="bg-gradient-card shadow-soft mb-5">
-          <CardContent className="p-5">
-            <h3 className="font-display text-lg font-semibold mb-3">{t("call.recording")}</h3>
-            {audioUrl ? <audio controls src={audioUrl} className="w-full" /> : <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> {t("common.loading")}</div>}
-          </CardContent>
-        </Card>
-      )}
+      <RecordingStatusCard
+        call={call}
+        audioUrl={audioUrl}
+        onRetry={handleRetry}
+        retrying={retrying}
+        lang={lang}
+        t={t}
+      />
+
 
       <Card className="bg-gradient-card shadow-soft">
         <CardContent className="p-5">

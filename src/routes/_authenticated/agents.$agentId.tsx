@@ -466,6 +466,24 @@ function AgentEditor() {
           </Button>
         </Section>
 
+        <Section title="База знаний (RAG)">
+          <p className="text-sm text-muted-foreground">
+            Загрузите PDF / DOCX / TXT / MD — документы будут разбиты на чанки, проиндексированы
+            эмбеддингами Gemini и подмешаны в контекст ассистента во время звонка (top-k поиск по
+            смыслу, не по ключевым словам).
+          </p>
+          {!isNew ? (
+            <Button asChild variant="outline">
+              <Link to="/knowledge" search={{ agent: agentId } as never}>
+                <BookOpen className="h-4 w-4 mr-1.5" /> Открыть базу знаний агента
+              </Link>
+            </Button>
+          ) : (
+            <p className="text-xs text-muted-foreground">Сначала сохраните агента, потом сможете загружать документы.</p>
+          )}
+        </Section>
+
+
       </div>
 
       {!isNew && (

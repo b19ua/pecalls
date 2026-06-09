@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Save, Trash2, Loader2, PhoneCall, Wrench } from "lucide-react";
+import { ArrowLeft, Save, Trash2, Loader2, PhoneCall, Wrench, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { TestCallDialog } from "@/components/TestCallDialog";
 import { useI18n } from "@/lib/i18n";

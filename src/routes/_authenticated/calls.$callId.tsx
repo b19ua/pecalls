@@ -106,9 +106,6 @@ function CallDetail() {
           <Button size="sm" variant="outline" onClick={() => { const text = formatCallTranscript(call as CallLike, locale); downloadTextFile(`transcript-${call.id.slice(0, 8)}.txt`, text); }} disabled={!turns.length}>
             <Download className="h-4 w-4 mr-2" /> TXT
           </Button>
-          <Button size="sm" onClick={() => downloadCallTranscriptPdf(call as CallLike, locale)} disabled={!turns.length}>
-            <FileText className="h-4 w-4 mr-2" /> PDF
-          </Button>
         </div>
       </div>
 

@@ -36,9 +36,10 @@ const MAX_BYTES = 50 * 1024 * 1024;
 function KnowledgePage() {
   const { t } = useI18n();
   const { user } = useAuth();
+  const search = useSearch({ from: "/_authenticated/knowledge" });
   const processFn = useServerFn(processDocument);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [agentId, setAgentId] = useState<string>("");
+  const [agentId, setAgentId] = useState<string>(search.agent ?? "");
   const [docs, setDocs] = useState<Doc[]>([]);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -47,8 +48,9 @@ function KnowledgePage() {
   useEffect(() => {
     supabase.from("agents").select("id,name").order("created_at", { ascending: false }).then(({ data }) => {
       setAgents(data ?? []);
-      if (data && data.length && !agentId) setAgentId(data[0].id);
+      if (data && data.length && !agentId) setAgentId(search.agent ?? data[0].id);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadDocs(id: string) {

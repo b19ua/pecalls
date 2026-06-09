@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/use-auth";
@@ -9,11 +9,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, Upload, FileText, Loader2, Trash2, RefreshCw, AlertCircle, CheckCircle2, Lightbulb } from "lucide-react";
+import { BookOpen, Upload, FileText, Loader2, Trash2, RefreshCw, AlertCircle, CheckCircle2, Lightbulb, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
 
-export const Route = createFileRoute("/_authenticated/knowledge")({ component: KnowledgePage });
+export const Route = createFileRoute("/_authenticated/knowledge")({
+  component: KnowledgePage,
+  validateSearch: (s: Record<string, unknown>) => ({ agent: typeof s.agent === "string" ? s.agent : undefined }),
+});
 
 type Agent = { id: string; name: string };
 type Doc = {

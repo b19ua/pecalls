@@ -421,6 +421,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 
   twilio.onclose = async () => {
     if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
+    if (transcriptSaveTimer !== null) { clearInterval(transcriptSaveTimer); transcriptSaveTimer = null; }
     try { gemini?.close(); } catch { /* noop */ }
     if (callSid && transcript.length) {
       try {

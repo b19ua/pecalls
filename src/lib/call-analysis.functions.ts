@@ -27,34 +27,28 @@ const Out = z.object({
 });
 
 async function analyzeOnce(text: string, summary: string | null): Promise<z.infer<typeof Out>> {
-  const key = process.env.LOVABLE_API_KEY;
-  if (!key) throw new Error("LOVABLE_API_KEY not configured");
-  const body = {
-    model: "google/gemini-2.5-flash",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a call-center quality analyst. Read the call transcript and return STRICT JSON, no commentary. Detect caller sentiment, complaint risk, competitor mentions and main topics. Languages: ru/ro/en mixed. Keys: sentiment (positive|neutral|negative), sentiment_score (-1..1), complaint_flag (bool), competitor_mentioned (bool), competitor_names (string[]), topics (string[] up to 5 short), short_summary (≤2 sentences in the call's language).",
-      },
-      {
-        role: "user",
-        content: `Summary so far: ${summary ?? "(none)"}\n\nTranscript:\n${text.slice(0, 12000)}\n\nReturn JSON only.`,
-      },
-    ],
-    response_format: { type: "json_object" },
-  };
-  const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("GEMINI_API_KEY not configured");
+  const sys = "You are a call-center quality analyst. Read the call transcript and return STRICT JSON, no commentary. Detect caller sentiment, complaint risk, competitor mentions and main topics. Languages: ru/ro/en mixed. Keys: sentiment (positive|neutral|negative), sentiment_score (-1..1), complaint_flag (bool), competitor_mentioned (bool), competitor_names (string[]), topics (string[] up to 5 short), short_summary (≤2 sentences in the call's language). Return ONLY the JSON object.";
+  const userText = `Summary so far: ${summary ?? "(none)"}\n\nTranscript:\n${text.slice(0, 12000)}\n\nReturn JSON only.`;
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: sys }] },
+        contents: [{ role: "user", parts: [{ text: userText }] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
+      }),
+    },
+  );
   if (!r.ok) {
     const t = await r.text().catch(() => "");
-    throw new Error(`AI gateway ${r.status}: ${t.slice(0, 200)}`);
+    throw new Error(`Gemini ${r.status}: ${t.slice(0, 200)}`);
   }
   const data = await r.json();
-  const content: string = data?.choices?.[0]?.message?.content ?? "{}";
+  const content: string = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "{}";
   let parsed: unknown;
   try { parsed = JSON.parse(content); } catch { parsed = {}; }
   return Out.parse(parsed);

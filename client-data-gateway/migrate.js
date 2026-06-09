@@ -28,9 +28,22 @@ CREATE TABLE IF NOT EXISTS audit_log (
   owner_id  TEXT,
   action    TEXT NOT NULL,
   target_id TEXT,
-  meta      JSONB NOT NULL DEFAULT '{}'::jsonb
+  meta      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  prev_hash TEXT,
+  hash      TEXT
 );
 CREATE INDEX IF NOT EXISTS audit_owner_ts ON audit_log(owner_id, ts DESC);
+
+-- On-prem RBAC: who can view/export/delete recordings.
+-- Roles: admin | supervisor | operator | auditor.
+CREATE TABLE IF NOT EXISTS gateway_users (
+  id            TEXT PRIMARY KEY,
+  email         TEXT UNIQUE NOT NULL,
+  display_name  TEXT,
+  role          TEXT NOT NULL DEFAULT 'operator',
+  department    TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 const c = new Client({ connectionString: process.env.DATABASE_URL });

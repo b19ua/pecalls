@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Save, Trash2, Loader2, PhoneCall, Wrench } from "lucide-react";
+import { ArrowLeft, Save, Trash2, Loader2, PhoneCall, Wrench, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { TestCallDialog } from "@/components/TestCallDialog";
 import { useI18n } from "@/lib/i18n";
@@ -465,6 +465,24 @@ function AgentEditor() {
             <Link to="/tools"><Wrench className="h-4 w-4 mr-1.5" /> Открыть инструменты</Link>
           </Button>
         </Section>
+
+        <Section title="База знаний (RAG)">
+          <p className="text-sm text-muted-foreground">
+            Загрузите PDF / DOCX / TXT / MD — документы будут разбиты на чанки, проиндексированы
+            эмбеддингами Gemini и подмешаны в контекст ассистента во время звонка (top-k поиск по
+            смыслу, не по ключевым словам).
+          </p>
+          {!isNew ? (
+            <Button asChild variant="outline">
+              <Link to="/knowledge" search={{ agent: agentId } as never}>
+                <BookOpen className="h-4 w-4 mr-1.5" /> Открыть базу знаний агента
+              </Link>
+            </Button>
+          ) : (
+            <p className="text-xs text-muted-foreground">Сначала сохраните агента, потом сможете загружать документы.</p>
+          )}
+        </Section>
+
 
       </div>
 

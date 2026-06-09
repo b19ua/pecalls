@@ -7,12 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PhoneCall, PhoneIncoming, PhoneOutgoing, Download, Search, Play, Pause, X, FileText, AlertTriangle, Flag, Sparkles } from "lucide-react";
+import { PhoneCall, PhoneIncoming, PhoneOutgoing, Download, Search, Play, Pause, X, AlertTriangle, Flag, Sparkles } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/lib/i18n";
 import { useServerFn } from "@tanstack/react-start";
 import { getRecordingSignedUrl } from "@/lib/calls.functions";
-import { formatManyTranscripts, downloadTextFile, formatCallTranscript, downloadCallTranscriptPdf, downloadCallsReportPdf, type CallLike } from "@/lib/transcript-export";
+import { formatManyTranscripts, downloadTextFile, formatCallTranscript, type CallLike } from "@/lib/transcript-export";
 import { analyzePendingCallsFn } from "@/lib/call-analysis.functions";
 import { toast } from "sonner";
 
@@ -161,11 +161,7 @@ function CallsPage() {
     downloadTextFile(`transcripts-${period}-${new Date().toISOString().slice(0, 10)}.txt`, text);
   };
 
-  const exportPdfReport = (period: "day" | "week" | "month" | "all") => {
-    const subset = subsetByPeriod(period);
-    if (!subset.length) { toast.info("No calls in this period"); return; }
-    downloadCallsReportPdf(subset, period, locale);
-  };
+  // PDF removed by request — TXT + MP3 only.
 
   const downloadOneTranscript = async (c: Call) => {
     const text = formatCallTranscript(c as unknown as CallLike, locale);
@@ -211,22 +207,6 @@ function CallsPage() {
             {analyzing ? "…" : (lang === "ru" ? "Анализ настроений" : lang === "ro" ? "Analiză sentimente" : "Analyze sentiment")}
           </Button>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={!calls.length}>
-                <FileText className="h-4 w-4 mr-1.5" />
-                PDF
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>{lang === "ru" ? "PDF-отчёт" : lang === "ro" ? "Raport PDF" : "PDF report"}</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => exportPdfReport("day")}>{lang === "ru" ? "За день" : "Last 24 hours"}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportPdfReport("week")}>{lang === "ru" ? "За неделю" : "Last 7 days"}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportPdfReport("month")}>{lang === "ru" ? "За месяц" : "Last 30 days"}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportPdfReport("all")}>{lang === "ru" ? "Все звонки" : "All calls"}</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -365,7 +345,6 @@ function CallsPage() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={(e) => { e.preventDefault(); downloadOneTranscript(c); }}>Transcript (TXT)</DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => { e.preventDefault(); downloadCallTranscriptPdf(c as unknown as CallLike, locale); }}>Transcript (PDF)</DropdownMenuItem>
                               {hasRecording && (
                                 <DropdownMenuItem onClick={async (e) => {
                                   e.preventDefault();

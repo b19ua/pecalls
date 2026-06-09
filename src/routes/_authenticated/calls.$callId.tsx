@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Loader2, RefreshCw, AlertCircle, CheckCircle2, Mic, Download, FileText, Sparkles, AlertTriangle, Flag } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, AlertCircle, CheckCircle2, Mic, Download, Sparkles, AlertTriangle, Flag } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useServerFn } from "@tanstack/react-start";
 import { getRecordingSignedUrl } from "@/lib/calls.functions";
@@ -13,7 +13,7 @@ import { retryRecordingFn } from "@/lib/twilio-recording.functions";
 import { analyzeCallFn } from "@/lib/call-analysis.functions";
 import { toast } from "sonner";
 import { getCallContentFn } from "@/lib/data-residency.functions";
-import { formatCallTranscript, downloadTextFile, downloadCallTranscriptPdf, groupTranscriptByTurn, type CallLike } from "@/lib/transcript-export";
+import { formatCallTranscript, downloadTextFile, groupTranscriptByTurn, type CallLike } from "@/lib/transcript-export";
 
 export const Route = createFileRoute("/_authenticated/calls/$callId")({ component: CallDetail });
 
@@ -105,9 +105,6 @@ function CallDetail() {
           </Button>
           <Button size="sm" variant="outline" onClick={() => { const text = formatCallTranscript(call as CallLike, locale); downloadTextFile(`transcript-${call.id.slice(0, 8)}.txt`, text); }} disabled={!turns.length}>
             <Download className="h-4 w-4 mr-2" /> TXT
-          </Button>
-          <Button size="sm" onClick={() => downloadCallTranscriptPdf(call as CallLike, locale)} disabled={!turns.length}>
-            <FileText className="h-4 w-4 mr-2" /> PDF
           </Button>
         </div>
       </div>

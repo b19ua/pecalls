@@ -109,6 +109,40 @@ async function transcribe(audio, language) {
   return data?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
 }
 
+// --------- Summary backends (Ollama for fully on-prem) ---------
+async function summarize(text, language) {
+  const backend = process.env.SUMMARY_BACKEND ?? "none";
+  if (backend === "none" || !text) return null;
+  const sys = `You are a call analyst. Reply in the SAME language as the dialog (${language ?? "auto"}). Output: 1) what the call was about (1-2 sentences), 2) key facts (bullets), 3) caller intent, 4) next steps. No filler.`;
+  if (backend === "ollama") {
+    const url = `${process.env.OLLAMA_URL ?? "http://ollama:11434"}/api/generate`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: process.env.OLLAMA_MODEL ?? "qwen2.5:7b-instruct", system: sys, prompt: text.slice(0, 12000), stream: false }),
+    });
+    if (!r.ok) throw new Error(`ollama ${r.status}`);
+    const j = await r.json();
+    return j.response ?? null;
+  }
+  return null;
+}
+
+// --------- Audit log (hash-chain — tamper-evident) ---------
+async function audit(ownerId, action, targetId, meta) {
+  try {
+    const { rows } = await pool.query(`SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1`);
+    const prev = rows[0]?.hash ?? "GENESIS";
+    const ts = new Date().toISOString();
+    const payload = JSON.stringify({ ts, owner: ownerId, action, target: targetId, meta: meta ?? {}, prev });
+    const hash = crypto.createHmac("sha256", SECRET).update(payload).digest("hex");
+    await pool.query(
+      `INSERT INTO audit_log (owner_id, action, target_id, meta, prev_hash, hash) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [ownerId ?? null, action, targetId ?? null, meta ?? {}, prev, hash],
+    );
+  } catch (e) { log("warn", "audit failed", { err: String(e) }); }
+}
+
 // --------- App ---------
 const app = express();
 app.disable("x-powered-by");
@@ -117,9 +151,13 @@ app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf.toString(
 
 app.get("/health", (_req, res) => res.json({ ok: true, version: VERSION }));
 app.get("/ready", async (_req, res) => {
-  const out = { ok: true, db: false, s3: false };
+  const out = { ok: true, version: VERSION, db: false, s3: false, transcribe: process.env.TRANSCRIBE_BACKEND ?? "gemini", summary: process.env.SUMMARY_BACKEND ?? "none", retention_days: RETENTION_DAYS, allowed_ips: ALLOWED_IPS.length };
   try { await pool.query("SELECT 1"); out.db = true; } catch (e) { out.ok = false; out.dbError = String(e).slice(0, 200); }
   try { await s3.send(new HeadBucketCommand({ Bucket: BUCKET })); out.s3 = true; } catch (e) { out.ok = false; out.s3Error = String(e).slice(0, 200); }
+  try {
+    const { rows } = await pool.query(`SELECT count(*)::int AS total, count(*) FILTER (WHERE status='ready')::int AS ready, count(*) FILTER (WHERE status='failed')::int AS failed FROM calls`);
+    out.calls = rows[0];
+  } catch { /* ignore */ }
   res.status(out.ok ? 200 : 503).json(out);
 });
 
@@ -140,10 +178,14 @@ app.post("/calls/ingest", verify, async (req, res) => {
     let text = "";
     try { text = await transcribe(audio, language ?? "ru"); }
     catch (e) { log("error", "transcribe failed", { call_id, err: String(e) }); }
+    let summaryText = null;
+    try { summaryText = await summarize(text, language); }
+    catch (e) { log("warn", "summary failed", { call_id, err: String(e) }); }
     await pool.query(
-      `UPDATE calls SET storage_key=$2, transcript=$3::jsonb, status='ready', error=null, updated_at=now() WHERE id=$1`,
-      [call_id, key, JSON.stringify(text ? [{ source: process.env.TRANSCRIBE_BACKEND ?? "gemini", text, at: new Date().toISOString() }] : [])],
+      `UPDATE calls SET storage_key=$2, transcript=$3::jsonb, summary=COALESCE($4, summary), status='ready', error=null, updated_at=now() WHERE id=$1`,
+      [call_id, key, JSON.stringify(text ? [{ source: process.env.TRANSCRIBE_BACKEND ?? "gemini", text, at: new Date().toISOString() }] : []), summaryText],
     );
+    await audit(req.ownerId, "ingest", call_id, { bytes: audio.length, transcribed: !!text, summarized: !!summaryText });
     log("info", "ingest ok", { call_id, owner: req.ownerId, bytes: audio.length });
   } catch (e) {
     log("error", "ingest failed", { call_id, err: String(e) });
@@ -196,8 +238,45 @@ app.delete("/calls/:id", verify, async (req, res) => {
   const { rows } = await pool.query(`SELECT storage_key FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
   if (rows[0]?.storage_key) await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: rows[0].storage_key })).catch(() => {});
   await pool.query(`DELETE FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
+  await audit(req.ownerId, "delete", req.params.id, {});
   log("info", "deleted", { id: req.params.id, owner: req.ownerId });
   res.json({ ok: true });
+});
+
+// --------- Audit + stats endpoints ---------
+app.get("/audit/log", verify, async (req, res) => {
+  const limit = Math.min(Number(req.query.limit ?? 200), 1000);
+  const { rows } = await pool.query(
+    `SELECT id, ts, action, target_id, meta, prev_hash, hash FROM audit_log WHERE owner_id=$1 ORDER BY id DESC LIMIT $2`,
+    [req.ownerId, limit],
+  );
+  res.json({ entries: rows });
+});
+
+app.get("/audit/verify", verify, async (req, res) => {
+  // Recompute hash chain to detect tampering.
+  const { rows } = await pool.query(`SELECT id, ts, owner_id, action, target_id, meta, prev_hash, hash FROM audit_log WHERE owner_id=$1 ORDER BY id ASC`, [req.ownerId]);
+  let prev = "GENESIS";
+  for (const r of rows) {
+    const payload = JSON.stringify({ ts: new Date(r.ts).toISOString(), owner: r.owner_id, action: r.action, target: r.target_id, meta: r.meta ?? {}, prev });
+    const calc = crypto.createHmac("sha256", SECRET).update(payload).digest("hex");
+    if (calc !== r.hash || r.prev_hash !== prev) return res.json({ ok: false, tampered_at_id: r.id, count: rows.length });
+    prev = r.hash;
+  }
+  res.json({ ok: true, count: rows.length });
+});
+
+app.get("/stats", verify, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS total,
+            count(*) FILTER (WHERE status='ready')::int AS ready,
+            count(*) FILTER (WHERE status='failed')::int AS failed,
+            count(*) FILTER (WHERE status='processing')::int AS processing,
+            count(*) FILTER (WHERE created_at > now() - interval '24 hours')::int AS last_24h
+       FROM calls WHERE owner_id=$1`,
+    [req.ownerId],
+  );
+  res.json(rows[0]);
 });
 
 // --------- Retention sweeper ---------

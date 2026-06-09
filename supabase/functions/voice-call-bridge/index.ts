@@ -90,10 +90,19 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let silenceTimer: number | null = null;
   let handoffTriggered = false;
   let recordingStarted = false;
+  let transcriptSaveTimer: number | null = null;
+  let lastSavedLen = 0;
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;
   const ctxReady = new Promise<Ctx>((res) => { ctxResolver = res; });
+
+  const persistTranscript = async () => {
+    if (!callSid || transcript.length === lastSavedLen) return;
+    lastSavedLen = transcript.length;
+    try { await supa.from("calls").update({ transcript, status: "in_progress" }).eq("twilio_call_sid", callSid); }
+    catch (e) { console.error("live transcript save", e); }
+  };
 
   const connectGemini = () => {
     gemini = new WebSocket(GEMINI_WS);
@@ -284,11 +293,18 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     }
   };
 
+  const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
   const maybeHandoffByPhrase = (text: string) => {
     if (handoffTriggered || !ctx?.handoffEnabled || !ctx.handoffNumbers.length) return;
-    const lower = text.toLowerCase();
-    const hit = ctx.handoffPhrases.some((p) => p && lower.includes(p.toLowerCase()));
-    if (hit) triggerHandoff("phrase");
+    const haystack = norm(text);
+    const hit = ctx.handoffPhrases.some((p) => {
+      const needle = norm(p || "");
+      return needle.length >= 2 && haystack.includes(needle);
+    });
+    if (hit) {
+      log("handoff phrase match:", text);
+      triggerHandoff("phrase");
+    }
   };
 
   const triggerHandoff = async (reason: "dtmf" | "phrase") => {
@@ -380,6 +396,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid);
         lastUserAudioAt = Date.now();
         if (silenceTimer === null) silenceTimer = setInterval(checkSilence, 2000) as unknown as number;
+        if (transcriptSaveTimer === null) transcriptSaveTimer = setInterval(() => { void persistTranscript(); }, 3000) as unknown as number;
         if (!gemini && agentId) startContextAndGemini(agentId);
       } else if (msg.event === "media") {
         const b64 = msg.media?.payload;
@@ -404,6 +421,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 
   twilio.onclose = async () => {
     if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
+    if (transcriptSaveTimer !== null) { clearInterval(transcriptSaveTimer); transcriptSaveTimer = null; }
     try { gemini?.close(); } catch { /* noop */ }
     if (callSid && transcript.length) {
       try {

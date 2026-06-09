@@ -284,11 +284,18 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     }
   };
 
+  const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
   const maybeHandoffByPhrase = (text: string) => {
     if (handoffTriggered || !ctx?.handoffEnabled || !ctx.handoffNumbers.length) return;
-    const lower = text.toLowerCase();
-    const hit = ctx.handoffPhrases.some((p) => p && lower.includes(p.toLowerCase()));
-    if (hit) triggerHandoff("phrase");
+    const haystack = norm(text);
+    const hit = ctx.handoffPhrases.some((p) => {
+      const needle = norm(p || "");
+      return needle.length >= 2 && haystack.includes(needle);
+    });
+    if (hit) {
+      log("handoff phrase match:", text);
+      triggerHandoff("phrase");
+    }
   };
 
   const triggerHandoff = async (reason: "dtmf" | "phrase") => {

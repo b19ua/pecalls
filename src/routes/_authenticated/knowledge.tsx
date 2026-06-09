@@ -136,6 +136,13 @@ function KnowledgePage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
+      {search.agent && (
+        <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
+          <Link to="/agents/$agentId" params={{ agentId: search.agent }}>
+            <ArrowLeft className="h-4 w-4 mr-1" /> К агенту
+          </Link>
+        </Button>
+      )}
       <PageHeader title={t("kb.title")} description={t("kb.subtitle")} />
 
       <div className="mb-5 rounded-xl border border-primary/20 bg-primary/5 p-3 flex items-start gap-2.5 text-sm">

@@ -161,11 +161,7 @@ function CallsPage() {
     downloadTextFile(`transcripts-${period}-${new Date().toISOString().slice(0, 10)}.txt`, text);
   };
 
-  const exportPdfReport = (period: "day" | "week" | "month" | "all") => {
-    const subset = subsetByPeriod(period);
-    if (!subset.length) { toast.info("No calls in this period"); return; }
-    downloadCallsReportPdf(subset, period, locale);
-  };
+  // PDF removed by request — TXT + MP3 only.
 
   const downloadOneTranscript = async (c: Call) => {
     const text = formatCallTranscript(c as unknown as CallLike, locale);

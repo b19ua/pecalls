@@ -7,12 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PhoneCall, PhoneIncoming, PhoneOutgoing, Download, Search, Play, Pause, X, FileText, AlertTriangle, Flag, Sparkles } from "lucide-react";
+import { PhoneCall, PhoneIncoming, PhoneOutgoing, Download, Search, Play, Pause, X, AlertTriangle, Flag, Sparkles } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/lib/i18n";
 import { useServerFn } from "@tanstack/react-start";
 import { getRecordingSignedUrl } from "@/lib/calls.functions";
-import { formatManyTranscripts, downloadTextFile, formatCallTranscript, downloadCallTranscriptPdf, downloadCallsReportPdf, type CallLike } from "@/lib/transcript-export";
+import { formatManyTranscripts, downloadTextFile, formatCallTranscript, type CallLike } from "@/lib/transcript-export";
 import { analyzePendingCallsFn } from "@/lib/call-analysis.functions";
 import { toast } from "sonner";
 

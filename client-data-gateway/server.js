@@ -151,9 +151,13 @@ app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf.toString(
 
 app.get("/health", (_req, res) => res.json({ ok: true, version: VERSION }));
 app.get("/ready", async (_req, res) => {
-  const out = { ok: true, db: false, s3: false };
+  const out = { ok: true, version: VERSION, db: false, s3: false, transcribe: process.env.TRANSCRIBE_BACKEND ?? "gemini", summary: process.env.SUMMARY_BACKEND ?? "none", retention_days: RETENTION_DAYS, allowed_ips: ALLOWED_IPS.length };
   try { await pool.query("SELECT 1"); out.db = true; } catch (e) { out.ok = false; out.dbError = String(e).slice(0, 200); }
   try { await s3.send(new HeadBucketCommand({ Bucket: BUCKET })); out.s3 = true; } catch (e) { out.ok = false; out.s3Error = String(e).slice(0, 200); }
+  try {
+    const { rows } = await pool.query(`SELECT count(*)::int AS total, count(*) FILTER (WHERE status='ready')::int AS ready, count(*) FILTER (WHERE status='failed')::int AS failed FROM calls`);
+    out.calls = rows[0];
+  } catch { /* ignore */ }
   res.status(out.ok ? 200 : 503).json(out);
 });
 

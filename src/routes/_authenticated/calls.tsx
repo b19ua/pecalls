@@ -207,22 +207,6 @@ function CallsPage() {
             {analyzing ? "…" : (lang === "ru" ? "Анализ настроений" : lang === "ro" ? "Analiză sentimente" : "Analyze sentiment")}
           </Button>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={!calls.length}>
-                <FileText className="h-4 w-4 mr-1.5" />
-                PDF
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>{lang === "ru" ? "PDF-отчёт" : lang === "ro" ? "Raport PDF" : "PDF report"}</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => exportPdfReport("day")}>{lang === "ru" ? "За день" : "Last 24 hours"}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportPdfReport("week")}>{lang === "ru" ? "За неделю" : "Last 7 days"}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportPdfReport("month")}>{lang === "ru" ? "За месяц" : "Last 30 days"}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportPdfReport("all")}>{lang === "ru" ? "Все звонки" : "All calls"}</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

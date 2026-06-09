@@ -238,8 +238,45 @@ app.delete("/calls/:id", verify, async (req, res) => {
   const { rows } = await pool.query(`SELECT storage_key FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
   if (rows[0]?.storage_key) await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: rows[0].storage_key })).catch(() => {});
   await pool.query(`DELETE FROM calls WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
+  await audit(req.ownerId, "delete", req.params.id, {});
   log("info", "deleted", { id: req.params.id, owner: req.ownerId });
   res.json({ ok: true });
+});
+
+// --------- Audit + stats endpoints ---------
+app.get("/audit/log", verify, async (req, res) => {
+  const limit = Math.min(Number(req.query.limit ?? 200), 1000);
+  const { rows } = await pool.query(
+    `SELECT id, ts, action, target_id, meta, prev_hash, hash FROM audit_log WHERE owner_id=$1 ORDER BY id DESC LIMIT $2`,
+    [req.ownerId, limit],
+  );
+  res.json({ entries: rows });
+});
+
+app.get("/audit/verify", verify, async (req, res) => {
+  // Recompute hash chain to detect tampering.
+  const { rows } = await pool.query(`SELECT id, ts, owner_id, action, target_id, meta, prev_hash, hash FROM audit_log WHERE owner_id=$1 ORDER BY id ASC`, [req.ownerId]);
+  let prev = "GENESIS";
+  for (const r of rows) {
+    const payload = JSON.stringify({ ts: new Date(r.ts).toISOString(), owner: r.owner_id, action: r.action, target: r.target_id, meta: r.meta ?? {}, prev });
+    const calc = crypto.createHmac("sha256", SECRET).update(payload).digest("hex");
+    if (calc !== r.hash || r.prev_hash !== prev) return res.json({ ok: false, tampered_at_id: r.id, count: rows.length });
+    prev = r.hash;
+  }
+  res.json({ ok: true, count: rows.length });
+});
+
+app.get("/stats", verify, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS total,
+            count(*) FILTER (WHERE status='ready')::int AS ready,
+            count(*) FILTER (WHERE status='failed')::int AS failed,
+            count(*) FILTER (WHERE status='processing')::int AS processing,
+            count(*) FILTER (WHERE created_at > now() - interval '24 hours')::int AS last_24h
+       FROM calls WHERE owner_id=$1`,
+    [req.ownerId],
+  );
+  res.json(rows[0]);
 });
 
 // --------- Retention sweeper ---------

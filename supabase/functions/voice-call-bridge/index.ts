@@ -396,6 +396,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid);
         lastUserAudioAt = Date.now();
         if (silenceTimer === null) silenceTimer = setInterval(checkSilence, 2000) as unknown as number;
+        if (transcriptSaveTimer === null) transcriptSaveTimer = setInterval(() => { void persistTranscript(); }, 3000) as unknown as number;
         if (!gemini && agentId) startContextAndGemini(agentId);
       } else if (msg.event === "media") {
         const b64 = msg.media?.payload;

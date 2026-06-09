@@ -68,6 +68,20 @@ export const pingResidencyGatewayFn = createServerFn({ method: "POST" })
     return res.ok ? { ok: true } : { ok: false, error: res.error };
   });
 
+export const gatewayHealthFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { userId } = context;
+    const { getResidencyConfig, callGateway, isSelfHosted } = await import("@/lib/data-residency.server");
+    const cfg = await getResidencyConfig(userId);
+    if (!isSelfHosted(cfg)) return { ok: false as const, error: "Gateway not configured" };
+    const t0 = Date.now();
+    const ready = await callGateway<Record<string, unknown>>(cfg, "GET", "/ready", undefined, { timeoutMs: 8000 });
+    const latencyMs = Date.now() - t0;
+    if (!ready.ok) return { ok: false as const, error: ready.error, latencyMs };
+    return { ok: true as const, latencyMs, info: ready.data };
+  });
+
 /** Returns audio URL + transcript for a single call, sourced from cloud or client gateway. */
 type TranscriptItem = { role?: string; source?: string; text?: string; at?: string };
 type CallContent = {

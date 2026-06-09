@@ -178,10 +178,14 @@ app.post("/calls/ingest", verify, async (req, res) => {
     let text = "";
     try { text = await transcribe(audio, language ?? "ru"); }
     catch (e) { log("error", "transcribe failed", { call_id, err: String(e) }); }
+    let summaryText = null;
+    try { summaryText = await summarize(text, language); }
+    catch (e) { log("warn", "summary failed", { call_id, err: String(e) }); }
     await pool.query(
-      `UPDATE calls SET storage_key=$2, transcript=$3::jsonb, status='ready', error=null, updated_at=now() WHERE id=$1`,
-      [call_id, key, JSON.stringify(text ? [{ source: process.env.TRANSCRIBE_BACKEND ?? "gemini", text, at: new Date().toISOString() }] : [])],
+      `UPDATE calls SET storage_key=$2, transcript=$3::jsonb, summary=COALESCE($4, summary), status='ready', error=null, updated_at=now() WHERE id=$1`,
+      [call_id, key, JSON.stringify(text ? [{ source: process.env.TRANSCRIBE_BACKEND ?? "gemini", text, at: new Date().toISOString() }] : []), summaryText],
     );
+    await audit(req.ownerId, "ingest", call_id, { bytes: audio.length, transcribed: !!text, summarized: !!summaryText });
     log("info", "ingest ok", { call_id, owner: req.ownerId, bytes: audio.length });
   } catch (e) {
     log("error", "ingest failed", { call_id, err: String(e) });

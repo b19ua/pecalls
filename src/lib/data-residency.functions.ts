@@ -79,7 +79,7 @@ export const gatewayHealthFn = createServerFn({ method: "POST" })
     const ready = await callGateway<Record<string, unknown>>(cfg, "GET", "/ready", undefined, { timeoutMs: 8000 });
     const latencyMs = Date.now() - t0;
     if (!ready.ok) return { ok: false as const, error: ready.error, latencyMs };
-    return { ok: true as const, latencyMs, info: ready.data };
+    return { ok: true as const, latencyMs, info: JSON.parse(JSON.stringify(ready.data)) as Record<string, string | number | boolean | null> };
   });
 
 /** Returns audio URL + transcript for a single call, sourced from cloud or client gateway. */

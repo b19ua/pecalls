@@ -109,6 +109,40 @@ async function transcribe(audio, language) {
   return data?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
 }
 
+// --------- Summary backends (Ollama for fully on-prem) ---------
+async function summarize(text, language) {
+  const backend = process.env.SUMMARY_BACKEND ?? "none";
+  if (backend === "none" || !text) return null;
+  const sys = `You are a call analyst. Reply in the SAME language as the dialog (${language ?? "auto"}). Output: 1) what the call was about (1-2 sentences), 2) key facts (bullets), 3) caller intent, 4) next steps. No filler.`;
+  if (backend === "ollama") {
+    const url = `${process.env.OLLAMA_URL ?? "http://ollama:11434"}/api/generate`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: process.env.OLLAMA_MODEL ?? "qwen2.5:7b-instruct", system: sys, prompt: text.slice(0, 12000), stream: false }),
+    });
+    if (!r.ok) throw new Error(`ollama ${r.status}`);
+    const j = await r.json();
+    return j.response ?? null;
+  }
+  return null;
+}
+
+// --------- Audit log (hash-chain — tamper-evident) ---------
+async function audit(ownerId, action, targetId, meta) {
+  try {
+    const { rows } = await pool.query(`SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1`);
+    const prev = rows[0]?.hash ?? "GENESIS";
+    const ts = new Date().toISOString();
+    const payload = JSON.stringify({ ts, owner: ownerId, action, target: targetId, meta: meta ?? {}, prev });
+    const hash = crypto.createHmac("sha256", SECRET).update(payload).digest("hex");
+    await pool.query(
+      `INSERT INTO audit_log (owner_id, action, target_id, meta, prev_hash, hash) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [ownerId ?? null, action, targetId ?? null, meta ?? {}, prev, hash],
+    );
+  } catch (e) { log("warn", "audit failed", { err: String(e) }); }
+}
+
 // --------- App ---------
 const app = express();
 app.disable("x-powered-by");

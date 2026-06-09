@@ -49,15 +49,32 @@ services:
       timeout: 5s
       retries: 5
 
-  # Optional local Whisper backend — start with: docker compose --profile whisper up
+  # Optional local Whisper (faster-whisper) — start with:
+  #   docker compose --profile whisper up -d
+  # Then set TRANSCRIBE_BACKEND=whisper and WHISPER_URL=http://whisper:9000 in .env
   whisper:
     profiles: ["whisper"]
     image: onerahmet/openai-whisper-asr-webservice:latest
     environment:
       ASR_MODEL: small
+      ASR_ENGINE: faster_whisper
     ports: ["9001:9000"]
+    restart: unless-stopped
+
+  # Optional local LLM (Ollama) for on-prem summaries — no data leaves the box.
+  #   docker compose --profile ollama up -d
+  #   docker exec -it lunara-ollama ollama pull qwen2.5:7b-instruct
+  # Then set SUMMARY_BACKEND=ollama OLLAMA_URL=http://ollama:11434 OLLAMA_MODEL=qwen2.5:7b-instruct in .env
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:latest
+    container_name: lunara-ollama
+    volumes: ["ollama:/root/.ollama"]
+    ports: ["11434:11434"]
     restart: unless-stopped
 
 volumes:
   pgdata:
   minio:
+  ollama:
+

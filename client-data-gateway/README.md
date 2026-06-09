@@ -44,6 +44,10 @@ Reject requests with clock skew > 5 minutes.
 | GET    | `/calls/:id/audio-url`     | Returns `{ audio_url }` — short-lived signed link to MP3 (browser-direct path). |
 | GET    | `/calls/:id/audio`         | Streams the raw MP3 bytes. Used by Lunara as a proxy when the gateway is **not** reachable from browsers (VPN-only). Enable **Proxy audio** in the Data residency tab. |
 | DELETE | `/calls/:id`               | Hard-delete (optional retention job).                                    |
+| GET    | `/ready`                   | Readiness probe: returns DB/S3 reachability, configured backends, retention, call counters. Powers the Health dashboard. |
+| GET    | `/stats`                   | Per-owner call counters (`total`, `ready`, `failed`, `processing`, `last_24h`). |
+| GET    | `/audit/log`               | Tamper-evident audit trail (hash-chain).                                 |
+| GET    | `/audit/verify`            | Re-computes the hash chain to detect tampering — returns `{ ok, count }` or `{ ok: false, tampered_at_id }`. |
 
 ## Recording security & retention
 

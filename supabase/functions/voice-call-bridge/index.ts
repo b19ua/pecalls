@@ -90,10 +90,19 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let silenceTimer: number | null = null;
   let handoffTriggered = false;
   let recordingStarted = false;
+  let transcriptSaveTimer: number | null = null;
+  let lastSavedLen = 0;
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;
   const ctxReady = new Promise<Ctx>((res) => { ctxResolver = res; });
+
+  const persistTranscript = async () => {
+    if (!callSid || transcript.length === lastSavedLen) return;
+    lastSavedLen = transcript.length;
+    try { await supa.from("calls").update({ transcript, status: "in_progress" }).eq("twilio_call_sid", callSid); }
+    catch (e) { console.error("live transcript save", e); }
+  };
 
   const connectGemini = () => {
     gemini = new WebSocket(GEMINI_WS);

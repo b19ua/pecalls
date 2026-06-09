@@ -345,7 +345,6 @@ function CallsPage() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={(e) => { e.preventDefault(); downloadOneTranscript(c); }}>Transcript (TXT)</DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => { e.preventDefault(); downloadCallTranscriptPdf(c as unknown as CallLike, locale); }}>Transcript (PDF)</DropdownMenuItem>
                               {hasRecording && (
                                 <DropdownMenuItem onClick={async (e) => {
                                   e.preventDefault();

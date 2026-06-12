@@ -446,13 +446,20 @@ function AgentEditor() {
               onChange={(e) => set("handoff_trigger_phrases", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
             />
           </Field>
-          <Field label={t("agent.field.numbers")} hint={t("agent.hint.numbers")}>
+          <Field label={t("agent.field.numbers")} hint="E.164 формат, по одному на строке (или через запятую). Пример: +37360111111">
             <Textarea
               rows={5}
               placeholder="+37360111111&#10;+37360222222"
               value={form.handoff_numbers.join("\n")}
-              onChange={(e) => set("handoff_numbers", e.target.value.split("\n").map((s) => s.trim()).filter(Boolean))}
+              onChange={(e) => set("handoff_numbers", e.target.value.split(/[\n,]+/).map((s) => s.trim()).filter((s) => /^\+?[0-9]{6,16}$/.test(s)))}
             />
+            {form.handoff_numbers.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {form.handoff_numbers.map((n, i) => (
+                  <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/30">✓ {n}</span>
+                ))}
+              </div>
+            )}
           </Field>
         </Section>
 

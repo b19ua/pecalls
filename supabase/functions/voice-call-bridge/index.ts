@@ -92,6 +92,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let recordingStarted = false;
   let transcriptSaveTimer: number | null = null;
   let lastSavedLen = 0;
+  let userPhraseBuffer = ""; // rolling buffer of user speech for phrase matching
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;
@@ -294,15 +295,19 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   };
 
   const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  const DEFAULT_TRIGGERS = ["оператор", "операторa", "человек", "живой человек", "менеджер", "operator", "human", "agent please", "real person"];
   const maybeHandoffByPhrase = (text: string) => {
     if (handoffTriggered || !ctx?.handoffEnabled || !ctx.handoffNumbers.length) return;
-    const haystack = norm(text);
-    const hit = ctx.handoffPhrases.some((p) => {
+    // Accumulate; keep last 400 chars to bound memory
+    userPhraseBuffer = (userPhraseBuffer + " " + text).slice(-400);
+    const haystack = norm(userPhraseBuffer);
+    const phrases = (ctx.handoffPhrases?.length ? ctx.handoffPhrases : DEFAULT_TRIGGERS);
+    const hit = phrases.find((p) => {
       const needle = norm(p || "");
       return needle.length >= 2 && haystack.includes(needle);
     });
     if (hit) {
-      log("handoff phrase match:", text);
+      log("[handoff] phrase match:", hit, "in:", haystack.slice(-120));
       triggerHandoff("phrase");
     }
   };
@@ -320,7 +325,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       }).eq("twilio_call_sid", callSid);
     } catch (e) { console.error("handoff db", e); }
 
-    const twiml = `<Response><Say voice="alice" language="${ctx.language || "ru-RU"}">Соединяю с оператором.</Say><Dial>${escXml(target)}</Dial></Response>`;
+    const lang = ctx.language || "ru-RU";
+    const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Say voice="alice" language="${lang}">Соединяю с оператором.</Say><Dial answerOnBridge="true" timeout="30">${escXml(target)}</Dial></Response>`;
     try {
       const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
         method: "POST",
@@ -331,8 +337,14 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         },
         body: new URLSearchParams({ Twiml: twiml }),
       });
-      if (!r.ok) log("handoff REST failed", r.status, await r.text());
-    } catch (e) { console.error("handoff REST", e); }
+      if (!r.ok) {
+        log("[handoff] REST failed", r.status, await r.text());
+        handoffTriggered = false; // allow retry
+      } else {
+        log("[handoff] REST ok, dialing", target);
+        try { await supa.from("calls").update({ status: "transferred" }).eq("twilio_call_sid", callSid); } catch {}
+      }
+    } catch (e) { console.error("[handoff] REST error", e); handoffTriggered = false; }
   };
 
   const startRecording = async () => {

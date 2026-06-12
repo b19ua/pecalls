@@ -325,7 +325,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       }).eq("twilio_call_sid", callSid);
     } catch (e) { console.error("handoff db", e); }
 
-    const twiml = `<Response><Say voice="alice" language="${ctx.language || "ru-RU"}">Соединяю с оператором.</Say><Dial>${escXml(target)}</Dial></Response>`;
+    const lang = ctx.language || "ru-RU";
+    const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Say voice="alice" language="${lang}">Соединяю с оператором.</Say><Dial answerOnBridge="true" timeout="30">${escXml(target)}</Dial></Response>`;
     try {
       const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
         method: "POST",
@@ -336,8 +337,14 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         },
         body: new URLSearchParams({ Twiml: twiml }),
       });
-      if (!r.ok) log("handoff REST failed", r.status, await r.text());
-    } catch (e) { console.error("handoff REST", e); }
+      if (!r.ok) {
+        log("[handoff] REST failed", r.status, await r.text());
+        handoffTriggered = false; // allow retry
+      } else {
+        log("[handoff] REST ok, dialing", target);
+        try { await supa.from("calls").update({ status: "transferred" }).eq("twilio_call_sid", callSid); } catch {}
+      }
+    } catch (e) { console.error("[handoff] REST error", e); handoffTriggered = false; }
   };
 
   const startRecording = async () => {

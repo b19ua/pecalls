@@ -92,6 +92,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let recordingStarted = false;
   let transcriptSaveTimer: number | null = null;
   let lastSavedLen = 0;
+  let userPhraseBuffer = ""; // rolling buffer of user speech for phrase matching
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;

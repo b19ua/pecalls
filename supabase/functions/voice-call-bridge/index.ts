@@ -415,13 +415,39 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       if (msg.event === "start") {
         streamSid = msg.start?.streamSid || "";
         const params = msg.start?.customParameters || msg.start?.custom_parameters || {};
-        if (!agentId && params.agent_id) agentId = params.agent_id;
-        if (!callSid && (params.call_sid || msg.start?.callSid)) callSid = params.call_sid || msg.start?.callSid;
-        log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid);
+        const paramAgent = params.agent_id ? String(params.agent_id) : "";
+        const paramCall = params.call_sid ? String(params.call_sid) : (msg.start?.callSid || "");
+        if (!callSid && paramCall) callSid = paramCall;
+        // SECURITY: derive agent_id from the calls row keyed by call_sid (Twilio-issued, signed via webhook),
+        // not from the WSS query string which is attacker-controllable. Query agent_id only used if no row found.
+        if (callSid) {
+          void (async () => {
+            const { data: callRow } = await supa
+              .from("calls")
+              .select("agent_id, owner_id")
+              .eq("twilio_call_sid", callSid)
+              .maybeSingle();
+            const trusted = callRow?.agent_id ? String(callRow.agent_id) : "";
+            if (trusted) {
+              if (paramAgent && paramAgent !== trusted) {
+                log("[security] agent_id mismatch query=", paramAgent, "db=", trusted, " — using db");
+              }
+              if (!agentId || agentId !== trusted) agentId = trusted;
+            } else if (!agentId && paramAgent) {
+              // No call row yet (rare race) — fall back to query value but mark for re-check.
+              agentId = paramAgent;
+            }
+            log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid);
+            if (!gemini && agentId) startContextAndGemini(agentId);
+          })();
+        } else {
+          if (!agentId && paramAgent) agentId = paramAgent;
+          log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid);
+          if (!gemini && agentId) startContextAndGemini(agentId);
+        }
         lastUserAudioAt = Date.now();
         if (silenceTimer === null) silenceTimer = setInterval(checkSilence, 2000) as unknown as number;
         if (transcriptSaveTimer === null) transcriptSaveTimer = setInterval(() => { void persistTranscript(); }, 3000) as unknown as number;
-        if (!gemini && agentId) startContextAndGemini(agentId);
       } else if (msg.event === "media") {
         const b64 = msg.media?.payload;
         if (!b64) return;

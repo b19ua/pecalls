@@ -34,6 +34,7 @@ import { Route as AuthenticatedAgentsAgentIdRouteImport } from './routes/_authen
 import { Route as ApiPublicTwilioVoiceRouteImport } from './routes/api/public/twilio/voice'
 import { Route as ApiPublicTwilioStatusRouteImport } from './routes/api/public/twilio/status'
 import { Route as ApiPublicTwilioRecordingRouteImport } from './routes/api/public/twilio/recording'
+import { Route as ApiPublicJambonzStatusRouteImport } from './routes/api/public/jambonz/status'
 import { Route as ApiPublicJambonzCallRouteImport } from './routes/api/public/jambonz/call'
 import { Route as ApiPublicCrmCallsRouteImport } from './routes/api/public/crm/calls'
 
@@ -166,6 +167,11 @@ const ApiPublicTwilioRecordingRoute =
     path: '/api/public/twilio/recording',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicJambonzStatusRoute = ApiPublicJambonzStatusRouteImport.update({
+  id: '/api/public/jambonz/status',
+  path: '/api/public/jambonz/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicJambonzCallRoute = ApiPublicJambonzCallRouteImport.update({
   id: '/api/public/jambonz/call',
   path: '/api/public/jambonz/call',
@@ -201,6 +207,7 @@ export interface FileRoutesByFullPath {
   '/agents/': typeof AuthenticatedAgentsIndexRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
+  '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
   '/api/public/twilio/recording': typeof ApiPublicTwilioRecordingRoute
   '/api/public/twilio/status': typeof ApiPublicTwilioStatusRoute
   '/api/public/twilio/voice': typeof ApiPublicTwilioVoiceRoute
@@ -228,6 +235,7 @@ export interface FileRoutesByTo {
   '/agents': typeof AuthenticatedAgentsIndexRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
+  '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
   '/api/public/twilio/recording': typeof ApiPublicTwilioRecordingRoute
   '/api/public/twilio/status': typeof ApiPublicTwilioStatusRoute
   '/api/public/twilio/voice': typeof ApiPublicTwilioVoiceRoute
@@ -258,6 +266,7 @@ export interface FileRoutesById {
   '/_authenticated/agents/': typeof AuthenticatedAgentsIndexRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
+  '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
   '/api/public/twilio/recording': typeof ApiPublicTwilioRecordingRoute
   '/api/public/twilio/status': typeof ApiPublicTwilioStatusRoute
   '/api/public/twilio/voice': typeof ApiPublicTwilioVoiceRoute
@@ -288,6 +297,7 @@ export interface FileRouteTypes {
     | '/agents/'
     | '/api/public/crm/calls'
     | '/api/public/jambonz/call'
+    | '/api/public/jambonz/status'
     | '/api/public/twilio/recording'
     | '/api/public/twilio/status'
     | '/api/public/twilio/voice'
@@ -315,6 +325,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/api/public/crm/calls'
     | '/api/public/jambonz/call'
+    | '/api/public/jambonz/status'
     | '/api/public/twilio/recording'
     | '/api/public/twilio/status'
     | '/api/public/twilio/voice'
@@ -344,6 +355,7 @@ export interface FileRouteTypes {
     | '/_authenticated/agents/'
     | '/api/public/crm/calls'
     | '/api/public/jambonz/call'
+    | '/api/public/jambonz/status'
     | '/api/public/twilio/recording'
     | '/api/public/twilio/status'
     | '/api/public/twilio/voice'
@@ -359,6 +371,7 @@ export interface RootRouteChildren {
   ApiAudioCallIdRoute: typeof ApiAudioCallIdRoute
   ApiPublicCrmCallsRoute: typeof ApiPublicCrmCallsRoute
   ApiPublicJambonzCallRoute: typeof ApiPublicJambonzCallRoute
+  ApiPublicJambonzStatusRoute: typeof ApiPublicJambonzStatusRoute
   ApiPublicTwilioRecordingRoute: typeof ApiPublicTwilioRecordingRoute
   ApiPublicTwilioStatusRoute: typeof ApiPublicTwilioStatusRoute
   ApiPublicTwilioVoiceRoute: typeof ApiPublicTwilioVoiceRoute
@@ -541,6 +554,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicTwilioRecordingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/jambonz/status': {
+      id: '/api/public/jambonz/status'
+      path: '/api/public/jambonz/status'
+      fullPath: '/api/public/jambonz/status'
+      preLoaderRoute: typeof ApiPublicJambonzStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/jambonz/call': {
       id: '/api/public/jambonz/call'
       path: '/api/public/jambonz/call'
@@ -626,6 +646,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAudioCallIdRoute: ApiAudioCallIdRoute,
   ApiPublicCrmCallsRoute: ApiPublicCrmCallsRoute,
   ApiPublicJambonzCallRoute: ApiPublicJambonzCallRoute,
+  ApiPublicJambonzStatusRoute: ApiPublicJambonzStatusRoute,
   ApiPublicTwilioRecordingRoute: ApiPublicTwilioRecordingRoute,
   ApiPublicTwilioStatusRoute: ApiPublicTwilioStatusRoute,
   ApiPublicTwilioVoiceRoute: ApiPublicTwilioVoiceRoute,

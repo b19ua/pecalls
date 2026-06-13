@@ -295,19 +295,31 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   };
 
   const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-  const DEFAULT_TRIGGERS = ["оператор", "операторa", "человек", "живой человек", "менеджер", "operator", "human", "agent please", "real person"];
+  // Language-segregated defaults — mixed RU+EN ‘human’ false-positives ("human resources") were a problem.
+  const DEFAULT_TRIGGERS_RU = ["оператор", "живого оператора", "живой человек", "соедините с человеком", "менеджер", "позови человека"];
+  const DEFAULT_TRIGGERS_EN = ["operator", "real person", "speak to a human", "talk to an agent", "human agent"];
+  const NEGATIONS = ["не", "не надо", "не нужно", "не хочу", "без", "no", "not", "dont", "don t", "do not", "without"];
+  // Word-boundary match (unicode-aware) + negation guard within last 3 tokens before the hit.
+  const matchPhrase = (haystack: string, needle: string): boolean => {
+    if (needle.length < 2) return false;
+    const re = new RegExp(`(^|[^\\p{L}\\p{N}])${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=[^\\p{L}\\p{N}]|$)`, "u");
+    const m = haystack.match(re);
+    if (!m) return false;
+    const before = haystack.slice(0, m.index ?? 0).split(/\s+/).slice(-3).join(" ");
+    return !NEGATIONS.some((n) => new RegExp(`(^|\\s)${n}(\\s|$)`).test(before));
+  };
   const maybeHandoffByPhrase = (text: string) => {
     if (handoffTriggered || !ctx?.handoffEnabled || !ctx.handoffNumbers.length) return;
-    // Accumulate; keep last 400 chars to bound memory
     userPhraseBuffer = (userPhraseBuffer + " " + text).slice(-400);
     const haystack = norm(userPhraseBuffer);
-    const phrases = (ctx.handoffPhrases?.length ? ctx.handoffPhrases : DEFAULT_TRIGGERS);
-    const hit = phrases.find((p) => {
-      const needle = norm(p || "");
-      return needle.length >= 2 && haystack.includes(needle);
-    });
+    const lang = (ctx.language || "ru-RU").toLowerCase().startsWith("ru") ? "ru" : "en";
+    const defaults = lang === "ru" ? DEFAULT_TRIGGERS_RU : DEFAULT_TRIGGERS_EN;
+    const phrases = (ctx.handoffPhrases?.length ? ctx.handoffPhrases : defaults);
+    const hit = phrases.find((p) => matchPhrase(haystack, norm(p || "")));
     if (hit) {
       log("[handoff] phrase match:", hit, "in:", haystack.slice(-120));
+      // Clear buffer so we don't re-trigger on the same context.
+      userPhraseBuffer = "";
       triggerHandoff("phrase");
     }
   };
@@ -403,13 +415,39 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       if (msg.event === "start") {
         streamSid = msg.start?.streamSid || "";
         const params = msg.start?.customParameters || msg.start?.custom_parameters || {};
-        if (!agentId && params.agent_id) agentId = params.agent_id;
-        if (!callSid && (params.call_sid || msg.start?.callSid)) callSid = params.call_sid || msg.start?.callSid;
-        log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid);
+        const paramAgent = params.agent_id ? String(params.agent_id) : "";
+        const paramCall = params.call_sid ? String(params.call_sid) : (msg.start?.callSid || "");
+        if (!callSid && paramCall) callSid = paramCall;
+        // SECURITY: derive agent_id from the calls row keyed by call_sid (Twilio-issued, signed via webhook),
+        // not from the WSS query string which is attacker-controllable. Query agent_id only used if no row found.
+        if (callSid) {
+          void (async () => {
+            const { data: callRow } = await supa
+              .from("calls")
+              .select("agent_id, owner_id")
+              .eq("twilio_call_sid", callSid)
+              .maybeSingle();
+            const trusted = callRow?.agent_id ? String(callRow.agent_id) : "";
+            if (trusted) {
+              if (paramAgent && paramAgent !== trusted) {
+                log("[security] agent_id mismatch query=", paramAgent, "db=", trusted, " — using db");
+              }
+              if (!agentId || agentId !== trusted) agentId = trusted;
+            } else if (!agentId && paramAgent) {
+              // No call row yet (rare race) — fall back to query value but mark for re-check.
+              agentId = paramAgent;
+            }
+            log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid);
+            if (!gemini && agentId) startContextAndGemini(agentId);
+          })();
+        } else {
+          if (!agentId && paramAgent) agentId = paramAgent;
+          log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid);
+          if (!gemini && agentId) startContextAndGemini(agentId);
+        }
         lastUserAudioAt = Date.now();
         if (silenceTimer === null) silenceTimer = setInterval(checkSilence, 2000) as unknown as number;
         if (transcriptSaveTimer === null) transcriptSaveTimer = setInterval(() => { void persistTranscript(); }, 3000) as unknown as number;
-        if (!gemini && agentId) startContextAndGemini(agentId);
       } else if (msg.event === "media") {
         const b64 = msg.media?.payload;
         if (!b64) return;

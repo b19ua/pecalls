@@ -295,19 +295,31 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   };
 
   const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-  const DEFAULT_TRIGGERS = ["оператор", "операторa", "человек", "живой человек", "менеджер", "operator", "human", "agent please", "real person"];
+  // Language-segregated defaults — mixed RU+EN ‘human’ false-positives ("human resources") were a problem.
+  const DEFAULT_TRIGGERS_RU = ["оператор", "живого оператора", "живой человек", "соедините с человеком", "менеджер", "позови человека"];
+  const DEFAULT_TRIGGERS_EN = ["operator", "real person", "speak to a human", "talk to an agent", "human agent"];
+  const NEGATIONS = ["не", "не надо", "не нужно", "не хочу", "без", "no", "not", "dont", "don t", "do not", "without"];
+  // Word-boundary match (unicode-aware) + negation guard within last 3 tokens before the hit.
+  const matchPhrase = (haystack: string, needle: string): boolean => {
+    if (needle.length < 2) return false;
+    const re = new RegExp(`(^|[^\\p{L}\\p{N}])${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=[^\\p{L}\\p{N}]|$)`, "u");
+    const m = haystack.match(re);
+    if (!m) return false;
+    const before = haystack.slice(0, m.index ?? 0).split(/\s+/).slice(-3).join(" ");
+    return !NEGATIONS.some((n) => new RegExp(`(^|\\s)${n}(\\s|$)`).test(before));
+  };
   const maybeHandoffByPhrase = (text: string) => {
     if (handoffTriggered || !ctx?.handoffEnabled || !ctx.handoffNumbers.length) return;
-    // Accumulate; keep last 400 chars to bound memory
     userPhraseBuffer = (userPhraseBuffer + " " + text).slice(-400);
     const haystack = norm(userPhraseBuffer);
-    const phrases = (ctx.handoffPhrases?.length ? ctx.handoffPhrases : DEFAULT_TRIGGERS);
-    const hit = phrases.find((p) => {
-      const needle = norm(p || "");
-      return needle.length >= 2 && haystack.includes(needle);
-    });
+    const lang = (ctx.language || "ru-RU").toLowerCase().startsWith("ru") ? "ru" : "en";
+    const defaults = lang === "ru" ? DEFAULT_TRIGGERS_RU : DEFAULT_TRIGGERS_EN;
+    const phrases = (ctx.handoffPhrases?.length ? ctx.handoffPhrases : defaults);
+    const hit = phrases.find((p) => matchPhrase(haystack, norm(p || "")));
     if (hit) {
       log("[handoff] phrase match:", hit, "in:", haystack.slice(-120));
+      // Clear buffer so we don't re-trigger on the same context.
+      userPhraseBuffer = "";
       triggerHandoff("phrase");
     }
   };

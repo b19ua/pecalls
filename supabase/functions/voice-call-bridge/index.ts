@@ -685,7 +685,7 @@ function buildHandoffDialTwiml(c: Pick<Ctx, "language" | "twilioNumberE164" | "o
   const auth = c.sipUsername ? ` username="${escXml(c.sipUsername)}" password="${escXml(c.sipPassword)}"` : "";
   const sipUri = `sip:${sipUser}@${c.sipDomain}${transport ? `;transport=${transport}` : ""}`;
   log("[handoff] using sip trunk", sipUri);
-  return `<Say voice="alice" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Sip${auth}>${escXml(sipUri)}</Sip></Dial>`;
+  return `<Say voice="${sayVoiceFor(c.language)}" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Sip${auth}>${escXml(sipUri)}</Sip></Dial>`;
 }
 
 function twimlResponse(body: string): Response {

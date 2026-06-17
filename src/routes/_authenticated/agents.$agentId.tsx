@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Save, Trash2, Loader2, PhoneCall, Wrench, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { TestCallDialog } from "@/components/TestCallDialog";
@@ -35,6 +36,8 @@ type AgentForm = {
   model: string;
   temperature: number;
   twilio_number_e164: string;
+  inbound_connection_type: "phone" | "sip_uri";
+  inbound_sip_uri_user: string;
   is_active: boolean;
   record_calls: boolean;
   silence_timeout_seconds: number;
@@ -62,6 +65,8 @@ const DEFAULTS: AgentForm = {
   model: "gemini-3.1-flash-live-preview",
   temperature: 0.8,
   twilio_number_e164: "",
+  inbound_connection_type: "phone",
+  inbound_sip_uri_user: "",
   is_active: true,
   record_calls: true,
   silence_timeout_seconds: 2,
@@ -118,6 +123,8 @@ function AgentEditor() {
           model: data.model,
           temperature: Number(data.temperature),
           twilio_number_e164: data.twilio_number_e164 ?? "",
+          inbound_connection_type: ((data as any).inbound_connection_type as "phone" | "sip_uri") ?? "phone",
+          inbound_sip_uri_user: (data as any).inbound_sip_uri_user ?? "",
           is_active: data.is_active,
           record_calls: data.record_calls,
           silence_timeout_seconds: data.silence_timeout_seconds,
@@ -156,6 +163,17 @@ function AgentEditor() {
       toast.error("max 5");
       return;
     }
+    if (form.inbound_connection_type === "sip_uri") {
+      const u = form.inbound_sip_uri_user.trim();
+      if (!u) {
+        toast.error("Укажите идентификатор SIP URI");
+        return;
+      }
+      if (!/^[a-zA-Z0-9._-]+$/.test(u)) {
+        toast.error("SIP идентификатор: только латиница, цифры, . _ -");
+        return;
+      }
+    }
     setSaving(true);
     try {
       const res = await saveAgentFn({
@@ -164,7 +182,9 @@ function AgentEditor() {
           data: {
             ...form,
             description: form.description || null,
-            twilio_number_e164: form.twilio_number_e164 || null,
+            twilio_number_e164: form.inbound_connection_type === "phone" ? (form.twilio_number_e164 || null) : null,
+            inbound_connection_type: form.inbound_connection_type,
+            inbound_sip_uri_user: form.inbound_connection_type === "sip_uri" ? (form.inbound_sip_uri_user.trim() || null) : null,
             sip_domain: form.sip_domain || null,
             sip_username: form.sip_username || null,
             sip_password: form.sip_password || null,
@@ -331,9 +351,45 @@ function AgentEditor() {
         </Section>
 
         <Section title={t("agent.section.telephony")}>
-          <Field label={t("agent.field.twilio")}>
-            <Input value={form.twilio_number_e164} onChange={(e) => set("twilio_number_e164", e.target.value)} placeholder="+37360123456" />
+          <Field label="Тип входящего подключения" hint="Phone number — обычный номер из Twilio. SIP URI — кастомный идентификатор для маршрутизации с вашей АТС.">
+            <Tabs
+              value={form.inbound_connection_type}
+              onValueChange={(v) => set("inbound_connection_type", v as "phone" | "sip_uri")}
+            >
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="phone">Phone number</TabsTrigger>
+                <TabsTrigger value="sip_uri">SIP URI</TabsTrigger>
+              </TabsList>
+              <TabsContent value="phone" className="mt-3">
+                <Input
+                  value={form.twilio_number_e164}
+                  onChange={(e) => set("twilio_number_e164", e.target.value)}
+                  placeholder="+37360123456"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">Номер Twilio в формате E.164.</p>
+              </TabsContent>
+              <TabsContent value="sip_uri" className="mt-3 space-y-2">
+                <Input
+                  value={form.inbound_sip_uri_user}
+                  onChange={(e) =>
+                    set(
+                      "inbound_sip_uri_user",
+                      e.target.value.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 64),
+                    )
+                  }
+                  placeholder="ai_sales"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Вставьте этот идентификатор в вашей АТС в формате{" "}
+                  <code className="font-mono">
+                    sip:{form.inbound_sip_uri_user || "идентификатор"}@ваш-транк.pstn.twilio.com
+                  </code>
+                  . Допустимы латиница, цифры, <code>.</code> <code>_</code> <code>-</code>.
+                </p>
+              </TabsContent>
+            </Tabs>
           </Field>
+
 
           <Field label="Исходящие звонки через">
             <Select value={form.outbound_mode} onValueChange={(v) => set("outbound_mode", v as "twilio_number" | "sip_trunk")}>

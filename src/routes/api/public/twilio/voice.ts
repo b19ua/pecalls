@@ -29,15 +29,24 @@ export const Route = createFileRoute("/api/public/twilio/voice")({
         const direction = String(form.get("Direction") ?? "inbound");
         const sipDomainSid = String(form.get("SipDomainSid") ?? "");
 
-        // Normalize SIP URI -> bare number/identifier for storage
-        const stripSip = (s: string) => {
-          const m = s.match(/^sips?:([^@;>\s]+)/i);
-          return m ? (m[1].startsWith("+") || /^\d+$/.test(m[1]) ? m[1] : s) : s;
-        };
-        const fromNumber = stripSip(fromRaw);
-        const toNumber = stripSip(toRaw);
+        // Debug logging for incoming routing parameter
+        console.log("[twilio/voice] incoming", { callSid, fromRaw, toRaw, direction, sipDomainSid });
 
-        // Resolve agent. Priority: explicit param > SipDomainSid > SIP To domain > PSTN To number
+        // Parse incoming `To`: either "sip:user@host" or a phone number "+123..."
+        function parseTo(to: string): { kind: "sip"; user: string; host: string } | { kind: "phone"; number: string } {
+          const sipMatch = to.match(/^sips?:([^@;>\s]+)@([^;>\s]+)/i);
+          if (sipMatch) {
+            return { kind: "sip", user: sipMatch[1], host: sipMatch[2].toLowerCase() };
+          }
+          // strip everything but +digits
+          const cleaned = to.replace(/[^\d+]/g, "");
+          return { kind: "phone", number: cleaned };
+        }
+        const parsed = toRaw ? parseTo(toRaw) : null;
+        const fromNumber = fromRaw.replace(/[^\d+]/g, "") || fromRaw;
+        const toNumber = parsed?.kind === "phone" ? parsed.number : toRaw;
+
+        // Resolve agent. Priority: explicit param > SipDomainSid > SIP user (inbound_sip_uri_user) > SIP To domain > PSTN To number
         let agentId = agentIdParam || null;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let agent: any = null;
@@ -55,29 +64,43 @@ export const Route = createFileRoute("/api/public/twilio/voice")({
           agent = data;
           agentId = data?.id ?? null;
         }
-        if (!agent && toRaw) {
-          const sipMatch = toRaw.match(/^sips?:[^@]+@([^;>\s]+)/i);
-          if (sipMatch) {
-            const domain = sipMatch[1].toLowerCase();
-            const { data } = await supabaseAdmin
-              .from("agents")
-              .select("*")
-              .eq("inbound_sip_domain", domain)
-              .eq("is_active", true)
-              .maybeSingle();
-            agent = data;
-            agentId = data?.id ?? null;
+
+        if (!agent && parsed?.kind === "sip") {
+          // Try SIP-URI identifier match first (custom routing like sip:ai_sales@trunk.pstn.twilio.com)
+          const userLower = parsed.user.toLowerCase();
+          const { data: byUser } = await supabaseAdmin
+            .from("agents")
+            .select("*")
+            .eq("inbound_connection_type", "sip_uri")
+            .ilike("inbound_sip_uri_user", userLower)
+            .eq("is_active", true)
+            .maybeSingle();
+          if (byUser) {
+            agent = byUser;
+            agentId = byUser.id;
           } else {
+            // Fall back to provisioned inbound SIP domain match (legacy path)
             const { data } = await supabaseAdmin
               .from("agents")
               .select("*")
-              .eq("twilio_number_e164", toRaw)
+              .eq("inbound_sip_domain", parsed.host)
               .eq("is_active", true)
               .maybeSingle();
             agent = data;
             agentId = data?.id ?? null;
           }
+        } else if (!agent && parsed?.kind === "phone" && parsed.number) {
+          const { data } = await supabaseAdmin
+            .from("agents")
+            .select("*")
+            .eq("inbound_connection_type", "phone")
+            .eq("twilio_number_e164", parsed.number)
+            .eq("is_active", true)
+            .maybeSingle();
+          agent = data;
+          agentId = data?.id ?? null;
         }
+
 
 
         if (!agent) {

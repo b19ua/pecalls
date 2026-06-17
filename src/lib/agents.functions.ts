@@ -40,6 +40,13 @@ const AgentSchema = z.object({
   model: z.string().min(1).max(200),
   temperature: z.number().min(0).max(2),
   twilio_number_e164: z.string().nullable().optional(),
+  inbound_connection_type: z.enum(["phone", "sip_uri"]).default("phone"),
+  inbound_sip_uri_user: z
+    .string()
+    .max(64)
+    .regex(/^[a-zA-Z0-9._-]+$/, "Only letters, digits, dot, underscore, dash")
+    .nullable()
+    .optional(),
   is_active: z.boolean(),
   record_calls: z.boolean(),
   silence_timeout_seconds: z.number().int().min(1).max(120),
@@ -67,12 +74,15 @@ export const saveAgent = createServerFn({ method: "POST" })
       ...data.data,
       description: data.data.description || null,
       twilio_number_e164: data.data.twilio_number_e164 || null,
+      inbound_sip_uri_user: data.data.inbound_sip_uri_user
+        ? data.data.inbound_sip_uri_user.trim().toLowerCase()
+        : null,
       owner_id: ownerId,
     };
 
     if (!data.id) {
-      // Auto-attach first Twilio number on create when none provided
-      if (!payload.twilio_number_e164) {
+      // Auto-attach first Twilio number on create when phone mode and none provided
+      if (payload.inbound_connection_type === "phone" && !payload.twilio_number_e164) {
         payload.twilio_number_e164 = await fetchFirstTwilioNumber();
       }
       const { data: row, error } = await supabaseAdmin

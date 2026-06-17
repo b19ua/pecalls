@@ -43,19 +43,35 @@ export const Route = createFileRoute("/api/public/jambonz/call")({
           if (got !== expected) return new Response("Unauthorized", { status: 401 });
         }
 
-        // Resolve agent: explicit ?agent_id wins, else lookup by called number
+        // Resolve agent: explicit ?agent_id wins, else lookup by called destination (SIP URI or phone)
+        console.log("[jambonz/call] incoming", { call_sid: info.call_sid, from: info.from, to: info.to, direction: info.direction });
         let agent: any = null;
         if (agentIdParam) {
           const { data } = await supabaseAdmin.from("agents").select("*").eq("id", agentIdParam).maybeSingle();
           agent = data;
         } else if (info.to) {
-          const { data } = await supabaseAdmin
-            .from("agents")
-            .select("*")
-            .eq("twilio_number_e164", info.to)
-            .eq("is_active", true)
-            .maybeSingle();
-          agent = data;
+          const sipMatch = info.to.match(/^sips?:([^@;>\s]+)@([^;>\s]+)/i);
+          if (sipMatch) {
+            const userLower = sipMatch[1].toLowerCase();
+            const { data } = await supabaseAdmin
+              .from("agents")
+              .select("*")
+              .eq("inbound_connection_type", "sip_uri")
+              .ilike("inbound_sip_uri_user", userLower)
+              .eq("is_active", true)
+              .maybeSingle();
+            agent = data;
+          } else {
+            const cleaned = info.to.replace(/[^\d+]/g, "");
+            const { data } = await supabaseAdmin
+              .from("agents")
+              .select("*")
+              .eq("inbound_connection_type", "phone")
+              .eq("twilio_number_e164", cleaned)
+              .eq("is_active", true)
+              .maybeSingle();
+            agent = data;
+          }
         }
 
         if (!agent) {

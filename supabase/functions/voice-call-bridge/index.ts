@@ -75,6 +75,13 @@ type Ctx = {
   handoffPhrases: string[];
   handoffNumbers: string[];
   twilioNumberE164: string;
+  outboundMode: "twilio_number" | "sip_trunk";
+  sipDomain: string;
+  sipUsername: string;
+  sipPassword: string;
+  sipTransport: string;
+  sipFromNumber: string;
+  sipRoutePrefix: string;
   tools: ToolRow[];
 };
 
@@ -383,9 +390,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       }).eq("twilio_call_sid", callSid);
     } catch (e) { console.error("handoff db", e); }
 
-    const lang = ctx.language || "ru-RU";
-    const from = ctx.twilioNumberE164 ? ` callerId="${escXml(ctx.twilioNumberE164)}"` : "";
-    const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Say voice="alice" language="${escXml(lang)}">Соединяю с оператором.</Say><Dial${from} answerOnBridge="true" timeout="30"><Number>${escXml(target)}</Number></Dial></Response>`;
+    const twiml = `<Response><Stop><Stream name="gemini"/></Stop>${buildHandoffDialTwiml(ctx, target)}</Response>`;
     try {
       const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
         method: "POST",

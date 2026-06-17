@@ -145,7 +145,7 @@ async function handleVoiceRequest(request: Request): Promise<Response> {
   if (bridgeWs) {
     const streamUrl = `${bridgeWs.replace(/\/$/, "")}?agent_id=${agent.id}&call_sid=${callSid}`;
     return twiml(
-      `<Connect><Stream url="${escapeXml(streamUrl)}"><Parameter name="agent_id" value="${agent.id}"/><Parameter name="call_sid" value="${callSid}"/></Stream></Connect>`,
+      `<Connect><Stream name="gemini" url="${escapeXml(streamUrl)}"><Parameter name="agent_id" value="${agent.id}"/><Parameter name="call_sid" value="${callSid}"/></Stream></Connect>`,
     );
   }
 

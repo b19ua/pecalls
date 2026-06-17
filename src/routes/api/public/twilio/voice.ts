@@ -23,23 +23,19 @@ async function handleVoiceRequest(request: Request): Promise<Response> {
   // We merge both so routing logic doesn't care which method was used.
   const params = new URLSearchParams();
   for (const [k, v] of url.searchParams.entries()) params.append(k, v);
-  let formForVerify: URLSearchParams | null = null;
+  let form: FormData | null = null;
   if (method === "POST") {
     try {
-      const form = await request.formData();
-      formForVerify = new URLSearchParams();
-      for (const [k, v] of form.entries()) {
-        params.append(k, String(v));
-        formForVerify.append(k, String(v));
-      }
+      form = await request.formData();
+      for (const [k, v] of form.entries()) params.append(k, String(v));
     } catch {
       // empty body — ignore
     }
   }
 
   // Signature verification only meaningful for POST (Twilio signs the form body)
-  if (method === "POST" && formForVerify) {
-    if (!(await verifyTwilioRequest(request, formForVerify))) {
+  if (method === "POST" && form) {
+    if (!(await verifyTwilioRequest(request, form))) {
       return new Response("Invalid signature", { status: 403 });
     }
   }

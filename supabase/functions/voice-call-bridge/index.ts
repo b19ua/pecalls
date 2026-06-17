@@ -677,7 +677,7 @@ function buildHandoffDialTwiml(c: Pick<Ctx, "language" | "twilioNumberE164" | "o
   const action = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/voice-call-bridge?action=handoff-result`;
   const dialAttrs = `${callerId} answerOnBridge="true" timeout="30" action="${escXml(action)}" method="POST"`;
   if (!useSip) {
-    return `<Say voice="alice" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Number>${escXml(target)}</Number></Dial>`;
+    return `<Say voice="${sayVoiceFor(c.language)}" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Number>${escXml(target)}</Number></Dial>`;
   }
   const transport = (c.sipTransport || "tls").toLowerCase();
   const prefix = (c.sipRoutePrefix || "").trim();

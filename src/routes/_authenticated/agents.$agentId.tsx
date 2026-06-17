@@ -64,6 +64,8 @@ const DEFAULTS: AgentForm = {
   model: "gemini-3.1-flash-live-preview",
   temperature: 0.8,
   twilio_number_e164: "",
+  inbound_connection_type: "phone",
+  inbound_sip_uri_user: "",
   is_active: true,
   record_calls: true,
   silence_timeout_seconds: 2,

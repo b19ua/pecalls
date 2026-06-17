@@ -21,11 +21,12 @@ const GEMINI_MODELS = AVAILABLE_LIVE_AUDIO_MODELS;
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
 const log = (...a: unknown[]) => console.log("[bridge]", ...a);
 
-Deno.serve((req) => {
+Deno.serve(async (req) => {
   const url = new URL(req.url);
   const agentId = url.searchParams.get("agent_id") || "";
   const callSid = url.searchParams.get("call_sid") || "";
   const upgrade = req.headers.get("upgrade") || "";
+  if (url.searchParams.get("action") === "handoff") return handleHandoffAction(req, url);
   if (upgrade.toLowerCase() !== "websocket") {
     return new Response("expected WebSocket upgrade", { status: 426 });
   }
@@ -73,6 +74,7 @@ type Ctx = {
   handoffDigit: string;
   handoffPhrases: string[];
   handoffNumbers: string[];
+  twilioNumberE164: string;
   tools: ToolRow[];
 };
 
@@ -115,7 +117,10 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       log("connecting Gemini Live model=", model);
       const phoneInstr = buildPhoneInstructions(lang, c.greeting);
       const knowledgePreamble = buildKnowledgePreamble(c.knowledgeContext);
-      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr]
+      const handoffInstr = c.handoffEnabled && c.handoffNumbers.length
+        ? `Human handoff rule: if the caller asks for an operator, manager, human, specialist, or transfer, do NOT say that you are transferring immediately. First tell the caller to press ${c.handoffDigit || "0"} on the phone keypad to connect to the operator. Keep this instruction short and do not ask extra questions.`
+        : "";
+      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, handoffInstr]
         .filter(Boolean)
         .join("\n\n");
       // Lunara-proven payload shape (snake_case, NO languageCode lock).
@@ -176,23 +181,28 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           return;
         }
         if (msg.serverContent) {
-          const parts = msg.serverContent?.modelTurn?.parts || [];
-          for (const p of parts) {
-            if (p.inlineData?.data) {
-              const pcm = b64ToBytes(p.inlineData.data);
-              const rate = parseAudioRate(p.inlineData.mimeType) || 24000;
-              sendMulawToTwilio(pcmToMulaw8k(pcm, rate));
-            } else if (p.text && !p.thought) {
-              transcript.push({ role: "agent", text: p.text, ts: new Date().toISOString() });
-            }
-          }
           const it = msg.serverContent?.inputTranscription?.text;
+          let handoffPromptIssued = false;
           if (it) {
             transcript.push({ role: "user", text: it, ts: new Date().toISOString() });
-            maybeHandoffByPhrase(it);
+            handoffPromptIssued = maybeHandoffByPhrase(it);
+          }
+          const parts = msg.serverContent?.modelTurn?.parts || [];
+          if (!handoffPromptIssued) {
+            for (const p of parts) {
+              if (p.inlineData?.data) {
+                const pcm = b64ToBytes(p.inlineData.data);
+                const rate = parseAudioRate(p.inlineData.mimeType) || 24000;
+                sendMulawToTwilio(pcmToMulaw8k(pcm, rate));
+              } else if (p.text && !p.thought) {
+                transcript.push({ role: "agent", text: p.text, ts: new Date().toISOString() });
+              }
+            }
+          } else if (parts.length) {
+            log("[handoff] suppressed model transfer text; waiting for DTMF");
           }
           const ot = msg.serverContent?.outputTranscription?.text;
-          if (ot) transcript.push({ role: "agent", text: ot, ts: new Date().toISOString() });
+          if (ot && !handoffPromptIssued) transcript.push({ role: "agent", text: ot, ts: new Date().toISOString() });
         } else if (msg.error) {
           log("gemini ERROR", JSON.stringify(msg.error));
           const currentModel = getModelCandidates(ctx?.model)[geminiModelIndex] || getModelCandidates(ctx?.model)[0] || GEMINI_MODELS[0];
@@ -299,6 +309,10 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   const DEFAULT_TRIGGERS_RU = ["оператор", "живого оператора", "живой человек", "соедините с человеком", "менеджер", "позови человека"];
   const DEFAULT_TRIGGERS_EN = ["operator", "real person", "speak to a human", "talk to an agent", "human agent"];
   const NEGATIONS = ["не", "не надо", "не нужно", "не хочу", "без", "no", "not", "dont", "don t", "do not", "without"];
+  const expandPhrases = (phrases: string[], lang: string) => {
+    const defaults = lang === "ru" ? DEFAULT_TRIGGERS_RU : DEFAULT_TRIGGERS_EN;
+    return Array.from(new Set([...phrases, ...defaults, "переведи", "переключи", "соедини", "специалист", "специалиста", "человек", "человека"]));
+  };
   // Word-boundary match (unicode-aware) + negation guard within last 3 tokens before the hit.
   const matchPhrase = (haystack: string, needle: string): boolean => {
     if (needle.length < 2) return false;
@@ -309,39 +323,51 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     return !NEGATIONS.some((n) => new RegExp(`(^|\\s)${n}(\\s|$)`).test(before));
   };
   let handoffPromptedAt = 0;
-  const promptForDtmfHandoff = () => {
-    if (!gemini || !geminiReady) return;
+  const promptForDtmfHandoff = async () => {
     const digit = ctx?.handoffDigit || "0";
-    const lang = (ctx?.language || "ru-RU").toLowerCase().startsWith("ru") ? "ru" : "en";
-    const instr = lang === "ru"
-      ? `Кратко скажи звонящему: "Чтобы соединиться с оператором, пожалуйста, нажмите ${digit} на клавиатуре телефона." Не задавай других вопросов.`
-      : `Briefly tell the caller: "To be connected to a human operator, please press ${digit} on your phone keypad." Do not ask anything else.`;
+    const lang = (ctx?.language || "ru-RU").toLowerCase();
+    const promptText = lang.startsWith("ru")
+      ? `Чтобы соединиться с оператором, пожалуйста, нажмите ${digit} на клавиатуре телефона.`
+      : `To be connected to a human operator, please press ${digit} on your phone keypad.`;
+    handoffPromptedAt = Date.now();
+    const bridgeWs = `${SUPABASE_URL.replace(/^https?:/, "wss:").replace(/\/$/, "")}/functions/v1/voice-call-bridge`;
+    const action = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/voice-call-bridge?action=handoff&agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&call_sid=${encodeURIComponent(callSid)}`;
+    const streamUrl = `${bridgeWs}?agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&call_sid=${encodeURIComponent(callSid)}`;
+    const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Gather input="dtmf" numDigits="1" timeout="10" action="${escXml(action)}" method="POST"><Say voice="alice" language="${escXml(ctx?.language || "ru-RU")}">${escXml(promptText)}</Say></Gather><Connect><Stream url="${escXml(streamUrl)}"><Parameter name="agent_id" value="${escXml(ctx?.agentId || agentId)}"/><Parameter name="call_sid" value="${escXml(callSid)}"/></Stream></Connect></Response>`;
     try {
-      gemini.send(JSON.stringify({
-        client_content: {
-          turns: [{ role: "user", parts: [{ text: instr }] }],
-          turn_complete: true,
+      const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_KEY}`,
+          "X-Connection-Api-Key": TWILIO_KEY,
+          "Content-Type": "application/x-www-form-urlencoded",
         },
-      }));
-      handoffPromptedAt = Date.now();
-      log("[handoff] prompted caller to press DTMF", digit);
-    } catch (e) { console.error("[handoff] prompt error", e); }
+        body: new URLSearchParams({ Twiml: twiml }),
+      });
+      if (!r.ok) {
+        log("[handoff] prompt REST failed", r.status, await r.text());
+        handoffPromptedAt = 0;
+      } else {
+        log("[handoff] prompted caller to press DTMF", digit);
+      }
+    } catch (e) { console.error("[handoff] prompt REST error", e); handoffPromptedAt = 0; }
   };
-  const maybeHandoffByPhrase = (text: string) => {
-    if (handoffTriggered || !ctx?.handoffEnabled || !ctx.handoffNumbers.length) return;
+  const maybeHandoffByPhrase = (text: string): boolean => {
+    if (handoffTriggered || !ctx?.handoffEnabled || !ctx.handoffNumbers.length) return false;
     // Avoid re-prompting within 20s
-    if (handoffPromptedAt && Date.now() - handoffPromptedAt < 20000) return;
+    if (handoffPromptedAt && Date.now() - handoffPromptedAt < 20000) return false;
     userPhraseBuffer = (userPhraseBuffer + " " + text).slice(-400);
     const haystack = norm(userPhraseBuffer);
     const lang = (ctx.language || "ru-RU").toLowerCase().startsWith("ru") ? "ru" : "en";
-    const defaults = lang === "ru" ? DEFAULT_TRIGGERS_RU : DEFAULT_TRIGGERS_EN;
-    const phrases = (ctx.handoffPhrases?.length ? ctx.handoffPhrases : defaults);
+    const phrases = expandPhrases(ctx.handoffPhrases || [], lang);
     const hit = phrases.find((p) => matchPhrase(haystack, norm(p || "")));
     if (hit) {
       log("[handoff] phrase match:", hit, "in:", haystack.slice(-120));
       userPhraseBuffer = "";
-      promptForDtmfHandoff();
+      void promptForDtmfHandoff();
+      return true;
     }
+    return false;
   };
 
   const triggerHandoff = async (reason: "dtmf" | "phrase") => {
@@ -358,7 +384,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     } catch (e) { console.error("handoff db", e); }
 
     const lang = ctx.language || "ru-RU";
-    const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Say voice="alice" language="${lang}">Соединяю с оператором.</Say><Dial answerOnBridge="true" timeout="30">${escXml(target)}</Dial></Response>`;
+    const from = ctx.twilioNumberE164 ? ` callerId="${escXml(ctx.twilioNumberE164)}"` : "";
+    const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Say voice="alice" language="${escXml(lang)}">Соединяю с оператором.</Say><Dial${from} answerOnBridge="true" timeout="30"><Number>${escXml(target)}</Number></Dial></Response>`;
     try {
       const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
         method: "POST",
@@ -374,7 +401,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         handoffTriggered = false; // allow retry
       } else {
         log("[handoff] REST ok, dialing", target);
-        try { await supa.from("calls").update({ status: "transferred" }).eq("twilio_call_sid", callSid); } catch {}
+        try { await supa.from("calls").update({ status: "handoff" }).eq("twilio_call_sid", callSid); } catch {}
       }
     } catch (e) { console.error("[handoff] REST error", e); handoffTriggered = false; }
   };
@@ -518,7 +545,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         knowledgeContext: "",
         voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
-        handoffPhrases: [], handoffNumbers: [], tools: [],
+        handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "", tools: [],
       };
       ctx = fb;
       ctxResolver?.(fb);
@@ -531,7 +558,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 async function loadContext(agentId: string): Promise<Ctx> {
   const { data: agent } = await supa
     .from("agents")
-    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers")
+    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164")
     .eq("id", agentId)
     .maybeSingle();
   if (!agent) {
@@ -540,7 +567,7 @@ async function loadContext(agentId: string): Promise<Ctx> {
       systemPrompt: "Ты вежливый ассистент Premier Energy.", knowledgeContext: "",
       voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
-      handoffPhrases: [], handoffNumbers: [], tools: [],
+      handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "", tools: [],
     };
   }
   const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
@@ -560,8 +587,51 @@ async function loadContext(agentId: string): Promise<Ctx> {
     handoffDigit: agent.handoff_dtmf_digit || "0",
     handoffPhrases: Array.isArray(agent.handoff_trigger_phrases) ? agent.handoff_trigger_phrases : [],
     handoffNumbers: Array.isArray(agent.handoff_numbers) ? agent.handoff_numbers : [],
+    twilioNumberE164: agent.twilio_number_e164 || "",
     tools,
   };
+}
+
+async function handleHandoffAction(req: Request, url: URL): Promise<Response> {
+  const form = req.method === "POST" ? await req.formData().catch(() => new FormData()) : new FormData();
+  const callSid = String(form.get("CallSid") || url.searchParams.get("call_sid") || "");
+  const digit = String(form.get("Digits") || "").trim();
+  const agentIdParam = String(url.searchParams.get("agent_id") || "");
+  const { data: call } = callSid
+    ? await supa.from("calls").select("agent_id").eq("twilio_call_sid", callSid).maybeSingle()
+    : { data: null };
+  const agentId = String(call?.agent_id || agentIdParam || "");
+  if (!agentId) return twimlResponse(`<Reject/>`);
+  const { data: agent } = await supa
+    .from("agents")
+    .select("id, handoff_enabled, handoff_dtmf_digit, handoff_numbers, twilio_number_e164, language")
+    .eq("id", agentId)
+    .eq("is_active", true)
+    .maybeSingle();
+  const expected = String(agent?.handoff_dtmf_digit || "0");
+  const numbers = Array.isArray(agent?.handoff_numbers) ? agent.handoff_numbers.filter(Boolean) : [];
+  if (!agent?.handoff_enabled || digit !== expected || !numbers.length) {
+    return twimlResponse(`<Say voice="alice" language="ru-RU">Оператор сейчас недоступен.</Say><Hangup/>`);
+  }
+  const target = String(numbers[Math.floor(Math.random() * numbers.length)]);
+  if (callSid) {
+    await supa.from("calls")
+      .update({ handoff_to: target, handoff_at: new Date().toISOString(), status: "handoff" })
+      .eq("twilio_call_sid", callSid);
+  }
+  const callerId = agent.twilio_number_e164 ? ` callerId="${escXml(agent.twilio_number_e164)}"` : "";
+  log("[handoff] action dialing", target, "call=", callSid, "digit=", digit);
+  return twimlResponse(
+    `<Say voice="alice" language="${escXml(agent.language || "ru-RU")}">Соединяю с оператором.</Say>` +
+      `<Dial${callerId} answerOnBridge="true" timeout="30"><Number>${escXml(target)}</Number></Dial>`,
+  );
+}
+
+function twimlResponse(body: string): Response {
+  return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`, {
+    status: 200,
+    headers: { "content-type": "text/xml" },
+  });
 }
 
 async function loadTools(agentId: string, ownerId: string): Promise<ToolRow[]> {

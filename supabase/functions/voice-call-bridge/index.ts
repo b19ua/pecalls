@@ -308,8 +308,29 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     const before = haystack.slice(0, m.index ?? 0).split(/\s+/).slice(-3).join(" ");
     return !NEGATIONS.some((n) => new RegExp(`(^|\\s)${n}(\\s|$)`).test(before));
   };
+  let handoffPromptedAt = 0;
+  const promptForDtmfHandoff = () => {
+    if (!gemini || !geminiReady) return;
+    const digit = ctx?.handoffDigit || "0";
+    const lang = (ctx?.language || "ru-RU").toLowerCase().startsWith("ru") ? "ru" : "en";
+    const instr = lang === "ru"
+      ? `Кратко скажи звонящему: "Чтобы соединиться с оператором, пожалуйста, нажмите ${digit} на клавиатуре телефона." Не задавай других вопросов.`
+      : `Briefly tell the caller: "To be connected to a human operator, please press ${digit} on your phone keypad." Do not ask anything else.`;
+    try {
+      gemini.send(JSON.stringify({
+        client_content: {
+          turns: [{ role: "user", parts: [{ text: instr }] }],
+          turn_complete: true,
+        },
+      }));
+      handoffPromptedAt = Date.now();
+      log("[handoff] prompted caller to press DTMF", digit);
+    } catch (e) { console.error("[handoff] prompt error", e); }
+  };
   const maybeHandoffByPhrase = (text: string) => {
     if (handoffTriggered || !ctx?.handoffEnabled || !ctx.handoffNumbers.length) return;
+    // Avoid re-prompting within 20s
+    if (handoffPromptedAt && Date.now() - handoffPromptedAt < 20000) return;
     userPhraseBuffer = (userPhraseBuffer + " " + text).slice(-400);
     const haystack = norm(userPhraseBuffer);
     const lang = (ctx.language || "ru-RU").toLowerCase().startsWith("ru") ? "ru" : "en";
@@ -318,9 +339,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     const hit = phrases.find((p) => matchPhrase(haystack, norm(p || "")));
     if (hit) {
       log("[handoff] phrase match:", hit, "in:", haystack.slice(-120));
-      // Clear buffer so we don't re-trigger on the same context.
       userPhraseBuffer = "";
-      triggerHandoff("phrase");
+      promptForDtmfHandoff();
     }
   };
 

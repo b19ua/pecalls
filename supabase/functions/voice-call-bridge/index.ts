@@ -593,6 +593,48 @@ async function loadContext(agentId: string): Promise<Ctx> {
   };
 }
 
+async function handleHandoffAction(req: Request, url: URL): Promise<Response> {
+  const form = req.method === "POST" ? await req.formData().catch(() => new FormData()) : new FormData();
+  const callSid = String(form.get("CallSid") || url.searchParams.get("call_sid") || "");
+  const digit = String(form.get("Digits") || "").trim();
+  const agentIdParam = String(url.searchParams.get("agent_id") || "");
+  const { data: call } = callSid
+    ? await supa.from("calls").select("agent_id").eq("twilio_call_sid", callSid).maybeSingle()
+    : { data: null };
+  const agentId = String(call?.agent_id || agentIdParam || "");
+  if (!agentId) return twimlResponse(`<Reject/>`);
+  const { data: agent } = await supa
+    .from("agents")
+    .select("id, handoff_enabled, handoff_dtmf_digit, handoff_numbers, twilio_number_e164, language")
+    .eq("id", agentId)
+    .eq("is_active", true)
+    .maybeSingle();
+  const expected = String(agent?.handoff_dtmf_digit || "0");
+  const numbers = Array.isArray(agent?.handoff_numbers) ? agent.handoff_numbers.filter(Boolean) : [];
+  if (!agent?.handoff_enabled || digit !== expected || !numbers.length) {
+    return twimlResponse(`<Say voice="alice" language="ru-RU">Оператор сейчас недоступен.</Say><Hangup/>`);
+  }
+  const target = String(numbers[Math.floor(Math.random() * numbers.length)]);
+  if (callSid) {
+    await supa.from("calls")
+      .update({ handoff_to: target, handoff_at: new Date().toISOString(), status: "handoff" })
+      .eq("twilio_call_sid", callSid);
+  }
+  const callerId = agent.twilio_number_e164 ? ` callerId="${escXml(agent.twilio_number_e164)}"` : "";
+  log("[handoff] action dialing", target, "call=", callSid, "digit=", digit);
+  return twimlResponse(
+    `<Say voice="alice" language="${escXml(agent.language || "ru-RU")}">Соединяю с оператором.</Say>` +
+      `<Dial${callerId} answerOnBridge="true" timeout="30"><Number>${escXml(target)}</Number></Dial>`,
+  );
+}
+
+function twimlResponse(body: string): Response {
+  return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`, {
+    status: 200,
+    headers: { "content-type": "text/xml" },
+  });
+}
+
 async function loadTools(agentId: string, ownerId: string): Promise<ToolRow[]> {
   try {
     const { data } = await supa

@@ -546,7 +546,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 async function loadContext(agentId: string): Promise<Ctx> {
   const { data: agent } = await supa
     .from("agents")
-    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers")
+    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164")
     .eq("id", agentId)
     .maybeSingle();
   if (!agent) {
@@ -555,7 +555,7 @@ async function loadContext(agentId: string): Promise<Ctx> {
       systemPrompt: "Ты вежливый ассистент Premier Energy.", knowledgeContext: "",
       voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
-      handoffPhrases: [], handoffNumbers: [], tools: [],
+      handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "", tools: [],
     };
   }
   const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
@@ -575,6 +575,7 @@ async function loadContext(agentId: string): Promise<Ctx> {
     handoffDigit: agent.handoff_dtmf_digit || "0",
     handoffPhrases: Array.isArray(agent.handoff_trigger_phrases) ? agent.handoff_trigger_phrases : [],
     handoffNumbers: Array.isArray(agent.handoff_numbers) ? agent.handoff_numbers : [],
+    twilioNumberE164: agent.twilio_number_e164 || "",
     tools,
   };
 }

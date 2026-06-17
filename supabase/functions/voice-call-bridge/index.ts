@@ -308,6 +308,10 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   const DEFAULT_TRIGGERS_RU = ["оператор", "живого оператора", "живой человек", "соедините с человеком", "менеджер", "позови человека"];
   const DEFAULT_TRIGGERS_EN = ["operator", "real person", "speak to a human", "talk to an agent", "human agent"];
   const NEGATIONS = ["не", "не надо", "не нужно", "не хочу", "без", "no", "not", "dont", "don t", "do not", "without"];
+  const expandPhrases = (phrases: string[], lang: string) => {
+    const defaults = lang === "ru" ? DEFAULT_TRIGGERS_RU : DEFAULT_TRIGGERS_EN;
+    return Array.from(new Set([...phrases, ...defaults, "переведи", "переключи", "соедини", "специалист", "человек"]));
+  };
   // Word-boundary match (unicode-aware) + negation guard within last 3 tokens before the hit.
   const matchPhrase = (haystack: string, needle: string): boolean => {
     if (needle.length < 2) return false;
@@ -343,8 +347,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     userPhraseBuffer = (userPhraseBuffer + " " + text).slice(-400);
     const haystack = norm(userPhraseBuffer);
     const lang = (ctx.language || "ru-RU").toLowerCase().startsWith("ru") ? "ru" : "en";
-    const defaults = lang === "ru" ? DEFAULT_TRIGGERS_RU : DEFAULT_TRIGGERS_EN;
-    const phrases = (ctx.handoffPhrases?.length ? ctx.handoffPhrases : defaults);
+    const phrases = expandPhrases(ctx.handoffPhrases || [], lang);
     const hit = phrases.find((p) => matchPhrase(haystack, norm(p || "")));
     if (hit) {
       log("[handoff] phrase match:", hit, "in:", haystack.slice(-120));
@@ -530,7 +533,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         knowledgeContext: "",
         voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
-        handoffPhrases: [], handoffNumbers: [], tools: [],
+        handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "", tools: [],
       };
       ctx = fb;
       ctxResolver?.(fb);

@@ -339,9 +339,45 @@ function AgentEditor() {
         </Section>
 
         <Section title={t("agent.section.telephony")}>
-          <Field label={t("agent.field.twilio")}>
-            <Input value={form.twilio_number_e164} onChange={(e) => set("twilio_number_e164", e.target.value)} placeholder="+37360123456" />
+          <Field label="Тип входящего подключения" hint="Phone number — обычный номер из Twilio. SIP URI — кастомный идентификатор для маршрутизации с вашей АТС.">
+            <Tabs
+              value={form.inbound_connection_type}
+              onValueChange={(v) => set("inbound_connection_type", v as "phone" | "sip_uri")}
+            >
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="phone">Phone number</TabsTrigger>
+                <TabsTrigger value="sip_uri">SIP URI</TabsTrigger>
+              </TabsList>
+              <TabsContent value="phone" className="mt-3">
+                <Input
+                  value={form.twilio_number_e164}
+                  onChange={(e) => set("twilio_number_e164", e.target.value)}
+                  placeholder="+37360123456"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">Номер Twilio в формате E.164.</p>
+              </TabsContent>
+              <TabsContent value="sip_uri" className="mt-3 space-y-2">
+                <Input
+                  value={form.inbound_sip_uri_user}
+                  onChange={(e) =>
+                    set(
+                      "inbound_sip_uri_user",
+                      e.target.value.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 64),
+                    )
+                  }
+                  placeholder="ai_sales"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Вставьте этот идентификатор в вашей АТС в формате{" "}
+                  <code className="font-mono">
+                    sip:{form.inbound_sip_uri_user || "идентификатор"}@ваш-транк.pstn.twilio.com
+                  </code>
+                  . Допустимы латиница, цифры, <code>.</code> <code>_</code> <code>-</code>.
+                </p>
+              </TabsContent>
+            </Tabs>
           </Field>
+
 
           <Field label="Исходящие звонки через">
             <Select value={form.outbound_mode} onValueChange={(v) => set("outbound_mode", v as "twilio_number" | "sip_trunk")}>

@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { verifyTwilioRequest } from "@/lib/twilio-verify.server";
 
 function escapeXml(s: string) {
@@ -17,6 +16,7 @@ export const Route = createFileRoute("/api/public/twilio/handoff")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const url = new URL(request.url);
         const form = await request.formData();
         if (!(await verifyTwilioRequest(request, form))) {

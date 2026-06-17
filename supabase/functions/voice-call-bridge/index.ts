@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
   const callSid = url.searchParams.get("call_sid") || "";
   const upgrade = req.headers.get("upgrade") || "";
   if (url.searchParams.get("action") === "handoff") return handleHandoffAction(req, url);
+  if (url.searchParams.get("action") === "handoff-result") return handleHandoffResult(req, url);
   if (upgrade.toLowerCase() !== "websocket") {
     return new Response("expected WebSocket upgrade", { status: 426 });
   }
@@ -75,6 +76,13 @@ type Ctx = {
   handoffPhrases: string[];
   handoffNumbers: string[];
   twilioNumberE164: string;
+  outboundMode: "twilio_number" | "sip_trunk";
+  sipDomain: string;
+  sipUsername: string;
+  sipPassword: string;
+  sipTransport: string;
+  sipFromNumber: string;
+  sipRoutePrefix: string;
   tools: ToolRow[];
 };
 
@@ -383,9 +391,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       }).eq("twilio_call_sid", callSid);
     } catch (e) { console.error("handoff db", e); }
 
-    const lang = ctx.language || "ru-RU";
-    const from = ctx.twilioNumberE164 ? ` callerId="${escXml(ctx.twilioNumberE164)}"` : "";
-    const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Say voice="alice" language="${escXml(lang)}">Соединяю с оператором.</Say><Dial${from} answerOnBridge="true" timeout="30"><Number>${escXml(target)}</Number></Dial></Response>`;
+    const twiml = `<Response><Stop><Stream name="gemini"/></Stop>${buildHandoffDialTwiml(ctx, target)}</Response>`;
     try {
       const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
         method: "POST",
@@ -545,7 +551,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         knowledgeContext: "",
         voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
-        handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "", tools: [],
+        handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
+        outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
       };
       ctx = fb;
       ctxResolver?.(fb);
@@ -558,7 +565,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 async function loadContext(agentId: string): Promise<Ctx> {
   const { data: agent } = await supa
     .from("agents")
-    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164")
+    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix")
     .eq("id", agentId)
     .maybeSingle();
   if (!agent) {
@@ -567,7 +574,8 @@ async function loadContext(agentId: string): Promise<Ctx> {
       systemPrompt: "Ты вежливый ассистент Premier Energy.", knowledgeContext: "",
       voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
-      handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "", tools: [],
+      handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
+      outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
     };
   }
   const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
@@ -588,6 +596,13 @@ async function loadContext(agentId: string): Promise<Ctx> {
     handoffPhrases: Array.isArray(agent.handoff_trigger_phrases) ? agent.handoff_trigger_phrases : [],
     handoffNumbers: Array.isArray(agent.handoff_numbers) ? agent.handoff_numbers : [],
     twilioNumberE164: agent.twilio_number_e164 || "",
+    outboundMode: agent.outbound_mode === "sip_trunk" ? "sip_trunk" : "twilio_number",
+    sipDomain: agent.sip_domain || "",
+    sipUsername: agent.sip_username || "",
+    sipPassword: agent.sip_password || "",
+    sipTransport: agent.sip_transport || "tls",
+    sipFromNumber: agent.sip_from_number || "",
+    sipRoutePrefix: agent.sip_route_prefix || "",
     tools,
   };
 }
@@ -604,7 +619,7 @@ async function handleHandoffAction(req: Request, url: URL): Promise<Response> {
   if (!agentId) return twimlResponse(`<Reject/>`);
   const { data: agent } = await supa
     .from("agents")
-    .select("id, handoff_enabled, handoff_dtmf_digit, handoff_numbers, twilio_number_e164, language")
+    .select("id, handoff_enabled, handoff_dtmf_digit, handoff_numbers, twilio_number_e164, language, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix")
     .eq("id", agentId)
     .eq("is_active", true)
     .maybeSingle();
@@ -619,12 +634,58 @@ async function handleHandoffAction(req: Request, url: URL): Promise<Response> {
       .update({ handoff_to: target, handoff_at: new Date().toISOString(), status: "handoff" })
       .eq("twilio_call_sid", callSid);
   }
-  const callerId = agent.twilio_number_e164 ? ` callerId="${escXml(agent.twilio_number_e164)}"` : "";
   log("[handoff] action dialing", target, "call=", callSid, "digit=", digit);
-  return twimlResponse(
-    `<Say voice="alice" language="${escXml(agent.language || "ru-RU")}">Соединяю с оператором.</Say>` +
-      `<Dial${callerId} answerOnBridge="true" timeout="30"><Number>${escXml(target)}</Number></Dial>`,
-  );
+  return twimlResponse(buildHandoffDialTwiml(mapAgentToDialCtx(agent), target));
+}
+
+async function handleHandoffResult(req: Request, url: URL): Promise<Response> {
+  const form = req.method === "POST" ? await req.formData().catch(() => new FormData()) : new FormData();
+  const callSid = String(form.get("CallSid") || url.searchParams.get("call_sid") || "");
+  const result = {
+    dial_call_status: String(form.get("DialCallStatus") || ""),
+    dial_call_sid: String(form.get("DialCallSid") || ""),
+    dial_sip_response_code: String(form.get("DialSipResponseCode") || ""),
+    dial_call_duration: String(form.get("DialCallDuration") || ""),
+  };
+  log("[handoff] dial result", result);
+  if (callSid) {
+    await supa.from("calls")
+      .update({ metadata: { handoff_result: result } })
+      .eq("twilio_call_sid", callSid);
+  }
+  return twimlResponse(`<Hangup/>`);
+}
+
+function mapAgentToDialCtx(agent: Record<string, unknown>): Pick<Ctx, "language" | "twilioNumberE164" | "outboundMode" | "sipDomain" | "sipUsername" | "sipPassword" | "sipTransport" | "sipFromNumber" | "sipRoutePrefix"> {
+  return {
+    language: String(agent.language || "ru-RU"),
+    twilioNumberE164: String(agent.twilio_number_e164 || ""),
+    outboundMode: agent.outbound_mode === "sip_trunk" ? "sip_trunk" : "twilio_number",
+    sipDomain: String(agent.sip_domain || ""),
+    sipUsername: String(agent.sip_username || ""),
+    sipPassword: String(agent.sip_password || ""),
+    sipTransport: String(agent.sip_transport || "tls"),
+    sipFromNumber: String(agent.sip_from_number || ""),
+    sipRoutePrefix: String(agent.sip_route_prefix || ""),
+  };
+}
+
+function buildHandoffDialTwiml(c: Pick<Ctx, "language" | "twilioNumberE164" | "outboundMode" | "sipDomain" | "sipUsername" | "sipPassword" | "sipTransport" | "sipFromNumber" | "sipRoutePrefix">, target: string): string {
+  const from = c.outboundMode === "sip_trunk" ? (c.sipFromNumber || c.twilioNumberE164) : c.twilioNumberE164;
+  const callerId = from ? ` callerId="${escXml(from)}"` : "";
+  const useSip = c.outboundMode === "sip_trunk" && !!c.sipDomain;
+  const action = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/voice-call-bridge?action=handoff-result`;
+  const dialAttrs = `${callerId} answerOnBridge="true" timeout="30" action="${escXml(action)}" method="POST"`;
+  if (!useSip) {
+    return `<Say voice="alice" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Number>${escXml(target)}</Number></Dial>`;
+  }
+  const transport = (c.sipTransport || "tls").toLowerCase();
+  const prefix = (c.sipRoutePrefix || "").trim();
+  const sipUser = prefix ? `${prefix}${target.replace(/^\+/, "")}` : target;
+  const auth = c.sipUsername ? ` username="${escXml(c.sipUsername)}" password="${escXml(c.sipPassword)}"` : "";
+  const sipUri = `sip:${sipUser}@${c.sipDomain}${transport ? `;transport=${transport}` : ""}`;
+  log("[handoff] using sip trunk", sipUri);
+  return `<Say voice="alice" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Sip${auth}>${escXml(sipUri)}</Sip></Dial>`;
 }
 
 function twimlResponse(body: string): Response {

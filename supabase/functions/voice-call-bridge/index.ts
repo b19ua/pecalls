@@ -695,6 +695,22 @@ function twimlResponse(body: string): Response {
   });
 }
 
+// Twilio <Say> voice that matches the male Gemini voice used in the live stream.
+// Polly.Maxim = Russian male; Polly.Matthew = English (US) male.
+function sayVoiceFor(language?: string): string {
+  const lang = (language || "ru-RU").toLowerCase();
+  if (lang.startsWith("ru")) return "Polly.Maxim";
+  if (lang.startsWith("en")) return "Polly.Matthew";
+  if (lang.startsWith("uk")) return "Polly.Maxim";
+  if (lang.startsWith("de")) return "Polly.Hans";
+  if (lang.startsWith("fr")) return "Polly.Mathieu";
+  if (lang.startsWith("es")) return "Polly.Enrique";
+  if (lang.startsWith("it")) return "Polly.Giorgio";
+  if (lang.startsWith("pl")) return "Polly.Jacek";
+  if (lang.startsWith("pt")) return "Polly.Cristiano";
+  return "Polly.Matthew";
+}
+
 async function loadTools(agentId: string, ownerId: string): Promise<ToolRow[]> {
   try {
     const { data } = await supa

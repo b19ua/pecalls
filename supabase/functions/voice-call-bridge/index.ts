@@ -401,7 +401,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         handoffTriggered = false; // allow retry
       } else {
         log("[handoff] REST ok, dialing", target);
-        try { await supa.from("calls").update({ status: "transferred" }).eq("twilio_call_sid", callSid); } catch {}
+        try { await supa.from("calls").update({ status: "handoff" }).eq("twilio_call_sid", callSid); } catch {}
       }
     } catch (e) { console.error("[handoff] REST error", e); handoffTriggered = false; }
   };

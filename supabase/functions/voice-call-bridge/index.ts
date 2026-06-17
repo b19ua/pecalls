@@ -311,7 +311,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   const NEGATIONS = ["не", "не надо", "не нужно", "не хочу", "без", "no", "not", "dont", "don t", "do not", "without"];
   const expandPhrases = (phrases: string[], lang: string) => {
     const defaults = lang === "ru" ? DEFAULT_TRIGGERS_RU : DEFAULT_TRIGGERS_EN;
-    return Array.from(new Set([...phrases, ...defaults, "переведи", "переключи", "соедини", "специалист", "человек"]));
+    return Array.from(new Set([...phrases, ...defaults, "переведи", "переключи", "соедини", "специалист", "специалиста", "человек", "человека"]));
   };
   // Word-boundary match (unicode-aware) + negation guard within last 3 tokens before the hit.
   const matchPhrase = (haystack: string, needle: string): boolean => {

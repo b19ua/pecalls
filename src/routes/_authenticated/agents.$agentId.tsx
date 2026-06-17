@@ -174,6 +174,7 @@ function AgentEditor() {
         return;
       }
     }
+    setSaving(true);
     try {
       const res = await saveAgentFn({
         data: {

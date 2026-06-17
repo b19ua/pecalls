@@ -126,7 +126,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const phoneInstr = buildPhoneInstructions(lang, c.greeting);
       const knowledgePreamble = buildKnowledgePreamble(c.knowledgeContext);
       const handoffInstr = c.handoffEnabled && c.handoffNumbers.length
-        ? `Human handoff rule: if the caller asks for an operator, manager, human, specialist, or transfer, do NOT say that you are transferring immediately. First tell the caller to press ${c.handoffDigit || "0"} on the phone keypad to connect to the operator. Keep this instruction short and do not ask extra questions.`
+        ? `Human handoff rule: if the caller asks for an operator, manager, human, specialist, or transfer, do NOT say that you are transferring immediately and NEVER speak, dictate or read any phone number out loud (the system handles dialing). Just tell the caller in one short sentence to press ${c.handoffDigit || "0"} on the phone keypad to connect to the operator. Do not ask extra questions, do not mention digits other than ${c.handoffDigit || "0"}.`
         : "";
       const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, handoffInstr]
         .filter(Boolean)
@@ -341,7 +341,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     const bridgeWs = `${SUPABASE_URL.replace(/^https?:/, "wss:").replace(/\/$/, "")}/functions/v1/voice-call-bridge`;
     const action = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/voice-call-bridge?action=handoff&agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&call_sid=${encodeURIComponent(callSid)}`;
     const streamUrl = `${bridgeWs}?agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&call_sid=${encodeURIComponent(callSid)}`;
-    const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Gather input="dtmf" numDigits="1" timeout="10" action="${escXml(action)}" method="POST"><Say voice="alice" language="${escXml(ctx?.language || "ru-RU")}">${escXml(promptText)}</Say></Gather><Connect><Stream url="${escXml(streamUrl)}"><Parameter name="agent_id" value="${escXml(ctx?.agentId || agentId)}"/><Parameter name="call_sid" value="${escXml(callSid)}"/></Stream></Connect></Response>`;
+    const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Gather input="dtmf" numDigits="1" timeout="10" action="${escXml(action)}" method="POST"><Say voice="${sayVoiceFor(ctx?.language)}" language="${escXml(ctx?.language || "ru-RU")}">${escXml(promptText)}</Say></Gather><Connect><Stream url="${escXml(streamUrl)}"><Parameter name="agent_id" value="${escXml(ctx?.agentId || agentId)}"/><Parameter name="call_sid" value="${escXml(callSid)}"/></Stream></Connect></Response>`;
     try {
       const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
         method: "POST",
@@ -626,7 +626,7 @@ async function handleHandoffAction(req: Request, url: URL): Promise<Response> {
   const expected = String(agent?.handoff_dtmf_digit || "0");
   const numbers = Array.isArray(agent?.handoff_numbers) ? agent.handoff_numbers.filter(Boolean) : [];
   if (!agent?.handoff_enabled || digit !== expected || !numbers.length) {
-    return twimlResponse(`<Say voice="alice" language="ru-RU">Оператор сейчас недоступен.</Say><Hangup/>`);
+    return twimlResponse(`<Say voice="${sayVoiceFor(agent?.language as string)}" language="${escXml((agent?.language as string) || "ru-RU")}">Оператор сейчас недоступен.</Say><Hangup/>`);
   }
   const target = String(numbers[Math.floor(Math.random() * numbers.length)]);
   if (callSid) {
@@ -677,7 +677,7 @@ function buildHandoffDialTwiml(c: Pick<Ctx, "language" | "twilioNumberE164" | "o
   const action = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/voice-call-bridge?action=handoff-result`;
   const dialAttrs = `${callerId} answerOnBridge="true" timeout="30" action="${escXml(action)}" method="POST"`;
   if (!useSip) {
-    return `<Say voice="alice" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Number>${escXml(target)}</Number></Dial>`;
+    return `<Say voice="${sayVoiceFor(c.language)}" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Number>${escXml(target)}</Number></Dial>`;
   }
   const transport = (c.sipTransport || "tls").toLowerCase();
   const prefix = (c.sipRoutePrefix || "").trim();
@@ -685,7 +685,7 @@ function buildHandoffDialTwiml(c: Pick<Ctx, "language" | "twilioNumberE164" | "o
   const auth = c.sipUsername ? ` username="${escXml(c.sipUsername)}" password="${escXml(c.sipPassword)}"` : "";
   const sipUri = `sip:${sipUser}@${c.sipDomain}${transport ? `;transport=${transport}` : ""}`;
   log("[handoff] using sip trunk", sipUri);
-  return `<Say voice="alice" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Sip${auth}>${escXml(sipUri)}</Sip></Dial>`;
+  return `<Say voice="${sayVoiceFor(c.language)}" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Sip${auth}>${escXml(sipUri)}</Sip></Dial>`;
 }
 
 function twimlResponse(body: string): Response {
@@ -693,6 +693,22 @@ function twimlResponse(body: string): Response {
     status: 200,
     headers: { "content-type": "text/xml" },
   });
+}
+
+// Twilio <Say> voice that matches the male Gemini voice used in the live stream.
+// Polly.Maxim = Russian male; Polly.Matthew = English (US) male.
+function sayVoiceFor(language?: string): string {
+  const lang = (language || "ru-RU").toLowerCase();
+  if (lang.startsWith("ru")) return "Polly.Maxim";
+  if (lang.startsWith("en")) return "Polly.Matthew";
+  if (lang.startsWith("uk")) return "Polly.Maxim";
+  if (lang.startsWith("de")) return "Polly.Hans";
+  if (lang.startsWith("fr")) return "Polly.Mathieu";
+  if (lang.startsWith("es")) return "Polly.Enrique";
+  if (lang.startsWith("it")) return "Polly.Giorgio";
+  if (lang.startsWith("pl")) return "Polly.Jacek";
+  if (lang.startsWith("pt")) return "Polly.Cristiano";
+  return "Polly.Matthew";
 }
 
 async function loadTools(agentId: string, ownerId: string): Promise<ToolRow[]> {

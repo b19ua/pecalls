@@ -626,7 +626,7 @@ async function handleHandoffAction(req: Request, url: URL): Promise<Response> {
   const expected = String(agent?.handoff_dtmf_digit || "0");
   const numbers = Array.isArray(agent?.handoff_numbers) ? agent.handoff_numbers.filter(Boolean) : [];
   if (!agent?.handoff_enabled || digit !== expected || !numbers.length) {
-    return twimlResponse(`<Say voice="alice" language="ru-RU">Оператор сейчас недоступен.</Say><Hangup/>`);
+    return twimlResponse(`<Say voice="${sayVoiceFor(agent?.language as string)}" language="${escXml((agent?.language as string) || "ru-RU")}">Оператор сейчас недоступен.</Say><Hangup/>`);
   }
   const target = String(numbers[Math.floor(Math.random() * numbers.length)]);
   if (callSid) {

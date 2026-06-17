@@ -159,10 +159,19 @@ function AgentEditor() {
       toast.error(t("agent.field.name"));
       return;
     }
-    if (form.handoff_numbers.length > 5) {
+    const cleanedNumbers = form.handoff_numbers
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const badNumber = cleanedNumbers.find((s) => !/^\+?[0-9]{6,16}$/.test(s));
+    if (badNumber) {
+      toast.error(`Неверный номер: ${badNumber}`);
+      return;
+    }
+    if (cleanedNumbers.length > 5) {
       toast.error("max 5");
       return;
     }
+    form.handoff_numbers = cleanedNumbers;
     if (form.inbound_connection_type === "sip_uri") {
       const u = form.inbound_sip_uri_user.trim();
       if (!u) {

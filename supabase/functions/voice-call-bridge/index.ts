@@ -73,6 +73,7 @@ type Ctx = {
   handoffDigit: string;
   handoffPhrases: string[];
   handoffNumbers: string[];
+  twilioNumberE164: string;
   tools: ToolRow[];
 };
 
@@ -115,7 +116,10 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       log("connecting Gemini Live model=", model);
       const phoneInstr = buildPhoneInstructions(lang, c.greeting);
       const knowledgePreamble = buildKnowledgePreamble(c.knowledgeContext);
-      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr]
+      const handoffInstr = c.handoffEnabled && c.handoffNumbers.length
+        ? `Human handoff rule: if the caller asks for an operator, manager, human, specialist, or transfer, do NOT say that you are transferring immediately. First tell the caller to press ${c.handoffDigit || "0"} on the phone keypad to connect to the operator. Keep this instruction short and do not ask extra questions.`
+        : "";
+      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, handoffInstr]
         .filter(Boolean)
         .join("\n\n");
       // Lunara-proven payload shape (snake_case, NO languageCode lock).
@@ -176,23 +180,28 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           return;
         }
         if (msg.serverContent) {
-          const parts = msg.serverContent?.modelTurn?.parts || [];
-          for (const p of parts) {
-            if (p.inlineData?.data) {
-              const pcm = b64ToBytes(p.inlineData.data);
-              const rate = parseAudioRate(p.inlineData.mimeType) || 24000;
-              sendMulawToTwilio(pcmToMulaw8k(pcm, rate));
-            } else if (p.text && !p.thought) {
-              transcript.push({ role: "agent", text: p.text, ts: new Date().toISOString() });
-            }
-          }
           const it = msg.serverContent?.inputTranscription?.text;
+          let handoffPromptIssued = false;
           if (it) {
             transcript.push({ role: "user", text: it, ts: new Date().toISOString() });
-            maybeHandoffByPhrase(it);
+            handoffPromptIssued = maybeHandoffByPhrase(it);
+          }
+          const parts = msg.serverContent?.modelTurn?.parts || [];
+          if (!handoffPromptIssued) {
+            for (const p of parts) {
+              if (p.inlineData?.data) {
+                const pcm = b64ToBytes(p.inlineData.data);
+                const rate = parseAudioRate(p.inlineData.mimeType) || 24000;
+                sendMulawToTwilio(pcmToMulaw8k(pcm, rate));
+              } else if (p.text && !p.thought) {
+                transcript.push({ role: "agent", text: p.text, ts: new Date().toISOString() });
+              }
+            }
+          } else if (parts.length) {
+            log("[handoff] suppressed model transfer text; waiting for DTMF");
           }
           const ot = msg.serverContent?.outputTranscription?.text;
-          if (ot) transcript.push({ role: "agent", text: ot, ts: new Date().toISOString() });
+          if (ot && !handoffPromptIssued) transcript.push({ role: "agent", text: ot, ts: new Date().toISOString() });
         } else if (msg.error) {
           log("gemini ERROR", JSON.stringify(msg.error));
           const currentModel = getModelCandidates(ctx?.model)[geminiModelIndex] || getModelCandidates(ctx?.model)[0] || GEMINI_MODELS[0];

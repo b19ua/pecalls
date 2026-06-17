@@ -163,7 +163,17 @@ function AgentEditor() {
       toast.error("max 5");
       return;
     }
-    setSaving(true);
+    if (form.inbound_connection_type === "sip_uri") {
+      const u = form.inbound_sip_uri_user.trim();
+      if (!u) {
+        toast.error("Укажите идентификатор SIP URI");
+        return;
+      }
+      if (!/^[a-zA-Z0-9._-]+$/.test(u)) {
+        toast.error("SIP идентификатор: только латиница, цифры, . _ -");
+        return;
+      }
+    }
     try {
       const res = await saveAgentFn({
         data: {

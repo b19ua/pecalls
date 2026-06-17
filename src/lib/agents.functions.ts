@@ -40,6 +40,13 @@ const AgentSchema = z.object({
   model: z.string().min(1).max(200),
   temperature: z.number().min(0).max(2),
   twilio_number_e164: z.string().nullable().optional(),
+  inbound_connection_type: z.enum(["phone", "sip_uri"]).default("phone"),
+  inbound_sip_uri_user: z
+    .string()
+    .max(64)
+    .regex(/^[a-zA-Z0-9._-]+$/, "Only letters, digits, dot, underscore, dash")
+    .nullable()
+    .optional(),
   is_active: z.boolean(),
   record_calls: z.boolean(),
   silence_timeout_seconds: z.number().int().min(1).max(120),

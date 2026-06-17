@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
   const callSid = url.searchParams.get("call_sid") || "";
   const upgrade = req.headers.get("upgrade") || "";
   if (url.searchParams.get("action") === "handoff") return handleHandoffAction(req, url);
+  if (url.searchParams.get("action") === "handoff-result") return handleHandoffResult(req, url);
   if (upgrade.toLowerCase() !== "websocket") {
     return new Response("expected WebSocket upgrade", { status: 426 });
   }
@@ -637,6 +638,24 @@ async function handleHandoffAction(req: Request, url: URL): Promise<Response> {
   return twimlResponse(buildHandoffDialTwiml(mapAgentToDialCtx(agent), target));
 }
 
+async function handleHandoffResult(req: Request, url: URL): Promise<Response> {
+  const form = req.method === "POST" ? await req.formData().catch(() => new FormData()) : new FormData();
+  const callSid = String(form.get("CallSid") || url.searchParams.get("call_sid") || "");
+  const result = {
+    dial_call_status: String(form.get("DialCallStatus") || ""),
+    dial_call_sid: String(form.get("DialCallSid") || ""),
+    dial_sip_response_code: String(form.get("DialSipResponseCode") || ""),
+    dial_call_duration: String(form.get("DialCallDuration") || ""),
+  };
+  log("[handoff] dial result", result);
+  if (callSid) {
+    await supa.from("calls")
+      .update({ metadata: { handoff_result: result } })
+      .eq("twilio_call_sid", callSid);
+  }
+  return twimlResponse(`<Hangup/>`);
+}
+
 function mapAgentToDialCtx(agent: Record<string, unknown>): Pick<Ctx, "language" | "twilioNumberE164" | "outboundMode" | "sipDomain" | "sipUsername" | "sipPassword" | "sipTransport" | "sipFromNumber" | "sipRoutePrefix"> {
   return {
     language: String(agent.language || "ru-RU"),
@@ -655,7 +674,8 @@ function buildHandoffDialTwiml(c: Pick<Ctx, "language" | "twilioNumberE164" | "o
   const from = c.outboundMode === "sip_trunk" ? (c.sipFromNumber || c.twilioNumberE164) : c.twilioNumberE164;
   const callerId = from ? ` callerId="${escXml(from)}"` : "";
   const useSip = c.outboundMode === "sip_trunk" && !!c.sipDomain;
-  const dialAttrs = `${callerId} answerOnBridge="true" timeout="30"`;
+  const action = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/voice-call-bridge?action=handoff-result`;
+  const dialAttrs = `${callerId} answerOnBridge="true" timeout="30" action="${escXml(action)}" method="POST"`;
   if (!useSip) {
     return `<Say voice="alice" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Number>${escXml(target)}</Number></Dial>`;
   }

@@ -63,11 +63,13 @@ export type Database = {
           handoff_numbers: string[]
           handoff_trigger_phrases: string[]
           id: string
+          inbound_connection_type: string
           inbound_sip_credential_list_sid: string | null
           inbound_sip_domain: string | null
           inbound_sip_domain_sid: string | null
           inbound_sip_password: string | null
           inbound_sip_slug: string | null
+          inbound_sip_uri_user: string | null
           inbound_sip_username: string | null
           is_active: boolean
           language: string
@@ -99,11 +101,13 @@ export type Database = {
           handoff_numbers?: string[]
           handoff_trigger_phrases?: string[]
           id?: string
+          inbound_connection_type?: string
           inbound_sip_credential_list_sid?: string | null
           inbound_sip_domain?: string | null
           inbound_sip_domain_sid?: string | null
           inbound_sip_password?: string | null
           inbound_sip_slug?: string | null
+          inbound_sip_uri_user?: string | null
           inbound_sip_username?: string | null
           is_active?: boolean
           language?: string
@@ -135,11 +139,13 @@ export type Database = {
           handoff_numbers?: string[]
           handoff_trigger_phrases?: string[]
           id?: string
+          inbound_connection_type?: string
           inbound_sip_credential_list_sid?: string | null
           inbound_sip_domain?: string | null
           inbound_sip_domain_sid?: string | null
           inbound_sip_password?: string | null
           inbound_sip_slug?: string | null
+          inbound_sip_uri_user?: string | null
           inbound_sip_username?: string | null
           is_active?: boolean
           language?: string

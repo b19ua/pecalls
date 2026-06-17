@@ -50,7 +50,7 @@ export const Route = createFileRoute("/api/public/twilio/handoff")({
         if (callSid) {
           await supabaseAdmin
             .from("calls")
-            .update({ handoff_to: target, handoff_at: new Date().toISOString(), status: "transferred" })
+            .update({ handoff_to: target, handoff_at: new Date().toISOString(), status: "handoff" })
             .eq("twilio_call_sid", callSid);
         }
 

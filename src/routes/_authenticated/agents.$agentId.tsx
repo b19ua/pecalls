@@ -170,7 +170,9 @@ function AgentEditor() {
           data: {
             ...form,
             description: form.description || null,
-            twilio_number_e164: form.twilio_number_e164 || null,
+            twilio_number_e164: form.inbound_connection_type === "phone" ? (form.twilio_number_e164 || null) : null,
+            inbound_connection_type: form.inbound_connection_type,
+            inbound_sip_uri_user: form.inbound_connection_type === "sip_uri" ? (form.inbound_sip_uri_user.trim() || null) : null,
             sip_domain: form.sip_domain || null,
             sip_username: form.sip_username || null,
             sip_password: form.sip_password || null,

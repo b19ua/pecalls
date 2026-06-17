@@ -35,6 +35,8 @@ type AgentForm = {
   model: string;
   temperature: number;
   twilio_number_e164: string;
+  inbound_connection_type: "phone" | "sip_uri";
+  inbound_sip_uri_user: string;
   is_active: boolean;
   record_calls: boolean;
   silence_timeout_seconds: number;

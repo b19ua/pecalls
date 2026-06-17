@@ -550,7 +550,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         knowledgeContext: "",
         voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
-        handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "", tools: [],
+        handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
+        outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
       };
       ctx = fb;
       ctxResolver?.(fb);
@@ -563,7 +564,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 async function loadContext(agentId: string): Promise<Ctx> {
   const { data: agent } = await supa
     .from("agents")
-    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164")
+    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix")
     .eq("id", agentId)
     .maybeSingle();
   if (!agent) {
@@ -572,7 +573,8 @@ async function loadContext(agentId: string): Promise<Ctx> {
       systemPrompt: "Ты вежливый ассистент Premier Energy.", knowledgeContext: "",
       voice: "Puck", language: "ru-RU", model: "gemini-2.5-flash-native-audio-latest", temperature: 0.6, greeting: "Здравствуйте!",
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
-      handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "", tools: [],
+      handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
+      outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
     };
   }
   const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
@@ -593,6 +595,13 @@ async function loadContext(agentId: string): Promise<Ctx> {
     handoffPhrases: Array.isArray(agent.handoff_trigger_phrases) ? agent.handoff_trigger_phrases : [],
     handoffNumbers: Array.isArray(agent.handoff_numbers) ? agent.handoff_numbers : [],
     twilioNumberE164: agent.twilio_number_e164 || "",
+    outboundMode: agent.outbound_mode === "sip_trunk" ? "sip_trunk" : "twilio_number",
+    sipDomain: agent.sip_domain || "",
+    sipUsername: agent.sip_username || "",
+    sipPassword: agent.sip_password || "",
+    sipTransport: agent.sip_transport || "tls",
+    sipFromNumber: agent.sip_from_number || "",
+    sipRoutePrefix: agent.sip_route_prefix || "",
     tools,
   };
 }

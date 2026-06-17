@@ -122,6 +122,8 @@ function AgentEditor() {
           model: data.model,
           temperature: Number(data.temperature),
           twilio_number_e164: data.twilio_number_e164 ?? "",
+          inbound_connection_type: ((data as any).inbound_connection_type as "phone" | "sip_uri") ?? "phone",
+          inbound_sip_uri_user: (data as any).inbound_sip_uri_user ?? "",
           is_active: data.is_active,
           record_calls: data.record_calls,
           silence_timeout_seconds: data.silence_timeout_seconds,

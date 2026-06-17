@@ -126,7 +126,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const phoneInstr = buildPhoneInstructions(lang, c.greeting);
       const knowledgePreamble = buildKnowledgePreamble(c.knowledgeContext);
       const handoffInstr = c.handoffEnabled && c.handoffNumbers.length
-        ? `Human handoff rule: if the caller asks for an operator, manager, human, specialist, or transfer, do NOT say that you are transferring immediately. First tell the caller to press ${c.handoffDigit || "0"} on the phone keypad to connect to the operator. Keep this instruction short and do not ask extra questions.`
+        ? `Human handoff rule: if the caller asks for an operator, manager, human, specialist, or transfer, do NOT say that you are transferring immediately and NEVER speak, dictate or read any phone number out loud (the system handles dialing). Just tell the caller in one short sentence to press ${c.handoffDigit || "0"} on the phone keypad to connect to the operator. Do not ask extra questions, do not mention digits other than ${c.handoffDigit || "0"}.`
         : "";
       const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, handoffInstr]
         .filter(Boolean)

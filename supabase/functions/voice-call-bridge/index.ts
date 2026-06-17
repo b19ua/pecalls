@@ -21,11 +21,12 @@ const GEMINI_MODELS = AVAILABLE_LIVE_AUDIO_MODELS;
 const GEMINI_WS = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
 const log = (...a: unknown[]) => console.log("[bridge]", ...a);
 
-Deno.serve((req) => {
+Deno.serve(async (req) => {
   const url = new URL(req.url);
   const agentId = url.searchParams.get("agent_id") || "";
   const callSid = url.searchParams.get("call_sid") || "";
   const upgrade = req.headers.get("upgrade") || "";
+  if (url.searchParams.get("action") === "handoff") return handleHandoffAction(req, url);
   if (upgrade.toLowerCase() !== "websocket") {
     return new Response("expected WebSocket upgrade", { status: 426 });
   }

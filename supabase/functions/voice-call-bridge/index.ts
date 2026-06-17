@@ -322,23 +322,35 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     return !NEGATIONS.some((n) => new RegExp(`(^|\\s)${n}(\\s|$)`).test(before));
   };
   let handoffPromptedAt = 0;
-  const promptForDtmfHandoff = () => {
+  const promptForDtmfHandoff = async () => {
     const digit = ctx?.handoffDigit || "0";
     const lang = (ctx?.language || "ru-RU").toLowerCase();
     const promptText = lang.startsWith("ru")
       ? `Чтобы соединиться с оператором, пожалуйста, нажмите ${digit} на клавиатуре телефона.`
       : `To be connected to a human operator, please press ${digit} on your phone keypad.`;
-    if (streamSid) sendMulawToTwilio(makeTonePromptMulaw(promptText, lang));
-    if (gemini && geminiReady) try {
-      gemini.send(JSON.stringify({
-        client_content: {
-          turns: [{ role: "user", parts: [{ text: `The caller asked for a human handoff. Stay silent now; the system already told the caller to press ${digit}. Do not say that you are transferring unless the DTMF digit is received.` }] }],
-          turn_complete: true,
-        },
-      }));
-    } catch (e) { console.error("[handoff] prompt error", e); }
     handoffPromptedAt = Date.now();
-    log("[handoff] prompted caller to press DTMF", digit);
+    const publicBase = (Deno.env.get("PUBLIC_APP_URL") || "https://pecalls.lovable.app").replace(/\/$/, "");
+    const action = `${publicBase}/api/public/twilio/handoff?agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&call_sid=${encodeURIComponent(callSid)}`;
+    const bridgeWs = `${SUPABASE_URL.replace(/^https?:/, "wss:").replace(/\/$/, "")}/functions/v1/voice-call-bridge`;
+    const streamUrl = `${bridgeWs}?agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&call_sid=${encodeURIComponent(callSid)}`;
+    const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Gather input="dtmf" numDigits="1" timeout="10" action="${escXml(action)}" method="POST"><Say voice="alice" language="${escXml(ctx?.language || "ru-RU")}">${escXml(promptText)}</Say></Gather><Connect><Stream url="${escXml(streamUrl)}"><Parameter name="agent_id" value="${escXml(ctx?.agentId || agentId)}"/><Parameter name="call_sid" value="${escXml(callSid)}"/></Stream></Connect></Response>`;
+    try {
+      const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_KEY}`,
+          "X-Connection-Api-Key": TWILIO_KEY,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ Twiml: twiml }),
+      });
+      if (!r.ok) {
+        log("[handoff] prompt REST failed", r.status, await r.text());
+        handoffPromptedAt = 0;
+      } else {
+        log("[handoff] prompted caller to press DTMF", digit);
+      }
+    } catch (e) { console.error("[handoff] prompt REST error", e); handoffPromptedAt = 0; }
   };
   const maybeHandoffByPhrase = (text: string): boolean => {
     if (handoffTriggered || !ctx?.handoffEnabled || !ctx.handoffNumbers.length) return false;
@@ -352,7 +364,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     if (hit) {
       log("[handoff] phrase match:", hit, "in:", haystack.slice(-120));
       userPhraseBuffer = "";
-      promptForDtmfHandoff();
+      void promptForDtmfHandoff();
       return true;
     }
     return false;

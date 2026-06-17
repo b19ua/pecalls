@@ -74,12 +74,15 @@ export const saveAgent = createServerFn({ method: "POST" })
       ...data.data,
       description: data.data.description || null,
       twilio_number_e164: data.data.twilio_number_e164 || null,
+      inbound_sip_uri_user: data.data.inbound_sip_uri_user
+        ? data.data.inbound_sip_uri_user.trim().toLowerCase()
+        : null,
       owner_id: ownerId,
     };
 
     if (!data.id) {
-      // Auto-attach first Twilio number on create when none provided
-      if (!payload.twilio_number_e164) {
+      // Auto-attach first Twilio number on create when phone mode and none provided
+      if (payload.inbound_connection_type === "phone" && !payload.twilio_number_e164) {
         payload.twilio_number_e164 = await fetchFirstTwilioNumber();
       }
       const { data: row, error } = await supabaseAdmin

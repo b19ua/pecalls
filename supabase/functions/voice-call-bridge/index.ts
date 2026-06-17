@@ -319,27 +319,27 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   };
   let handoffPromptedAt = 0;
   const promptForDtmfHandoff = () => {
-    if (!gemini || !geminiReady) return;
     const digit = ctx?.handoffDigit || "0";
-    const lang = (ctx?.language || "ru-RU").toLowerCase().startsWith("ru") ? "ru" : "en";
-    const instr = lang === "ru"
-      ? `Кратко скажи звонящему: "Чтобы соединиться с оператором, пожалуйста, нажмите ${digit} на клавиатуре телефона." Не задавай других вопросов.`
-      : `Briefly tell the caller: "To be connected to a human operator, please press ${digit} on your phone keypad." Do not ask anything else.`;
-    try {
+    const lang = (ctx?.language || "ru-RU").toLowerCase();
+    const promptText = lang.startsWith("ru")
+      ? `Чтобы соединиться с оператором, пожалуйста, нажмите ${digit} на клавиатуре телефона.`
+      : `To be connected to a human operator, please press ${digit} on your phone keypad.`;
+    if (streamSid) sendMulawToTwilio(makeTonePromptMulaw(promptText, lang));
+    if (gemini && geminiReady) try {
       gemini.send(JSON.stringify({
         client_content: {
-          turns: [{ role: "user", parts: [{ text: instr }] }],
+          turns: [{ role: "user", parts: [{ text: `The caller asked for a human handoff. Stay silent now; the system already told the caller to press ${digit}. Do not say that you are transferring unless the DTMF digit is received.` }] }],
           turn_complete: true,
         },
       }));
-      handoffPromptedAt = Date.now();
-      log("[handoff] prompted caller to press DTMF", digit);
     } catch (e) { console.error("[handoff] prompt error", e); }
+    handoffPromptedAt = Date.now();
+    log("[handoff] prompted caller to press DTMF", digit);
   };
-  const maybeHandoffByPhrase = (text: string) => {
-    if (handoffTriggered || !ctx?.handoffEnabled || !ctx.handoffNumbers.length) return;
+  const maybeHandoffByPhrase = (text: string): boolean => {
+    if (handoffTriggered || !ctx?.handoffEnabled || !ctx.handoffNumbers.length) return false;
     // Avoid re-prompting within 20s
-    if (handoffPromptedAt && Date.now() - handoffPromptedAt < 20000) return;
+    if (handoffPromptedAt && Date.now() - handoffPromptedAt < 20000) return false;
     userPhraseBuffer = (userPhraseBuffer + " " + text).slice(-400);
     const haystack = norm(userPhraseBuffer);
     const lang = (ctx.language || "ru-RU").toLowerCase().startsWith("ru") ? "ru" : "en";
@@ -350,7 +350,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       log("[handoff] phrase match:", hit, "in:", haystack.slice(-120));
       userPhraseBuffer = "";
       promptForDtmfHandoff();
+      return true;
     }
+    return false;
   };
 
   const triggerHandoff = async (reason: "dtmf" | "phrase") => {
@@ -367,7 +369,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     } catch (e) { console.error("handoff db", e); }
 
     const lang = ctx.language || "ru-RU";
-    const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Say voice="alice" language="${lang}">Соединяю с оператором.</Say><Dial answerOnBridge="true" timeout="30">${escXml(target)}</Dial></Response>`;
+    const from = ctx.twilioNumberE164 ? ` callerId="${escXml(ctx.twilioNumberE164)}"` : "";
+    const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Say voice="alice" language="${escXml(lang)}">Соединяю с оператором.</Say><Dial${from} answerOnBridge="true" timeout="30"><Number>${escXml(target)}</Number></Dial></Response>`;
     try {
       const r = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
         method: "POST",

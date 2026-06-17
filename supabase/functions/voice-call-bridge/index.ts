@@ -330,9 +330,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       ? `Чтобы соединиться с оператором, пожалуйста, нажмите ${digit} на клавиатуре телефона.`
       : `To be connected to a human operator, please press ${digit} on your phone keypad.`;
     handoffPromptedAt = Date.now();
-    const publicBase = (Deno.env.get("PUBLIC_APP_URL") || "https://pecalls.lovable.app").replace(/\/$/, "");
-    const action = `${publicBase}/api/public/twilio/handoff?agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&call_sid=${encodeURIComponent(callSid)}`;
     const bridgeWs = `${SUPABASE_URL.replace(/^https?:/, "wss:").replace(/\/$/, "")}/functions/v1/voice-call-bridge`;
+    const action = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/voice-call-bridge?action=handoff&agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&call_sid=${encodeURIComponent(callSid)}`;
     const streamUrl = `${bridgeWs}?agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&call_sid=${encodeURIComponent(callSid)}`;
     const twiml = `<Response><Stop><Stream name="gemini"/></Stop><Gather input="dtmf" numDigits="1" timeout="10" action="${escXml(action)}" method="POST"><Say voice="alice" language="${escXml(ctx?.language || "ru-RU")}">${escXml(promptText)}</Say></Gather><Connect><Stream url="${escXml(streamUrl)}"><Parameter name="agent_id" value="${escXml(ctx?.agentId || agentId)}"/><Parameter name="call_sid" value="${escXml(callSid)}"/></Stream></Connect></Response>`;
     try {

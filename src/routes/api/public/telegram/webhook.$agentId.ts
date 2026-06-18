@@ -30,28 +30,30 @@ async function tgAction(token: string, chatId: number, action: string) {
 }
 
 async function aiReply(systemPrompt: string, userText: string, language: string): Promise<string> {
-  const apiKey = process.env.LOVABLE_API_KEY;
-  if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
-  const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        {
-          role: "system",
-          content: `${systemPrompt}\n\nОтвечай на языке: ${language}. Кратко, дружелюбно, в формате чата.`,
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+  const model = "gemini-2.0-flash";
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [
+            {
+              text: `${systemPrompt}\n\nОтвечай на языке: ${language}. Кратко, дружелюбно, в формате чата.`,
+            },
+          ],
         },
-        { role: "user", content: userText },
-      ],
-    }),
-  });
+        contents: [{ role: "user", parts: [{ text: userText }] }],
+      }),
+    },
+  );
   const data = await r.json();
-  if (!r.ok) throw new Error(`AI ${r.status}: ${JSON.stringify(data).slice(0, 200)}`);
-  return data.choices?.[0]?.message?.content ?? "…";
+  if (!r.ok) throw new Error(`Gemini ${r.status}: ${JSON.stringify(data).slice(0, 200)}`);
+  const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text ?? "").join("") ?? "";
+  return text || "…";
 }
 
 export const Route = createFileRoute("/api/public/telegram/webhook/$agentId")({

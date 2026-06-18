@@ -38,11 +38,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-      <div className="p-3 border-b border-sidebar-border">
-        <div className="rounded-lg bg-white p-2.5 flex items-center justify-center">
-          <AppLogo size="md" />
-        </div>
-      </div>
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {NAV.map(({ to, key, icon: Icon }) => {
           const active = location.pathname === to || location.pathname.startsWith(to + "/");

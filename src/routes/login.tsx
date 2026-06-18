@@ -179,7 +179,7 @@ function LoginPage() {
                   id="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="StarNet, Test, Premier, Admin or email"
+                  placeholder=""
                   autoComplete="username"
                   required
                 />

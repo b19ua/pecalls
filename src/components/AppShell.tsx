@@ -111,7 +111,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <SidebarContent onNavigate={() => setOpen(false)} />
           </SheetContent>
         </Sheet>
-        <AppLogo size="sm" />
+        <div className="flex-1" />
         <div className="w-10" />
       </div>
 

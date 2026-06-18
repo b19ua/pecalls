@@ -17,7 +17,7 @@ const NAV = [
   { to: "/calls",      key: "nav.calls",      icon: PhoneCall },
   { to: "/live",       key: "nav.live",       icon: Radio },
   { to: "/analytics",  key: "nav.analytics",  icon: BarChart3 },
-  { to: "/campaigns",  key: "nav.campaigns",  icon: Megaphone },
+  
   { to: "/data-residency", key: "nav.residency", icon: Server },
   { to: "/crm",        key: "nav.crm",        icon: Plug },
   { to: "/settings",   key: "nav.settings",   icon: Settings },

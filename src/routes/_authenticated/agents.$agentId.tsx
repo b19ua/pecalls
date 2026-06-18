@@ -17,7 +17,8 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Save, Trash2, Loader2, PhoneCall, Wrench, BookOpen } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ArrowLeft, Save, Trash2, Loader2, PhoneCall, Wrench, BookOpen, ChevronDown, MessageCircle, Send, Instagram, Linkedin, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { TestCallDialog } from "@/components/TestCallDialog";
 import { useI18n } from "@/lib/i18n";
@@ -345,21 +346,29 @@ function AgentEditor() {
           <Field label={t("agent.field.systemPrompt")} hint={t("agent.hint.systemPrompt")}>
             <Textarea value={form.system_prompt} onChange={(e) => set("system_prompt", e.target.value)} rows={6} />
           </Field>
-          <div className="grid md:grid-cols-2 gap-4">
-            <Field label={t("agent.field.silence")}>
-              <Input type="number" value={form.silence_timeout_seconds} onChange={(e) => set("silence_timeout_seconds", Number(e.target.value))} />
-            </Field>
-            <Field label={t("agent.field.maxCall")}>
-              <Input type="number" value={form.max_call_seconds} onChange={(e) => set("max_call_seconds", Number(e.target.value))} />
-            </Field>
-          </div>
-          <div className="flex items-center justify-between">
-            <Label>{t("agent.field.record")}</Label>
-            <Switch checked={form.record_calls} onCheckedChange={(v) => set("record_calls", v)} />
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-primary" />
+              <h4 className="font-medium text-sm">База знаний (RAG)</h4>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Загрузите PDF / DOCX / TXT / MD — документы будут разбиты на чанки, проиндексированы
+              эмбеддингами Gemini и автоматически подмешаны в контекст ассистента во время звонка
+              (top-k поиск по смыслу).
+            </p>
+            {!isNew ? (
+              <Button asChild variant="outline" size="sm">
+                <Link to="/knowledge" search={{ agent: agentId } as never}>
+                  <BookOpen className="h-4 w-4 mr-1.5" /> Открыть базу знаний агента
+                </Link>
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">Сначала сохраните агента.</p>
+            )}
           </div>
         </Section>
 
-        <Section title={t("agent.section.telephony")}>
+        <CollapsibleSection title={t("agent.section.telephony")} defaultOpen>
           <Field label="Тип входящего подключения" hint="Phone number — обычный номер из Twilio. SIP URI — кастомный идентификатор для маршрутизации с вашей АТС.">
             <Tabs
               value={form.inbound_connection_type}
@@ -399,167 +408,187 @@ function AgentEditor() {
             </Tabs>
           </Field>
 
+          <div className="flex items-center justify-between rounded-md border border-border/50 p-3">
+            <Label className="text-sm">{t("agent.field.record")}</Label>
+            <Switch checked={form.record_calls} onCheckedChange={(v) => set("record_calls", v)} />
+          </div>
 
-          <Field label="Исходящие звонки через">
-            <Select value={form.outbound_mode} onValueChange={(v) => set("outbound_mode", v as "twilio_number" | "sip_trunk")}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="twilio_number">Twilio номер (по умолчанию)</SelectItem>
-                <SelectItem value="sip_trunk">Свой SIP trunk</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-
-          {form.outbound_mode === "sip_trunk" && (
-            <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
-              <p className="text-xs text-muted-foreground">
-                Исходящие звонки будут уходить через ваш SIP-провайдер. Если провайдер ждёт номер в формате E.164,
-                оставьте Route prefix пустым — тогда номер уйдёт как <code className="font-mono">+373...</code>. Префикс
-                нужен только если ваш PBX требует добавлять код маршрута вроде <code className="font-mono">88</code>.
-              </p>
-              <div className="grid md:grid-cols-2 gap-4">
-                <Field label="SIP домен / termination URI" hint="Хост вашего SIP-провайдера для исходящих вызовов, например gpg.vgtele.com">
-                  <Input value={form.sip_domain} onChange={(e) => set("sip_domain", e.target.value)} placeholder="gpg.vgtele.com" />
-                </Field>
-                <Field label="Transport">
-                  <Select value={form.sip_transport} onValueChange={(v) => set("sip_transport", v as "tls" | "tcp" | "udp")}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="tls">TLS (рекомендуется)</SelectItem>
-                      <SelectItem value="tcp">TCP</SelectItem>
-                      <SelectItem value="udp">UDP</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="SIP username">
-                  <Input value={form.sip_username} onChange={(e) => set("sip_username", e.target.value)} autoComplete="off" />
-                </Field>
-                <Field label="SIP password">
-                  <Input type="password" value={form.sip_password} onChange={(e) => set("sip_password", e.target.value)} autoComplete="new-password" />
-                </Field>
-                <Field label="Caller ID (E.164, опционально)">
-                  <Input value={form.sip_from_number} onChange={(e) => set("sip_from_number", e.target.value)} placeholder="+37360123456" />
-                </Field>
-                <Field label="Route prefix (опционально)" hint="Если оставить пустым, номер уходит как +373...; если указать 88, получится 88373...">
-                  <Input value={form.sip_route_prefix} onChange={(e) => set("sip_route_prefix", e.target.value)} placeholder="88" />
-                </Field>
-              </div>
-            </div>
-          )}
-        </Section>
-
-        <Section title="Входящие звонки через SIP">
-          <p className="text-xs text-muted-foreground">
-            Для входящих вызовов ваш SIP/PBX должен отправлять INVITE прямо на домен агента ниже, а не на Elastic SIP Trunk.
-            То есть входящий маршрут должен вести на <code className="font-mono">*.sip.twilio.com</code> из этого блока,
-            с указанными логином и паролем — тогда агент автоматически ответит.
-          </p>
-          {inboundSip ? (
-            <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <div className="space-y-3 rounded-lg border border-border/60 p-4">
+            <h4 className="font-medium text-sm">Входящие через SIP</h4>
+            <p className="text-xs text-muted-foreground">
+              Для входящих вызовов ваш SIP/PBX должен отправлять INVITE прямо на домен агента ниже.
+            </p>
+            {inboundSip ? (
               <div className="space-y-3">
                 {[
-                  { label: "SIP host (Termination URI)", value: inboundSip.sip_domain, hint: "Куда направлять INVITE из вашего PBX" },
-                  { label: "Auth username", value: inboundSip.username, hint: "Digest authentication username" },
-                  { label: "Auth password", value: inboundSip.password, hint: "Digest authentication password" },
-                  { label: "Transport", value: "TLS (рекомендуется), порт 5061", hint: "Поддерживается также UDP/TCP на 5060" },
-                  { label: "Формат вызова", value: `sip:+37322010075@${inboundSip.sip_domain}`, hint: "Для вашего номера используйте именно такой адрес в маршруте PBX" },
+                  { label: "SIP host", value: inboundSip.sip_domain },
+                  { label: "Username", value: inboundSip.username },
+                  { label: "Password", value: inboundSip.password },
+                  { label: "Transport", value: "TLS 5061 (или UDP/TCP 5060)" },
                 ].map((row) => (
                   <div key={row.label} className="flex items-start justify-between gap-3 border-b border-border/40 pb-2 last:border-0 last:pb-0">
                     <div className="min-w-0 flex-1">
                       <Label className="text-xs text-muted-foreground">{row.label}</Label>
                       <code className="block font-mono text-xs mt-0.5 break-all">{row.value}</code>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{row.hint}</p>
                     </div>
-                    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0" onClick={() => copy(row.value, row.label)}>
-                      Copy
-                    </Button>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0" onClick={() => copy(row.value, row.label)}>Copy</Button>
                   </div>
                 ))}
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={handleProvisionSip} disabled={provisioning}>
+                    {provisioning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}Обновить webhook
+                  </Button>
+                  <Button type="button" variant="destructive" size="sm" onClick={handleDeleteSip} disabled={provisioning}>Удалить SIP</Button>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={handleProvisionSip} disabled={provisioning}>
-                  {provisioning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                  Обновить webhook
-                </Button>
-                <Button type="button" variant="destructive" size="sm" onClick={handleDeleteSip} disabled={provisioning}>
-                  Удалить SIP-домен
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button type="button" onClick={handleProvisionSip} disabled={provisioning || isNew}>
-              {provisioning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Создать SIP-домен для входящих
-            </Button>
-          )}
-        </Section>
-
-        <Section title={t("agent.section.handoff")}>
-          <div className="flex items-center justify-between">
-            <Label className="flex items-center gap-1.5">
-              {t("agent.field.handoffOn")} <HintIcon text={t("agent.hint.handoff")} />
-            </Label>
-            <Switch checked={form.handoff_enabled} onCheckedChange={(v) => set("handoff_enabled", v)} />
+            ) : (
+              <Button type="button" size="sm" onClick={handleProvisionSip} disabled={provisioning || isNew}>
+                {provisioning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Создать SIP-домен
+              </Button>
+            )}
           </div>
-          <Field label={t("agent.field.dtmf")}>
-            <Input maxLength={1} value={form.handoff_dtmf_digit} onChange={(e) => set("handoff_dtmf_digit", e.target.value)} className="w-24" />
-          </Field>
-          <Field label={t("agent.field.phrases")}>
-            <Textarea
-              rows={2}
-              value={form.handoff_trigger_phrases.join(", ")}
-              onChange={(e) => set("handoff_trigger_phrases", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
-            />
-          </Field>
-          <Field label={t("agent.field.numbers")} hint="E.164 формат, по одному на строке (или через запятую). Пример: +37360111111">
-            <Textarea
-              rows={5}
-              placeholder="+37360111111&#10;+37360222222"
-              value={form.handoff_numbers.join("\n")}
-              onChange={(e) => set("handoff_numbers", e.target.value.split(/[\n,]+/).map((s) => s.replace(/[^\d+]/g, "")))}
-              onBlur={(e) => set("handoff_numbers", e.target.value.split(/[\n,]+/).map((s) => s.trim()).filter((s) => /^\+?[0-9]{6,16}$/.test(s)))}
-            />
-            {form.handoff_numbers.length > 0 && (
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {form.handoff_numbers.map((n, i) => {
-                  const ok = /^\+?[0-9]{6,16}$/.test(n);
-                  return (
-                    <span key={i} className={`text-xs px-2 py-0.5 rounded-full border ${ok ? "bg-success/10 text-success border-success/30" : "bg-destructive/10 text-destructive border-destructive/30"}`}>
-                      {ok ? "✓" : "⚠"} {n || "(пусто)"}
-                    </span>
-                  );
-                })}
+
+          <div className="space-y-3 rounded-lg border border-border/60 p-4">
+            <h4 className="font-medium text-sm">Human Handoff</h4>
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1.5 text-sm">
+                {t("agent.field.handoffOn")} <HintIcon text={t("agent.hint.handoff")} />
+              </Label>
+              <Switch checked={form.handoff_enabled} onCheckedChange={(v) => set("handoff_enabled", v)} />
+            </div>
+            <Field label={t("agent.field.dtmf")}>
+              <Input maxLength={1} value={form.handoff_dtmf_digit} onChange={(e) => set("handoff_dtmf_digit", e.target.value)} className="w-24" />
+            </Field>
+            <Field label={t("agent.field.phrases")}>
+              <Textarea
+                rows={2}
+                value={form.handoff_trigger_phrases.join(", ")}
+                onChange={(e) => set("handoff_trigger_phrases", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
+              />
+            </Field>
+            <Field label={t("agent.field.numbers")} hint="E.164 формат. Пример: +37360111111">
+              <Textarea
+                rows={4}
+                placeholder="+37360111111&#10;+37360222222"
+                value={form.handoff_numbers.join("\n")}
+                onChange={(e) => set("handoff_numbers", e.target.value.split(/[\n,]+/).map((s) => s.replace(/[^\d+]/g, "")))}
+                onBlur={(e) => set("handoff_numbers", e.target.value.split(/[\n,]+/).map((s) => s.trim()).filter((s) => /^\+?[0-9]{6,16}$/.test(s)))}
+              />
+              {form.handoff_numbers.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {form.handoff_numbers.map((n, i) => {
+                    const ok = /^\+?[0-9]{6,16}$/.test(n);
+                    return (
+                      <span key={i} className={`text-xs px-2 py-0.5 rounded-full border ${ok ? "bg-success/10 text-success border-success/30" : "bg-destructive/10 text-destructive border-destructive/30"}`}>
+                        {ok ? "✓" : "⚠"} {n || "(пусто)"}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </Field>
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-border/60 p-4">
+            <h4 className="font-medium text-sm">Исходящие звонки</h4>
+            <Field label="Маршрут исходящих">
+              <Select value={form.outbound_mode} onValueChange={(v) => set("outbound_mode", v as "twilio_number" | "sip_trunk")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="twilio_number">Twilio номер (по умолчанию)</SelectItem>
+                  <SelectItem value="sip_trunk">Свой SIP trunk</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            {form.outbound_mode === "sip_trunk" && (
+              <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+                <p className="text-xs text-muted-foreground">
+                  Исходящие звонки уйдут через ваш SIP-провайдер. Если провайдер ждёт E.164 — оставьте Route prefix пустым.
+                </p>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Field label="SIP домен" hint="например gpg.vgtele.com">
+                    <Input value={form.sip_domain} onChange={(e) => set("sip_domain", e.target.value)} placeholder="gpg.vgtele.com" />
+                  </Field>
+                  <Field label="Transport">
+                    <Select value={form.sip_transport} onValueChange={(v) => set("sip_transport", v as "tls" | "tcp" | "udp")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="tls">TLS (рекомендуется)</SelectItem>
+                        <SelectItem value="tcp">TCP</SelectItem>
+                        <SelectItem value="udp">UDP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="SIP username">
+                    <Input value={form.sip_username} onChange={(e) => set("sip_username", e.target.value)} autoComplete="off" />
+                  </Field>
+                  <Field label="SIP password">
+                    <Input type="password" value={form.sip_password} onChange={(e) => set("sip_password", e.target.value)} autoComplete="new-password" />
+                  </Field>
+                  <Field label="Caller ID (опц.)">
+                    <Input value={form.sip_from_number} onChange={(e) => set("sip_from_number", e.target.value)} placeholder="+37360123456" />
+                  </Field>
+                  <Field label="Route prefix (опц.)" hint="Например 88">
+                    <Input value={form.sip_route_prefix} onChange={(e) => set("sip_route_prefix", e.target.value)} placeholder="88" />
+                  </Field>
+                </div>
               </div>
             )}
-          </Field>
-        </Section>
+          </div>
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Texting">
+          <p className="text-sm text-muted-foreground">
+            Подключите каналы переписки — агент сможет отвечать клиентам в выбранных мессенджерах.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <ChannelCard
+              name="Telegram Bot"
+              description="Подключить через Lovable"
+              icon={<Send className="h-5 w-5" />}
+              brandClass="bg-[#229ED9]/10 text-[#229ED9] border-[#229ED9]/30"
+              onConnect={() => toast.info("Скоро: подключение Telegram бота")}
+            />
+            <ChannelCard
+              name="WhatsApp"
+              description="Business API"
+              icon={<MessageCircle className="h-5 w-5" />}
+              brandClass="bg-[#25D366]/10 text-[#25D366] border-[#25D366]/30"
+              onConnect={() => toast.info("Скоро: WhatsApp")}
+            />
+            <ChannelCard
+              name="Instagram"
+              description="Direct Messages"
+              icon={<Instagram className="h-5 w-5" />}
+              brandClass="bg-[#E1306C]/10 text-[#E1306C] border-[#E1306C]/30"
+              onConnect={() => toast.info("Скоро: Instagram DM")}
+            />
+            <ChannelCard
+              name="LinkedIn"
+              description="Сообщения"
+              icon={<Linkedin className="h-5 w-5" />}
+              brandClass="bg-[#0A66C2]/10 text-[#0A66C2] border-[#0A66C2]/30"
+              onConnect={() => toast.info("Скоро: LinkedIn")}
+            />
+            <ChannelCard
+              name="Gmail"
+              description="Email-ответы"
+              icon={<Mail className="h-5 w-5" />}
+              brandClass="bg-[#EA4335]/10 text-[#EA4335] border-[#EA4335]/30"
+              onConnect={() => toast.info("Скоро: Gmail")}
+            />
+          </div>
+        </CollapsibleSection>
 
         <Section title="Инструменты">
           <p className="text-sm text-muted-foreground">
-            Подключите webhook и CRM-инструменты, которые ассистент будет использовать во время разговора
-            (узнать статус заказа, найти контакт, создать лид и т.д.).
+            Подключите webhook и CRM-инструменты, которые ассистент будет использовать во время разговора.
           </p>
           <Button asChild variant="outline">
             <Link to="/tools"><Wrench className="h-4 w-4 mr-1.5" /> Открыть инструменты</Link>
           </Button>
         </Section>
 
-        <Section title="База знаний (RAG)">
-          <p className="text-sm text-muted-foreground">
-            Загрузите PDF / DOCX / TXT / MD — документы будут разбиты на чанки, проиндексированы
-            эмбеддингами Gemini и подмешаны в контекст ассистента во время звонка (top-k поиск по
-            смыслу, не по ключевым словам).
-          </p>
-          {!isNew ? (
-            <Button asChild variant="outline">
-              <Link to="/knowledge" search={{ agent: agentId } as never}>
-                <BookOpen className="h-4 w-4 mr-1.5" /> Открыть базу знаний агента
-              </Link>
-            </Button>
-          ) : (
-            <p className="text-xs text-muted-foreground">Сначала сохраните агента, потом сможете загружать документы.</p>
-          )}
-        </Section>
 
 
       </div>
@@ -585,6 +614,41 @@ function Section({ title, children }: { title: string; children: React.ReactNode
         {children}
       </CardContent>
     </Card>
+  );
+}
+
+function CollapsibleSection({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Card className="bg-gradient-card shadow-soft">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CardContent className="p-4 sm:p-6 space-y-4">
+          <CollapsibleTrigger className="flex w-full items-center justify-between group">
+            <h3 className="font-display text-lg font-semibold">{title}</h3>
+            <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 data-[state=open]:pt-1">
+            <Separator />
+            {children}
+          </CollapsibleContent>
+        </CardContent>
+      </Collapsible>
+    </Card>
+  );
+}
+
+function ChannelCard({ name, description, icon, brandClass, onConnect }: { name: string; description: string; icon: React.ReactNode; brandClass: string; onConnect: () => void }) {
+  return (
+    <div className="rounded-lg border border-border/60 bg-card/40 p-4 flex items-center gap-3 hover:border-primary/40 transition-colors">
+      <div className={`h-10 w-10 rounded-lg border flex items-center justify-center shrink-0 ${brandClass}`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-sm truncate">{name}</div>
+        <div className="text-xs text-muted-foreground truncate">{description}</div>
+      </div>
+      <Button type="button" size="sm" variant="outline" onClick={onConnect}>Подключить</Button>
+    </div>
   );
 }
 

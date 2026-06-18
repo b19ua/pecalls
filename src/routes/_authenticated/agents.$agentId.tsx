@@ -269,6 +269,102 @@ function AgentEditor() {
     );
   }
 
+  function setOutboundMode(m: "twilio_number" | "sip_trunk") {
+    setForm((p) => ({
+      ...p,
+      outbound_mode: m,
+      inbound_connection_type: m === "twilio_number" ? "phone" : "sip_uri",
+    }));
+  }
+
+  async function loadTwilioNumbers() {
+    setNumbersLoading(true);
+    const { data } = await supabase
+      .from("twilio_numbers")
+      .select("id,phone_e164,friendly_name,agent_id")
+      .order("phone_e164");
+    setTwilioNumbers(data ?? []);
+    setNumbersLoading(false);
+  }
+
+  useEffect(() => {
+    if (form.outbound_mode === "twilio_number" && !isNew) loadTwilioNumbers();
+  }, [form.outbound_mode, isNew]);
+
+  async function handleSyncNumbers() {
+    setSyncingNumbers(true);
+    try {
+      const r = await syncNumbersFn({});
+      toast.success(`Синхронизировано: ${r.synced}`);
+      await loadTwilioNumbers();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setSyncingNumbers(false);
+    }
+  }
+
+  async function handleAssignNumber(numberId: string) {
+    if (isNew) { toast.error("Сначала сохраните агента"); return; }
+    try {
+      await configureNumberFn({ data: { numberId, agentId } });
+      const num = twilioNumbers.find((n) => n.id === numberId);
+      if (num) set("twilio_number_e164", num.phone_e164);
+      toast.success("Номер привязан к агенту");
+      await loadTwilioNumbers();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Assign failed");
+    }
+  }
+
+  async function handleTestNumber() {
+    if (isNew) { toast.error("Сначала сохраните агента"); return; }
+    const to = testToNumber.trim();
+    if (!/^\+?[0-9]{6,16}$/.test(to)) { toast.error("Введите корректный номер E.164"); return; }
+    try {
+      const r = await outboundCallFn({ data: { agentId, toNumber: to } });
+      toast.success(`Тестовый звонок: ${r.sid}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Call failed");
+    }
+  }
+
+  function parseBulkNumbers(text: string): string[] {
+    return Array.from(
+      new Set(
+        text
+          .split(/[\s,;]+/)
+          .map((s) => s.trim())
+          .filter((s) => /^\+?[0-9]{6,16}$/.test(s)),
+      ),
+    );
+  }
+
+  async function handleBulkDial() {
+    if (isNew) { toast.error("Сначала сохраните агента"); return; }
+    const nums = parseBulkNumbers(bulkText);
+    if (!nums.length) { toast.error("Нет валидных номеров"); return; }
+    if (!confirm(`Запустить ${nums.length} звонк(ов)?`)) return;
+    setBulkDialing(true);
+    let ok = 0, fail = 0;
+    for (const n of nums) {
+      try { await outboundCallFn({ data: { agentId, toNumber: n } }); ok++; }
+      catch { fail++; }
+    }
+    setBulkDialing(false);
+    toast.success(`Запущено: ${ok}, ошибок: ${fail}`);
+  }
+
+  function handleBulkCsv(file: File) {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = String(ev.target?.result ?? "");
+      setBulkText(text);
+      toast.success(`Импортировано ${parseBulkNumbers(text).length} номеров`);
+    };
+    reader.readAsText(file);
+  }
+
   if (loading) {
     return (
       <div className="p-8 flex items-center gap-2 text-muted-foreground">

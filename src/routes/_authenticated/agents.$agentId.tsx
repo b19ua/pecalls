@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { saveAgent, deleteAgent } from "@/lib/agents.functions";
-import { provisionInboundSip, deleteInboundSip } from "@/lib/twilio.functions";
+import { provisionInboundSip, deleteInboundSip, syncTwilioNumbers, configureTwilioNumber, placeOutboundCall } from "@/lib/twilio.functions";
 import { GEMINI_VOICES, LANGUAGES } from "@/lib/voices";
 import { PageHeader } from "@/components/PageHeader";
 import { HintIcon } from "@/components/HintIcon";
@@ -16,9 +16,8 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ArrowLeft, Save, Trash2, Loader2, PhoneCall, Wrench, BookOpen, ChevronDown, MessageCircle, Send, Instagram, Linkedin, Mail } from "lucide-react";
+import { ArrowLeft, Save, Trash2, Loader2, PhoneCall, Wrench, BookOpen, ChevronDown, MessageCircle, Send, Instagram, Linkedin, Mail, RefreshCw, Upload, PhoneOutgoing } from "lucide-react";
 import { toast } from "sonner";
 import { TestCallDialog } from "@/components/TestCallDialog";
 import { useI18n } from "@/lib/i18n";
@@ -94,12 +93,21 @@ function AgentEditor() {
   const deleteAgentFn = useServerFn(deleteAgent);
   const provisionSipFn = useServerFn(provisionInboundSip);
   const deleteSipFn = useServerFn(deleteInboundSip);
+  const syncNumbersFn = useServerFn(syncTwilioNumbers);
+  const configureNumberFn = useServerFn(configureTwilioNumber);
+  const outboundCallFn = useServerFn(placeOutboundCall);
   const [form, setForm] = useState<AgentForm>(DEFAULTS);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
   const [inboundSip, setInboundSip] = useState<{ sip_domain: string; username: string; password: string } | null>(null);
   const [provisioning, setProvisioning] = useState(false);
+  const [twilioNumbers, setTwilioNumbers] = useState<Array<{ id: string; phone_e164: string; friendly_name: string | null; agent_id: string | null }>>([]);
+  const [numbersLoading, setNumbersLoading] = useState(false);
+  const [syncingNumbers, setSyncingNumbers] = useState(false);
+  const [testToNumber, setTestToNumber] = useState("");
+  const [bulkText, setBulkText] = useState("");
+  const [bulkDialing, setBulkDialing] = useState(false);
 
   useEffect(() => {
     if (isNew) return;
@@ -261,6 +269,102 @@ function AgentEditor() {
     );
   }
 
+  function setOutboundMode(m: "twilio_number" | "sip_trunk") {
+    setForm((p) => ({
+      ...p,
+      outbound_mode: m,
+      inbound_connection_type: m === "twilio_number" ? "phone" : "sip_uri",
+    }));
+  }
+
+  async function loadTwilioNumbers() {
+    setNumbersLoading(true);
+    const { data } = await supabase
+      .from("twilio_numbers")
+      .select("id,phone_e164,friendly_name,agent_id")
+      .order("phone_e164");
+    setTwilioNumbers(data ?? []);
+    setNumbersLoading(false);
+  }
+
+  useEffect(() => {
+    if (form.outbound_mode === "twilio_number" && !isNew) loadTwilioNumbers();
+  }, [form.outbound_mode, isNew]);
+
+  async function handleSyncNumbers() {
+    setSyncingNumbers(true);
+    try {
+      const r = await syncNumbersFn({});
+      toast.success(`Синхронизировано: ${r.synced}`);
+      await loadTwilioNumbers();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setSyncingNumbers(false);
+    }
+  }
+
+  async function handleAssignNumber(numberId: string) {
+    if (isNew) { toast.error("Сначала сохраните агента"); return; }
+    try {
+      await configureNumberFn({ data: { numberId, agentId } });
+      const num = twilioNumbers.find((n) => n.id === numberId);
+      if (num) set("twilio_number_e164", num.phone_e164);
+      toast.success("Номер привязан к агенту");
+      await loadTwilioNumbers();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Assign failed");
+    }
+  }
+
+  async function handleTestNumber() {
+    if (isNew) { toast.error("Сначала сохраните агента"); return; }
+    const to = testToNumber.trim();
+    if (!/^\+?[0-9]{6,16}$/.test(to)) { toast.error("Введите корректный номер E.164"); return; }
+    try {
+      const r = await outboundCallFn({ data: { agentId, toNumber: to } });
+      toast.success(`Тестовый звонок: ${r.sid}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Call failed");
+    }
+  }
+
+  function parseBulkNumbers(text: string): string[] {
+    return Array.from(
+      new Set(
+        text
+          .split(/[\s,;]+/)
+          .map((s) => s.trim())
+          .filter((s) => /^\+?[0-9]{6,16}$/.test(s)),
+      ),
+    );
+  }
+
+  async function handleBulkDial() {
+    if (isNew) { toast.error("Сначала сохраните агента"); return; }
+    const nums = parseBulkNumbers(bulkText);
+    if (!nums.length) { toast.error("Нет валидных номеров"); return; }
+    if (!confirm(`Запустить ${nums.length} звонк(ов)?`)) return;
+    setBulkDialing(true);
+    let ok = 0, fail = 0;
+    for (const n of nums) {
+      try { await outboundCallFn({ data: { agentId, toNumber: n } }); ok++; }
+      catch { fail++; }
+    }
+    setBulkDialing(false);
+    toast.success(`Запущено: ${ok}, ошибок: ${fail}`);
+  }
+
+  function handleBulkCsv(file: File) {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = String(ev.target?.result ?? "");
+      setBulkText(text);
+      toast.success(`Импортировано ${parseBulkNumbers(text).length} номеров`);
+    };
+    reader.readAsText(file);
+  }
+
   if (loading) {
     return (
       <div className="p-8 flex items-center gap-2 text-muted-foreground">
@@ -369,43 +473,14 @@ function AgentEditor() {
         </Section>
 
         <CollapsibleSection title={t("agent.section.telephony")} defaultOpen>
-          <Field label="Тип входящего подключения" hint="Phone number — обычный номер из Twilio. SIP URI — кастомный идентификатор для маршрутизации с вашей АТС.">
-            <Tabs
-              value={form.inbound_connection_type}
-              onValueChange={(v) => set("inbound_connection_type", v as "phone" | "sip_uri")}
-            >
-              <TabsList className="grid grid-cols-2 w-full">
-                <TabsTrigger value="phone">Phone number</TabsTrigger>
-                <TabsTrigger value="sip_uri">SIP URI</TabsTrigger>
-              </TabsList>
-              <TabsContent value="phone" className="mt-3">
-                <Input
-                  value={form.twilio_number_e164}
-                  onChange={(e) => set("twilio_number_e164", e.target.value)}
-                  placeholder="+37360123456"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">Номер Twilio в формате E.164.</p>
-              </TabsContent>
-              <TabsContent value="sip_uri" className="mt-3 space-y-2">
-                <Input
-                  value={form.inbound_sip_uri_user}
-                  onChange={(e) =>
-                    set(
-                      "inbound_sip_uri_user",
-                      e.target.value.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 64),
-                    )
-                  }
-                  placeholder="ai_sales"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Вставьте этот идентификатор в вашей АТС в формате{" "}
-                  <code className="font-mono">
-                    sip:{form.inbound_sip_uri_user || "идентификатор"}@ваш-транк.pstn.twilio.com
-                  </code>
-                  . Допустимы латиница, цифры, <code>.</code> <code>_</code> <code>-</code>.
-                </p>
-              </TabsContent>
-            </Tabs>
+          <Field label="Маршрут звонка" hint="Применяется ко всем звонкам — и входящим, и исходящим.">
+            <Select value={form.outbound_mode} onValueChange={(v) => setOutboundMode(v as "twilio_number" | "sip_trunk")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="twilio_number">Twilio номер</SelectItem>
+                <SelectItem value="sip_trunk">Свой SIP trunk</SelectItem>
+              </SelectContent>
+            </Select>
           </Field>
 
           <div className="flex items-center justify-between rounded-md border border-border/50 p-3">
@@ -413,40 +488,171 @@ function AgentEditor() {
             <Switch checked={form.record_calls} onCheckedChange={(v) => set("record_calls", v)} />
           </div>
 
-          <div className="space-y-3 rounded-lg border border-border/60 p-4">
-            <h4 className="font-medium text-sm">Входящие через SIP</h4>
-            <p className="text-xs text-muted-foreground">
-              Для входящих вызовов ваш SIP/PBX должен отправлять INVITE прямо на домен агента ниже.
-            </p>
-            {inboundSip ? (
-              <div className="space-y-3">
-                {[
-                  { label: "SIP host", value: inboundSip.sip_domain },
-                  { label: "Username", value: inboundSip.username },
-                  { label: "Password", value: inboundSip.password },
-                  { label: "Transport", value: "TLS 5061 (или UDP/TCP 5060)" },
-                ].map((row) => (
-                  <div key={row.label} className="flex items-start justify-between gap-3 border-b border-border/40 pb-2 last:border-0 last:pb-0">
-                    <div className="min-w-0 flex-1">
-                      <Label className="text-xs text-muted-foreground">{row.label}</Label>
-                      <code className="block font-mono text-xs mt-0.5 break-all">{row.value}</code>
-                    </div>
-                    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0" onClick={() => copy(row.value, row.label)}>Copy</Button>
-                  </div>
-                ))}
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={handleProvisionSip} disabled={provisioning}>
-                    {provisioning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}Обновить webhook
+          {form.outbound_mode === "twilio_number" ? (
+            <>
+              <div className="space-y-3 rounded-lg border border-border/60 p-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h4 className="font-medium text-sm">Номера Twilio</h4>
+                  <Button type="button" size="sm" variant="outline" onClick={handleSyncNumbers} disabled={syncingNumbers}>
+                    {syncingNumbers ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+                    Синхронизировать
                   </Button>
-                  <Button type="button" variant="destructive" size="sm" onClick={handleDeleteSip} disabled={provisioning}>Удалить SIP</Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Выберите номер Twilio — он будет использоваться и для входящих, и для исходящих звонков агента. Активный номер: <code className="font-mono">{form.twilio_number_e164 || "—"}</code>
+                </p>
+                {numbersLoading ? (
+                  <p className="text-xs text-muted-foreground">Загрузка…</p>
+                ) : twilioNumbers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Нет номеров. Нажмите «Синхронизировать», чтобы импортировать из аккаунта Twilio.</p>
+                ) : (
+                  <div className="overflow-x-auto rounded-md border border-border/50">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/40 text-xs text-muted-foreground">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium">Номер</th>
+                          <th className="text-left px-3 py-2 font-medium">Имя</th>
+                          <th className="text-left px-3 py-2 font-medium">Статус</th>
+                          <th className="px-3 py-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {twilioNumbers.map((n) => {
+                          const mine = n.agent_id === agentId;
+                          const taken = !!n.agent_id && !mine;
+                          return (
+                            <tr key={n.id} className="border-t border-border/40">
+                              <td className="px-3 py-2 font-mono">{n.phone_e164}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{n.friendly_name || "—"}</td>
+                              <td className="px-3 py-2 text-xs">
+                                {mine ? <span className="text-success">✓ этот агент</span> : taken ? <span className="text-muted-foreground">занят</span> : <span className="text-muted-foreground">свободен</span>}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {mine ? (
+                                  <span className="text-xs text-success">Активен</span>
+                                ) : (
+                                  <Button size="sm" variant="outline" disabled={taken} onClick={() => handleAssignNumber(n.id)}>
+                                    Подключить
+                                  </Button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div className="rounded-md border border-border/40 p-3 space-y-2">
+                  <Label className="text-xs text-muted-foreground">Тест номера</Label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      value={testToNumber}
+                      onChange={(e) => setTestToNumber(e.target.value)}
+                      placeholder="+37360123456"
+                      className="flex-1"
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={handleTestNumber} disabled={isNew || !form.twilio_number_e164}>
+                      <PhoneOutgoing className="h-3.5 w-3.5 mr-1.5" /> Позвонить
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Агент позвонит на указанный номер с привязанного Twilio номера.</p>
                 </div>
               </div>
-            ) : (
-              <Button type="button" size="sm" onClick={handleProvisionSip} disabled={provisioning || isNew}>
-                {provisioning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Создать SIP-домен
-              </Button>
-            )}
-          </div>
+
+              <BulkOutboundBlock
+                bulkText={bulkText}
+                onChange={setBulkText}
+                onCsv={handleBulkCsv}
+                onDial={handleBulkDial}
+                busy={bulkDialing}
+                disabled={isNew || !form.twilio_number_e164}
+                hint="Звонки уйдут с привязанного Twilio номера."
+              />
+            </>
+          ) : (
+            <>
+              <div className="space-y-3 rounded-lg border border-border/60 p-4">
+                <h4 className="font-medium text-sm">Входящие через SIP</h4>
+                <p className="text-xs text-muted-foreground">
+                  Для входящих вызовов ваш SIP/PBX должен отправлять INVITE прямо на домен агента ниже.
+                </p>
+                {inboundSip ? (
+                  <div className="space-y-3">
+                    {[
+                      { label: "SIP host", value: inboundSip.sip_domain },
+                      { label: "Username", value: inboundSip.username },
+                      { label: "Password", value: inboundSip.password },
+                      { label: "Transport", value: "TLS 5061 (или UDP/TCP 5060)" },
+                    ].map((row) => (
+                      <div key={row.label} className="flex items-start justify-between gap-3 border-b border-border/40 pb-2 last:border-0 last:pb-0">
+                        <div className="min-w-0 flex-1">
+                          <Label className="text-xs text-muted-foreground">{row.label}</Label>
+                          <code className="block font-mono text-xs mt-0.5 break-all">{row.value}</code>
+                        </div>
+                        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0" onClick={() => copy(row.value, row.label)}>Copy</Button>
+                      </div>
+                    ))}
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={handleProvisionSip} disabled={provisioning}>
+                        {provisioning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}Обновить webhook
+                      </Button>
+                      <Button type="button" variant="destructive" size="sm" onClick={handleDeleteSip} disabled={provisioning}>Удалить SIP</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button type="button" size="sm" onClick={handleProvisionSip} disabled={provisioning || isNew}>
+                    {provisioning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Создать SIP-домен
+                  </Button>
+                )}
+              </div>
+
+              <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+                <h4 className="font-medium text-sm">Исходящий SIP trunk</h4>
+                <p className="text-xs text-muted-foreground">
+                  Звонки уйдут через ваш SIP-провайдер. Если провайдер ждёт E.164 — оставьте Route prefix пустым.
+                </p>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Field label="SIP домен" hint="например gpg.vgtele.com">
+                    <Input value={form.sip_domain} onChange={(e) => set("sip_domain", e.target.value)} placeholder="gpg.vgtele.com" />
+                  </Field>
+                  <Field label="Transport">
+                    <Select value={form.sip_transport} onValueChange={(v) => set("sip_transport", v as "tls" | "tcp" | "udp")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="tls">TLS (рекомендуется)</SelectItem>
+                        <SelectItem value="tcp">TCP</SelectItem>
+                        <SelectItem value="udp">UDP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="SIP username">
+                    <Input value={form.sip_username} onChange={(e) => set("sip_username", e.target.value)} autoComplete="off" />
+                  </Field>
+                  <Field label="SIP password">
+                    <Input type="password" value={form.sip_password} onChange={(e) => set("sip_password", e.target.value)} autoComplete="new-password" />
+                  </Field>
+                  <Field label="Caller ID (опц.)">
+                    <Input value={form.sip_from_number} onChange={(e) => set("sip_from_number", e.target.value)} placeholder="+37360123456" />
+                  </Field>
+                  <Field label="Route prefix (опц.)" hint="Например 88">
+                    <Input value={form.sip_route_prefix} onChange={(e) => set("sip_route_prefix", e.target.value)} placeholder="88" />
+                  </Field>
+                </div>
+              </div>
+
+              <BulkOutboundBlock
+                bulkText={bulkText}
+                onChange={setBulkText}
+                onCsv={handleBulkCsv}
+                onDial={handleBulkDial}
+                busy={bulkDialing}
+                disabled={isNew || !form.sip_domain}
+                hint="Звонки уйдут через подключённый SIP trunk."
+              />
+            </>
+          )}
 
           <div className="space-y-3 rounded-lg border border-border/60 p-4">
             <h4 className="font-medium text-sm">Human Handoff</h4>
@@ -487,53 +693,6 @@ function AgentEditor() {
                 </div>
               )}
             </Field>
-          </div>
-
-          <div className="space-y-3 rounded-lg border border-border/60 p-4">
-            <h4 className="font-medium text-sm">Исходящие звонки</h4>
-            <Field label="Маршрут исходящих">
-              <Select value={form.outbound_mode} onValueChange={(v) => set("outbound_mode", v as "twilio_number" | "sip_trunk")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="twilio_number">Twilio номер (по умолчанию)</SelectItem>
-                  <SelectItem value="sip_trunk">Свой SIP trunk</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            {form.outbound_mode === "sip_trunk" && (
-              <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
-                <p className="text-xs text-muted-foreground">
-                  Исходящие звонки уйдут через ваш SIP-провайдер. Если провайдер ждёт E.164 — оставьте Route prefix пустым.
-                </p>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <Field label="SIP домен" hint="например gpg.vgtele.com">
-                    <Input value={form.sip_domain} onChange={(e) => set("sip_domain", e.target.value)} placeholder="gpg.vgtele.com" />
-                  </Field>
-                  <Field label="Transport">
-                    <Select value={form.sip_transport} onValueChange={(v) => set("sip_transport", v as "tls" | "tcp" | "udp")}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="tls">TLS (рекомендуется)</SelectItem>
-                        <SelectItem value="tcp">TCP</SelectItem>
-                        <SelectItem value="udp">UDP</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field label="SIP username">
-                    <Input value={form.sip_username} onChange={(e) => set("sip_username", e.target.value)} autoComplete="off" />
-                  </Field>
-                  <Field label="SIP password">
-                    <Input type="password" value={form.sip_password} onChange={(e) => set("sip_password", e.target.value)} autoComplete="new-password" />
-                  </Field>
-                  <Field label="Caller ID (опц.)">
-                    <Input value={form.sip_from_number} onChange={(e) => set("sip_from_number", e.target.value)} placeholder="+37360123456" />
-                  </Field>
-                  <Field label="Route prefix (опц.)" hint="Например 88">
-                    <Input value={form.sip_route_prefix} onChange={(e) => set("sip_route_prefix", e.target.value)} placeholder="88" />
-                  </Field>
-                </div>
-              </div>
-            )}
           </div>
         </CollapsibleSection>
 
@@ -634,6 +793,51 @@ function CollapsibleSection({ title, children, defaultOpen = false }: { title: s
         </CardContent>
       </Collapsible>
     </Card>
+  );
+}
+
+
+function BulkOutboundBlock({ bulkText, onChange, onCsv, onDial, busy, disabled, hint }: {
+  bulkText: string;
+  onChange: (v: string) => void;
+  onCsv: (file: File) => void;
+  onDial: () => void;
+  busy: boolean;
+  disabled: boolean;
+  hint: string;
+}) {
+  const count = bulkText.split(/[\s,;]+/).map((s) => s.trim()).filter((s) => /^\+?[0-9]{6,16}$/.test(s)).length;
+  return (
+    <div className="space-y-3 rounded-lg border border-border/60 p-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h4 className="font-medium text-sm">Массовые исходящие звонки</h4>
+        <span className="text-xs text-muted-foreground">Валидных номеров: {count}</span>
+      </div>
+      <p className="text-xs text-muted-foreground">{hint} Загрузите CSV или вставьте номера через запятую / с новой строки.</p>
+      <Textarea
+        rows={5}
+        placeholder="+37360111111, +37360222222&#10;+37360333333"
+        value={bulkText}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <div className="flex flex-wrap gap-2">
+        <label className="inline-flex">
+          <input
+            type="file"
+            accept=".csv,text/csv,text/plain"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) onCsv(f); e.target.value = ""; }}
+          />
+          <span className="inline-flex items-center text-xs px-3 py-2 rounded-md border border-border/60 hover:bg-muted/40 cursor-pointer">
+            <Upload className="h-3.5 w-3.5 mr-1.5" /> Загрузить CSV
+          </span>
+        </label>
+        <Button type="button" size="sm" onClick={onDial} disabled={disabled || busy || count === 0} className="bg-gradient-primary">
+          {busy ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <PhoneOutgoing className="h-3.5 w-3.5 mr-1.5" />}
+          Запустить звонки
+        </Button>
+      </div>
+    </div>
   );
 }
 

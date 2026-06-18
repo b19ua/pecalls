@@ -38,6 +38,7 @@ import { Route as ApiPublicTwilioHandoffRouteImport } from './routes/api/public/
 import { Route as ApiPublicJambonzStatusRouteImport } from './routes/api/public/jambonz/status'
 import { Route as ApiPublicJambonzCallRouteImport } from './routes/api/public/jambonz/call'
 import { Route as ApiPublicCrmCallsRouteImport } from './routes/api/public/crm/calls'
+import { Route as ApiPublicTelegramWebhookAgentIdRouteImport } from './routes/api/public/telegram/webhook.$agentId'
 
 const SnRoute = SnRouteImport.update({
   id: '/sn',
@@ -188,6 +189,12 @@ const ApiPublicCrmCallsRoute = ApiPublicCrmCallsRouteImport.update({
   path: '/api/public/crm/calls',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicTelegramWebhookAgentIdRoute =
+  ApiPublicTelegramWebhookAgentIdRouteImport.update({
+    id: '/api/public/telegram/webhook/$agentId',
+    path: '/api/public/telegram/webhook/$agentId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -218,6 +225,7 @@ export interface FileRoutesByFullPath {
   '/api/public/twilio/recording': typeof ApiPublicTwilioRecordingRoute
   '/api/public/twilio/status': typeof ApiPublicTwilioStatusRoute
   '/api/public/twilio/voice': typeof ApiPublicTwilioVoiceRoute
+  '/api/public/telegram/webhook/$agentId': typeof ApiPublicTelegramWebhookAgentIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -247,6 +255,7 @@ export interface FileRoutesByTo {
   '/api/public/twilio/recording': typeof ApiPublicTwilioRecordingRoute
   '/api/public/twilio/status': typeof ApiPublicTwilioStatusRoute
   '/api/public/twilio/voice': typeof ApiPublicTwilioVoiceRoute
+  '/api/public/telegram/webhook/$agentId': typeof ApiPublicTelegramWebhookAgentIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -279,6 +288,7 @@ export interface FileRoutesById {
   '/api/public/twilio/recording': typeof ApiPublicTwilioRecordingRoute
   '/api/public/twilio/status': typeof ApiPublicTwilioStatusRoute
   '/api/public/twilio/voice': typeof ApiPublicTwilioVoiceRoute
+  '/api/public/telegram/webhook/$agentId': typeof ApiPublicTelegramWebhookAgentIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -311,6 +321,7 @@ export interface FileRouteTypes {
     | '/api/public/twilio/recording'
     | '/api/public/twilio/status'
     | '/api/public/twilio/voice'
+    | '/api/public/telegram/webhook/$agentId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -340,6 +351,7 @@ export interface FileRouteTypes {
     | '/api/public/twilio/recording'
     | '/api/public/twilio/status'
     | '/api/public/twilio/voice'
+    | '/api/public/telegram/webhook/$agentId'
   id:
     | '__root__'
     | '/'
@@ -371,6 +383,7 @@ export interface FileRouteTypes {
     | '/api/public/twilio/recording'
     | '/api/public/twilio/status'
     | '/api/public/twilio/voice'
+    | '/api/public/telegram/webhook/$agentId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -388,6 +401,7 @@ export interface RootRouteChildren {
   ApiPublicTwilioRecordingRoute: typeof ApiPublicTwilioRecordingRoute
   ApiPublicTwilioStatusRoute: typeof ApiPublicTwilioStatusRoute
   ApiPublicTwilioVoiceRoute: typeof ApiPublicTwilioVoiceRoute
+  ApiPublicTelegramWebhookAgentIdRoute: typeof ApiPublicTelegramWebhookAgentIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -595,6 +609,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicCrmCallsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/telegram/webhook/$agentId': {
+      id: '/api/public/telegram/webhook/$agentId'
+      path: '/api/public/telegram/webhook/$agentId'
+      fullPath: '/api/public/telegram/webhook/$agentId'
+      preLoaderRoute: typeof ApiPublicTelegramWebhookAgentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -671,6 +692,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicTwilioRecordingRoute: ApiPublicTwilioRecordingRoute,
   ApiPublicTwilioStatusRoute: ApiPublicTwilioStatusRoute,
   ApiPublicTwilioVoiceRoute: ApiPublicTwilioVoiceRoute,
+  ApiPublicTelegramWebhookAgentIdRoute: ApiPublicTelegramWebhookAgentIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

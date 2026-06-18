@@ -87,6 +87,9 @@ export type Database = {
           sip_transport: string
           sip_username: string | null
           system_prompt: string
+          telegram_bot_id: number | null
+          telegram_bot_token: string | null
+          telegram_bot_username: string | null
           temperature: number
           twilio_number_e164: string | null
           updated_at: string
@@ -125,6 +128,9 @@ export type Database = {
           sip_transport?: string
           sip_username?: string | null
           system_prompt?: string
+          telegram_bot_id?: number | null
+          telegram_bot_token?: string | null
+          telegram_bot_username?: string | null
           temperature?: number
           twilio_number_e164?: string | null
           updated_at?: string
@@ -163,6 +169,9 @@ export type Database = {
           sip_transport?: string
           sip_username?: string | null
           system_prompt?: string
+          telegram_bot_id?: number | null
+          telegram_bot_token?: string | null
+          telegram_bot_username?: string | null
           temperature?: number
           twilio_number_e164?: string | null
           updated_at?: string

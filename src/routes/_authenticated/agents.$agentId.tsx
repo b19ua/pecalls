@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { saveAgent, deleteAgent } from "@/lib/agents.functions";
 import { provisionInboundSip, deleteInboundSip, syncTwilioNumbers, configureTwilioNumber, placeOutboundCall } from "@/lib/twilio.functions";
+import { connectTelegramBot, disconnectTelegramBot } from "@/lib/telegram.functions";
 import { GEMINI_VOICES, LANGUAGES } from "@/lib/voices";
 import { PageHeader } from "@/components/PageHeader";
 import { HintIcon } from "@/components/HintIcon";
@@ -108,6 +109,11 @@ function AgentEditor() {
   const [testToNumber, setTestToNumber] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [bulkDialing, setBulkDialing] = useState(false);
+  const [telegramUsername, setTelegramUsername] = useState<string | null>(null);
+  const [tgToken, setTgToken] = useState("");
+  const [tgBusy, setTgBusy] = useState(false);
+  const connectTelegramFn = useServerFn(connectTelegramBot);
+  const disconnectTelegramFn = useServerFn(disconnectTelegramBot);
 
   useEffect(() => {
     if (isNew) return;
@@ -157,6 +163,7 @@ function AgentEditor() {
             password: data.inbound_sip_password,
           });
         }
+        setTelegramUsername((data as any).telegram_bot_username ?? null);
         setLoading(false);
       });
   }, [agentId, isNew, navigate]);
@@ -363,6 +370,37 @@ function AgentEditor() {
       toast.success(`Импортировано ${parseBulkNumbers(text).length} номеров`);
     };
     reader.readAsText(file);
+  }
+
+  async function handleConnectTelegram() {
+    if (isNew) { toast.error("Сначала сохраните агента"); return; }
+    const token = tgToken.trim();
+    if (!token) { toast.error("Введите токен от @BotFather"); return; }
+    setTgBusy(true);
+    try {
+      const res = await connectTelegramFn({ data: { agentId, token } });
+      setTelegramUsername(res.username);
+      setTgToken("");
+      toast.success(`Подключено: @${res.username}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось подключить");
+    } finally {
+      setTgBusy(false);
+    }
+  }
+
+  async function handleDisconnectTelegram() {
+    if (!confirm("Отключить Telegram бота?")) return;
+    setTgBusy(true);
+    try {
+      await disconnectTelegramFn({ data: { agentId } });
+      setTelegramUsername(null);
+      toast.success("Telegram отключён");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setTgBusy(false);
+    }
   }
 
   if (loading) {
@@ -700,14 +738,46 @@ function AgentEditor() {
           <p className="text-sm text-muted-foreground">
             Подключите каналы переписки — агент сможет отвечать клиентам в выбранных мессенджерах.
           </p>
+          <div className="rounded-lg border border-[#229ED9]/30 bg-[#229ED9]/5 p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg border bg-[#229ED9]/10 text-[#229ED9] border-[#229ED9]/30 flex items-center justify-center shrink-0">
+                <Send className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm">Telegram Bot</div>
+                <div className="text-xs text-muted-foreground">
+                  {telegramUsername ? (
+                    <>Подключён: <a href={`https://t.me/${telegramUsername}`} target="_blank" rel="noreferrer" className="text-[#229ED9] hover:underline">@{telegramUsername}</a></>
+                  ) : (
+                    <>Создайте бота у <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-[#229ED9] hover:underline">@BotFather</a> и вставьте токен ниже.</>
+                  )}
+                </div>
+              </div>
+              {telegramUsername && (
+                <Button type="button" variant="outline" size="sm" onClick={handleDisconnectTelegram} disabled={tgBusy}>
+                  {tgBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Отключить"}
+                </Button>
+              )}
+            </div>
+            {!telegramUsername && (
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  value={tgToken}
+                  onChange={(e) => setTgToken(e.target.value)}
+                  placeholder="123456789:AAH..."
+                  autoComplete="off"
+                  className="flex-1 font-mono text-xs"
+                />
+                <Button type="button" size="sm" onClick={handleConnectTelegram} disabled={tgBusy || isNew} className="bg-[#229ED9] hover:bg-[#1d8fc4] text-white">
+                  {tgBusy ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
+                  Подключить
+                </Button>
+              </div>
+            )}
+            {isNew && <p className="text-xs text-muted-foreground">Сначала сохраните агента.</p>}
+          </div>
+
           <div className="grid sm:grid-cols-2 gap-3">
-            <ChannelCard
-              name="Telegram Bot"
-              description="Подключить через Lovable"
-              icon={<Send className="h-5 w-5" />}
-              brandClass="bg-[#229ED9]/10 text-[#229ED9] border-[#229ED9]/30"
-              onConnect={() => toast.info("Скоро: подключение Telegram бота")}
-            />
             <ChannelCard
               name="WhatsApp"
               description="Business API"

@@ -225,18 +225,37 @@ export const provisionInboundSip = createServerFn({ method: "POST" })
     let credListSid = agent.inbound_sip_credential_list_sid as string | null;
 
     if (!credListSid) {
-      const cl = await gwPost(`/SIP/CredentialLists.json`, {
-        FriendlyName: `Agent ${agent.id.slice(0, 8)} SIP`,
-      });
-      credListSid = cl.sid;
-      await gwPost(`/SIP/CredentialLists/${credListSid}/Credentials.json`, {
-        Username: username,
-        Password: password,
-      });
-      // Map credential list to the SIP Domain (Auth Calls)
-      await gwPost(`/SIP/Domains/${domainSid}/Auth/Calls/CredentialListMappings.json`, {
-        CredentialListSid: credListSid as string,
-      });
+      const friendlyName = `Agent ${agent.id.slice(0, 8)} SIP`;
+      // Reuse existing CredentialList with same FriendlyName (e.g. leftover from prior provisioning)
+      const existingLists = await gwGet(`/SIP/CredentialLists.json?PageSize=200`);
+      const existingList = (existingLists.credential_lists || []).find(
+        (cl: { friendly_name: string; sid: string }) => cl.friendly_name === friendlyName,
+      );
+      if (existingList) {
+        credListSid = existingList.sid;
+      } else {
+        const cl = await gwPost(`/SIP/CredentialLists.json`, { FriendlyName: friendlyName });
+        credListSid = cl.sid;
+      }
+      // Ensure credential exists (ignore "already exists" errors)
+      try {
+        await gwPost(`/SIP/CredentialLists/${credListSid}/Credentials.json`, {
+          Username: username,
+          Password: password,
+        });
+      } catch (e) {
+        const msg = String((e as Error).message || "");
+        if (!/already exists|22122|already in use/i.test(msg)) throw e;
+      }
+      // Map credential list to SIP Domain — ignore if mapping already exists
+      try {
+        await gwPost(`/SIP/Domains/${domainSid}/Auth/Calls/CredentialListMappings.json`, {
+          CredentialListSid: credListSid as string,
+        });
+      } catch (e) {
+        const msg = String((e as Error).message || "");
+        if (!/already|exists/i.test(msg)) throw e;
+      }
     }
 
     await supabase

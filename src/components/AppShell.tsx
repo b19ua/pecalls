@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Bot, PhoneCall, Megaphone, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench, Server, Plug } from "lucide-react";
-import { AppLogo } from "./AppLogo";
+import { LayoutDashboard, Bot, PhoneCall, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench, Server, Plug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";

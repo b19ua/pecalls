@@ -617,6 +617,41 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+function CollapsibleSection({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Card className="bg-gradient-card shadow-soft">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CardContent className="p-4 sm:p-6 space-y-4">
+          <CollapsibleTrigger className="flex w-full items-center justify-between group">
+            <h3 className="font-display text-lg font-semibold">{title}</h3>
+            <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 data-[state=open]:pt-1">
+            <Separator />
+            {children}
+          </CollapsibleContent>
+        </CardContent>
+      </Collapsible>
+    </Card>
+  );
+}
+
+function ChannelCard({ name, description, icon, brandClass, onConnect }: { name: string; description: string; icon: React.ReactNode; brandClass: string; onConnect: () => void }) {
+  return (
+    <div className="rounded-lg border border-border/60 bg-card/40 p-4 flex items-center gap-3 hover:border-primary/40 transition-colors">
+      <div className={`h-10 w-10 rounded-lg border flex items-center justify-center shrink-0 ${brandClass}`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-sm truncate">{name}</div>
+        <div className="text-xs text-muted-foreground truncate">{description}</div>
+      </div>
+      <Button type="button" size="sm" variant="outline" onClick={onConnect}>Подключить</Button>
+    </div>
+  );
+}
+
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">

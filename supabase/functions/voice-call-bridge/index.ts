@@ -671,22 +671,20 @@ function mapAgentToDialCtx(agent: Record<string, unknown>): Pick<Ctx, "language"
 }
 
 function buildHandoffDialTwiml(c: Pick<Ctx, "language" | "twilioNumberE164" | "outboundMode" | "sipDomain" | "sipUsername" | "sipPassword" | "sipTransport" | "sipFromNumber" | "sipRoutePrefix">, target: string): string {
-  const from = c.outboundMode === "sip_trunk" ? (c.sipFromNumber || c.twilioNumberE164) : c.twilioNumberE164;
-  const callerId = from ? ` callerId="${escXml(from)}"` : "";
-  const useSip = c.outboundMode === "sip_trunk" && !!c.sipDomain;
+  // Always dial via Twilio PSTN <Number> for human handoff. Routing the transfer
+  // through the customer's SIP trunk frequently fails (403/forbidden, geo / ACL
+  // restrictions) and leaves the caller hung up. Twilio PSTN works as long as
+  // the Twilio account has voice permissions for the destination country.
+  const callerIdRaw = c.twilioNumberE164 || c.sipFromNumber || "";
+  const callerId = callerIdRaw ? ` callerId="${escXml(callerIdRaw)}"` : "";
   const action = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/voice-call-bridge?action=handoff-result`;
   const dialAttrs = `${callerId} answerOnBridge="true" timeout="30" action="${escXml(action)}" method="POST"`;
-  if (!useSip) {
-    return `<Say voice="${sayVoiceFor(c.language)}" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Number>${escXml(target)}</Number></Dial>`;
-  }
-  const transport = (c.sipTransport || "tls").toLowerCase();
-  const prefix = (c.sipRoutePrefix || "").trim();
-  const sipUser = prefix ? `${prefix}${target.replace(/^\+/, "")}` : target;
-  const auth = c.sipUsername ? ` username="${escXml(c.sipUsername)}" password="${escXml(c.sipPassword)}"` : "";
-  const sipUri = `sip:${sipUser}@${c.sipDomain}${transport ? `;transport=${transport}` : ""}`;
-  log("[handoff] using sip trunk", sipUri);
-  return `<Say voice="${sayVoiceFor(c.language)}" language="${escXml(c.language || "ru-RU")}">Соединяю с оператором.</Say><Dial${dialAttrs}><Sip${auth}>${escXml(sipUri)}</Sip></Dial>`;
+  const sayLang = escXml(c.language || "ru-RU");
+  const sayVoice = sayVoiceFor(c.language);
+  log("[handoff] dialing PSTN", target, "callerId=", callerIdRaw);
+  return `<Say voice="${sayVoice}" language="${sayLang}">Соединяю с оператором.</Say><Dial${dialAttrs}><Number>${escXml(target)}</Number></Dial>`;
 }
+
 
 function twimlResponse(body: string): Response {
   return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`, {

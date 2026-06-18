@@ -11,6 +11,7 @@ import {
   Plus, Upload, Sparkles, CheckCircle2, ArrowRight, Lightbulb, Activity,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { UserBanner } from "@/components/UserBanner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: DashboardPage,

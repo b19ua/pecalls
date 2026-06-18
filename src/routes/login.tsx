@@ -156,11 +156,11 @@ function LoginPage() {
             {c === "sn" ? (
               <img src={starnetAsset.url} alt="StarNet" className="h-12 w-auto" />
             ) : (
-              <AppLogo size="md" />
+              <img src={lunaraVoxAsset.url} alt="Lunara Vox" className="h-16 w-auto object-contain" />
             )}
           </div>
           <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-3 py-1 text-xs font-semibold">
-            <Lock className="h-3.5 w-3.5" /> {client.name} workspace
+            <Lock className="h-3.5 w-3.5" /> Sign in
           </div>
           <h1 className="font-display text-3xl font-bold tracking-tight mt-3">
             {mode === "signin" ? "Sign in to the platform" : "Create your workspace"}

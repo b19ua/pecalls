@@ -56,7 +56,10 @@ function LoginPage() {
   const { c } = Route.useSearch();
   const client = CLIENTS[(c ?? "pe") as ClientId];
   const login = useServerFn(verifyAdminLogin);
-  const [username, setUsername] = useState("Admin");
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -64,18 +67,52 @@ function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await login({ data: { username, password } });
-      const { error: setErr } = await supabase.auth.setSession({
-        access_token: res.access_token,
-        refresh_token: res.refresh_token,
-      });
-      if (setErr) throw setErr;
-      localStorage.setItem(ADMIN_SESSION_KEY, "1");
-      toast.success("Welcome back!");
-      navigate({ to: "/dashboard" });
+      if (mode === "signin") {
+        const res = await login({ data: { username, password } });
+        const { error: setErr } = await supabase.auth.setSession({
+          access_token: res.access_token,
+          refresh_token: res.refresh_token,
+        });
+        if (setErr) throw setErr;
+        localStorage.setItem(ADMIN_SESSION_KEY, "1");
+        toast.success("Welcome back!");
+        navigate({ to: "/dashboard" });
+      } else {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { display_name: displayName || email.split("@")[0] },
+          },
+        });
+        if (error) throw error;
+        if (data.session) {
+          localStorage.setItem(ADMIN_SESSION_KEY, "1");
+          toast.success("Account created!");
+          navigate({ to: "/dashboard" });
+        } else {
+          toast.success("Check your email to confirm your account.");
+          setMode("signin");
+        }
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Authentication error");
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const onGoogle = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin + "/dashboard" },
+      });
+      if (error) throw error;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Google sign-in failed");
       setLoading(false);
     }
   };
@@ -126,24 +163,52 @@ function LoginPage() {
             <Lock className="h-3.5 w-3.5" /> {client.name} workspace
           </div>
           <h1 className="font-display text-3xl font-bold tracking-tight mt-3">
-            Sign in to the platform
+            {mode === "signin" ? "Sign in to the platform" : "Create your workspace"}
           </h1>
           <p className="text-muted-foreground mt-2">
-            Sign in as administrator to manage AI agents and calls.
+            {mode === "signin"
+              ? "Sign in with your username or email."
+              : "Register to get your own dashboard."}
           </p>
 
           <form onSubmit={onSubmit} className="mt-8 space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Admin"
-                autoComplete="username"
-                required
-              />
-            </div>
+            {mode === "signin" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="username">Username or email</Label>
+                <Input
+                  id="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="StarNet, Test, Premier, Admin or email"
+                  autoComplete="username"
+                  required
+                />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="displayName">Display name</Label>
+                  <Input
+                    id="displayName"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="Your name"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+              </>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="password">Password</Label>
               <Input
@@ -152,8 +217,9 @@ function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                autoComplete="current-password"
+                placeholder={mode === "signin" ? "Enter your password" : "At least 8 characters"}
+                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                minLength={mode === "signup" ? 8 : undefined}
               />
             </div>
             <Button
@@ -163,11 +229,51 @@ function LoginPage() {
               disabled={loading}
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Sign in
+              {mode === "signin" ? "Sign in" : "Create account"}
             </Button>
           </form>
 
+          <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+            <div className="h-px bg-border flex-1" /> OR <div className="h-px bg-border flex-1" />
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            size="lg"
+            onClick={onGoogle}
+            disabled={loading}
+          >
+            Continue with Google
+          </Button>
+
           <p className="mt-6 text-sm text-center">
+            {mode === "signin" ? (
+              <>
+                Don't have an account?{" "}
+                <button
+                  type="button"
+                  className="text-primary hover:underline font-medium"
+                  onClick={() => setMode("signup")}
+                >
+                  Sign up
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  className="text-primary hover:underline font-medium"
+                  onClick={() => setMode("signin")}
+                >
+                  Sign in
+                </button>
+              </>
+            )}
+          </p>
+          <p className="mt-2 text-sm text-center">
             <Link to="/" className="text-muted-foreground hover:text-foreground">
               ← Back to home
             </Link>
@@ -177,3 +283,4 @@ function LoginPage() {
     </div>
   );
 }
+

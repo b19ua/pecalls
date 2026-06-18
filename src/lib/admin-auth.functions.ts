@@ -17,62 +17,90 @@ export const verifyAdminLogin = createServerFn({ method: "POST" })
     const adminPassword = process.env.ADMIN_PASSWORD;
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
-    if (!adminPassword) throw new Error("ADMIN_PASSWORD is not configured");
     if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
       throw new Error("Supabase is not configured");
     }
-    const ok =
-      data.username.trim().toLowerCase() === "admin" &&
-      data.password === adminPassword;
-    if (!ok) {
-      await new Promise((r) => setTimeout(r, 400));
-      throw new Error("Invalid login or password");
-    }
 
-    // Ensure admin user exists in Supabase auth, then sign in to get a session.
     const anonClient = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false, storage: undefined },
     });
 
-    let signIn = await anonClient.auth.signInWithPassword({
-      email: ADMIN_EMAIL,
-      password: adminPassword,
-    });
+    const raw = data.username.trim();
+    const isEmail = raw.includes("@");
 
-    if (signIn.error) {
-      // Try to create the user (idempotent), then sign in again.
-      const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
+    // Legacy hardcoded admin path: username "admin" + ADMIN_PASSWORD env
+    if (!isEmail && raw.toLowerCase() === "admin") {
+      if (!adminPassword || data.password !== adminPassword) {
+        await new Promise((r) => setTimeout(r, 400));
+        throw new Error("Invalid login or password");
+      }
+      let signIn = await anonClient.auth.signInWithPassword({
         email: ADMIN_EMAIL,
         password: adminPassword,
-        email_confirm: true,
       });
-      if (createErr && !/already|registered|exists/i.test(createErr.message)) {
-        throw new Error(createErr.message);
-      }
-      // If the user already existed but with a different password, reset it.
-      if (createErr) {
-        const { data: list } = await supabaseAdmin.auth.admin.listUsers();
-        const existing = list?.users.find((u) => u.email === ADMIN_EMAIL);
-        if (existing) {
-          await supabaseAdmin.auth.admin.updateUserById(existing.id, {
-            password: adminPassword,
-            email_confirm: true,
-          });
+      if (signIn.error) {
+        const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
+          email: ADMIN_EMAIL,
+          password: adminPassword,
+          email_confirm: true,
+        });
+        if (createErr && !/already|registered|exists/i.test(createErr.message)) {
+          throw new Error(createErr.message);
+        }
+        if (createErr) {
+          const { data: list } = await supabaseAdmin.auth.admin.listUsers();
+          const existing = list?.users.find((u) => u.email === ADMIN_EMAIL);
+          if (existing) {
+            await supabaseAdmin.auth.admin.updateUserById(existing.id, {
+              password: adminPassword,
+              email_confirm: true,
+            });
+          }
+        }
+        signIn = await anonClient.auth.signInWithPassword({
+          email: ADMIN_EMAIL,
+          password: adminPassword,
+        });
+        if (signIn.error || !signIn.data.session) {
+          throw new Error(signIn.error?.message || "Failed to establish session");
         }
       }
-      signIn = await anonClient.auth.signInWithPassword({
-        email: ADMIN_EMAIL,
-        password: adminPassword,
-      });
-      if (signIn.error || !signIn.data.session) {
-        throw new Error(signIn.error?.message || "Failed to establish session");
-      }
+      const session = signIn.data.session!;
+      return {
+        ok: true as const,
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      };
     }
 
-    const session = signIn.data.session!;
+    // Generic path: resolve email (either provided directly or via display_name lookup)
+    let email = isEmail ? raw.toLowerCase() : "";
+    if (!isEmail) {
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("email, display_name")
+        .ilike("display_name", raw)
+        .maybeSingle();
+      if (!profile?.email) {
+        await new Promise((r) => setTimeout(r, 400));
+        throw new Error("Invalid login or password");
+      }
+      email = profile.email;
+    }
+
+    const signIn = await anonClient.auth.signInWithPassword({
+      email,
+      password: data.password,
+    });
+    if (signIn.error || !signIn.data.session) {
+      await new Promise((r) => setTimeout(r, 400));
+      throw new Error("Invalid login or password");
+    }
+    const session = signIn.data.session;
     return {
       ok: true as const,
       access_token: session.access_token,
       refresh_token: session.refresh_token,
     };
   });
+

@@ -712,7 +712,7 @@ async function resolvePstnCallerId(ownerId: string, preferred: string): Promise<
 }
 
 function normalizeE164(value: string): string {
-  const cleaned = String(value || "").replace(/[^(\d|+)]/g, "");
+  const cleaned = String(value || "").replace(/[^\d+]/g, "");
   return /^\+\d{8,15}$/.test(cleaned) ? cleaned : "";
 }
 

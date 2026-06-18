@@ -35,7 +35,7 @@ const CLIENTS: Record<ClientId, {
 }> = {
   pe: {
     name: "Premier Energy",
-    logo: logoPE,
+    logo: lunaraVoxAsset.url,
     logoClass: "w-2/3",
     tagline: "Next-generation AI calling",
     description:

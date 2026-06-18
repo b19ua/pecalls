@@ -595,7 +595,7 @@ async function loadContext(agentId: string): Promise<Ctx> {
     handoffDigit: agent.handoff_dtmf_digit || "0",
     handoffPhrases: Array.isArray(agent.handoff_trigger_phrases) ? agent.handoff_trigger_phrases : [],
     handoffNumbers: Array.isArray(agent.handoff_numbers) ? agent.handoff_numbers : [],
-    twilioNumberE164: agent.twilio_number_e164 || "",
+    twilioNumberE164: await resolvePstnCallerId(agent.owner_id, agent.twilio_number_e164 || ""),
     outboundMode: agent.outbound_mode === "sip_trunk" ? "sip_trunk" : "twilio_number",
     sipDomain: agent.sip_domain || "",
     sipUsername: agent.sip_username || "",
@@ -619,7 +619,7 @@ async function handleHandoffAction(req: Request, url: URL): Promise<Response> {
   if (!agentId) return twimlResponse(`<Reject/>`);
   const { data: agent } = await supa
     .from("agents")
-    .select("id, handoff_enabled, handoff_dtmf_digit, handoff_numbers, twilio_number_e164, language, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix")
+    .select("id, owner_id, handoff_enabled, handoff_dtmf_digit, handoff_numbers, twilio_number_e164, language, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix")
     .eq("id", agentId)
     .eq("is_active", true)
     .maybeSingle();
@@ -634,8 +634,10 @@ async function handleHandoffAction(req: Request, url: URL): Promise<Response> {
       .update({ handoff_to: target, handoff_at: new Date().toISOString(), status: "handoff" })
       .eq("twilio_call_sid", callSid);
   }
+  const dialCtx = mapAgentToDialCtx(agent);
+  dialCtx.twilioNumberE164 = await resolvePstnCallerId(String(agent.owner_id || ""), String(agent.twilio_number_e164 || ""));
   log("[handoff] action dialing", target, "call=", callSid, "digit=", digit);
-  return twimlResponse(buildHandoffDialTwiml(mapAgentToDialCtx(agent), target));
+  return twimlResponse(buildHandoffDialTwiml(dialCtx, target));
 }
 
 async function handleHandoffResult(req: Request, url: URL): Promise<Response> {
@@ -675,14 +677,43 @@ function buildHandoffDialTwiml(c: Pick<Ctx, "language" | "twilioNumberE164" | "o
   // through the customer's SIP trunk frequently fails (403/forbidden, geo / ACL
   // restrictions) and leaves the caller hung up. Twilio PSTN works as long as
   // the Twilio account has voice permissions for the destination country.
-  const callerIdRaw = c.twilioNumberE164 || c.sipFromNumber || "";
+  // Only use a callerId that belongs to the connected Twilio account. SIP DID / URI
+  // values (for example +37322010026 in a SIP address) are not valid Twilio callerIds
+  // and make <Dial><Number> fail immediately with no child call SID.
+  const callerIdRaw = c.twilioNumberE164 || "";
   const callerId = callerIdRaw ? ` callerId="${escXml(callerIdRaw)}"` : "";
   const action = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/voice-call-bridge?action=handoff-result`;
   const dialAttrs = `${callerId} answerOnBridge="true" timeout="30" action="${escXml(action)}" method="POST"`;
   const sayLang = escXml(c.language || "ru-RU");
   const sayVoice = sayVoiceFor(c.language);
-  log("[handoff] dialing PSTN", target, "callerId=", callerIdRaw);
+  log("[handoff] dialing PSTN", target, callerIdRaw ? `callerId=${callerIdRaw}` : "callerId omitted");
   return `<Say voice="${sayVoice}" language="${sayLang}">Соединяю с оператором.</Say><Dial${dialAttrs}><Number>${escXml(target)}</Number></Dial>`;
+}
+
+async function resolvePstnCallerId(ownerId: string, preferred: string): Promise<string> {
+  const normalizedPreferred = normalizeE164(preferred);
+  if (!ownerId) return "";
+  try {
+    const { data } = await supa
+      .from("twilio_numbers")
+      .select("phone_e164, capabilities, agent_id")
+      .eq("owner_id", ownerId);
+    const rows = (data || []) as Array<{ phone_e164?: string | null; capabilities?: Record<string, unknown> | null; agent_id?: string | null }>;
+    const voiceNumbers = rows
+      .filter((row) => row.capabilities?.voice !== false)
+      .map((row) => ({ phone: normalizeE164(row.phone_e164 || ""), agentId: row.agent_id || "" }))
+      .filter((row) => !!row.phone);
+    if (normalizedPreferred && voiceNumbers.some((row) => row.phone === normalizedPreferred)) return normalizedPreferred;
+    return voiceNumbers.find((row) => !row.agentId)?.phone || voiceNumbers[0]?.phone || "";
+  } catch (e) {
+    console.error("resolve callerId", e);
+    return "";
+  }
+}
+
+function normalizeE164(value: string): string {
+  const cleaned = String(value || "").replace(/[^(\d|+)]/g, "");
+  return /^\+\d{8,15}$/.test(cleaned) ? cleaned : "";
 }
 
 

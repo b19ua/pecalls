@@ -796,6 +796,51 @@ function CollapsibleSection({ title, children, defaultOpen = false }: { title: s
   );
 }
 
+
+function BulkOutboundBlock({ bulkText, onChange, onCsv, onDial, busy, disabled, hint }: {
+  bulkText: string;
+  onChange: (v: string) => void;
+  onCsv: (file: File) => void;
+  onDial: () => void;
+  busy: boolean;
+  disabled: boolean;
+  hint: string;
+}) {
+  const count = bulkText.split(/[\s,;]+/).map((s) => s.trim()).filter((s) => /^\+?[0-9]{6,16}$/.test(s)).length;
+  return (
+    <div className="space-y-3 rounded-lg border border-border/60 p-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h4 className="font-medium text-sm">Массовые исходящие звонки</h4>
+        <span className="text-xs text-muted-foreground">Валидных номеров: {count}</span>
+      </div>
+      <p className="text-xs text-muted-foreground">{hint} Загрузите CSV или вставьте номера через запятую / с новой строки.</p>
+      <Textarea
+        rows={5}
+        placeholder="+37360111111, +37360222222&#10;+37360333333"
+        value={bulkText}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <div className="flex flex-wrap gap-2">
+        <label className="inline-flex">
+          <input
+            type="file"
+            accept=".csv,text/csv,text/plain"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) onCsv(f); e.target.value = ""; }}
+          />
+          <span className="inline-flex items-center text-xs px-3 py-2 rounded-md border border-border/60 hover:bg-muted/40 cursor-pointer">
+            <Upload className="h-3.5 w-3.5 mr-1.5" /> Загрузить CSV
+          </span>
+        </label>
+        <Button type="button" size="sm" onClick={onDial} disabled={disabled || busy || count === 0} className="bg-gradient-primary">
+          {busy ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <PhoneOutgoing className="h-3.5 w-3.5 mr-1.5" />}
+          Запустить звонки
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ChannelCard({ name, description, icon, brandClass, onConnect }: { name: string; description: string; icon: React.ReactNode; brandClass: string; onConnect: () => void }) {
   return (
     <div className="rounded-lg border border-border/60 bg-card/40 p-4 flex items-center gap-3 hover:border-primary/40 transition-colors">

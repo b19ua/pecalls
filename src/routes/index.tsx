@@ -260,8 +260,8 @@ function LandingPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex">
-              <a href="#clients">{t("nav.login")}</a>
+            <Button asChild size="sm" className="bg-gradient-primary shadow-elegant">
+              <Link to="/login">{t("nav.login")}</Link>
             </Button>
           </div>
         </div>

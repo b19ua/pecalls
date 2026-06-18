@@ -631,27 +631,48 @@ function AgentEditor() {
                 </Field>
 
                 {form.inbound_connection_type === "sip_uri" ? (
-                  <Field label="SIP URI идентификатор" hint="латиница, цифры, . _ -">
-                    <Input
-                      value={form.inbound_sip_uri_user}
-                      onChange={(e) => set("inbound_sip_uri_user", e.target.value)}
-                      placeholder="agent-name"
-                    />
+                  <>
+                    <Field label="SIP URI идентификатор" hint="латиница, цифры, . _ -">
+                      <Input
+                        value={form.inbound_sip_uri_user}
+                        onChange={(e) => set("inbound_sip_uri_user", e.target.value)}
+                        placeholder="agent-name"
+                      />
+                    </Field>
                     {form.inbound_sip_uri_user && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Полный URI: <code className="font-mono">sip:{form.inbound_sip_uri_user}@{inboundSip?.sip_domain || "<домен после создания>"}</code>
-                      </p>
+                      <div className="flex items-start justify-between gap-3 rounded-md bg-muted/40 p-2">
+                        <div className="min-w-0 flex-1">
+                          <Label className="text-xs text-muted-foreground">Полный SIP URI</Label>
+                          <code className="block font-mono text-xs mt-0.5 break-all">
+                            sip:{form.inbound_sip_uri_user}@{inboundSip?.sip_domain || "<создайте SIP-домен ниже>"}
+                          </code>
+                        </div>
+                        {inboundSip?.sip_domain && (
+                          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0"
+                            onClick={() => copy(`sip:${form.inbound_sip_uri_user}@${inboundSip.sip_domain}`, "SIP URI")}>Copy</Button>
+                        )}
+                      </div>
                     )}
-                  </Field>
+                    <p className="text-xs text-muted-foreground">
+                      Передайте этот URI вашему SIP-провайдеру / софтфону — звонки на него попадут напрямую к агенту.
+                    </p>
+                  </>
                 ) : (
-                  <Field label="Ваш входящий SIP-номер (E.164)" hint="номер, который провайдер будет слать на агента">
-                    <Input
-                      value={form.twilio_number_e164}
-                      onChange={(e) => set("twilio_number_e164", e.target.value)}
-                      placeholder="+37360123456"
-                    />
-                  </Field>
+                  <>
+                    <Field label="Ваш входящий SIP-номер (E.164)" hint="номер, который провайдер будет слать на агента">
+                      <Input
+                        value={form.twilio_number_e164}
+                        onChange={(e) => set("twilio_number_e164", e.target.value)}
+                        placeholder="+37360123456"
+                      />
+                    </Field>
+                    <p className="text-xs text-muted-foreground">
+                      Ваш PBX/провайдер должен пересылать вызовы на этот номер в SIP-домен ниже (после создания). Логин/пароль — из карточки credentials.
+                    </p>
+                  </>
                 )}
+
+
 
                 {inboundSip ? (
                   <div className="space-y-3">

@@ -163,6 +163,7 @@ function AgentEditor() {
             password: data.inbound_sip_password,
           });
         }
+        setTelegramUsername((data as any).telegram_bot_username ?? null);
         setLoading(false);
       });
   }, [agentId, isNew, navigate]);

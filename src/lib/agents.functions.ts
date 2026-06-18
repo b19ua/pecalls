@@ -1,16 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
-
-const ADMIN_EMAIL = "admin@premier.local";
-
-async function getAdminUserId(): Promise<string> {
-  const { data, error } = await supabaseAdmin.auth.admin.listUsers();
-  if (error) throw new Error(error.message);
-  const u = data.users.find((x) => x.email === ADMIN_EMAIL);
-  if (!u) throw new Error("Admin user not found. Sign in once first.");
-  return u.id;
-}
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const GATEWAY = "https://connector-gateway.lovable.dev/twilio";
 

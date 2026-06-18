@@ -109,6 +109,11 @@ function AgentEditor() {
   const [testToNumber, setTestToNumber] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [bulkDialing, setBulkDialing] = useState(false);
+  const [telegramUsername, setTelegramUsername] = useState<string | null>(null);
+  const [tgToken, setTgToken] = useState("");
+  const [tgBusy, setTgBusy] = useState(false);
+  const connectTelegramFn = useServerFn(connectTelegramBot);
+  const disconnectTelegramFn = useServerFn(disconnectTelegramBot);
 
   useEffect(() => {
     if (isNew) return;

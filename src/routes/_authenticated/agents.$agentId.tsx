@@ -614,8 +614,45 @@ function AgentEditor() {
               <div className="space-y-3 rounded-lg border border-border/60 p-4">
                 <h4 className="font-medium text-sm">Входящие через SIP</h4>
                 <p className="text-xs text-muted-foreground">
-                  Для входящих вызовов ваш SIP/PBX должен отправлять INVITE прямо на домен агента ниже.
+                  Выберите способ приёма входящих: ваш SIP-номер (PSTN через провайдера) или SIP URI напрямую на агента.
                 </p>
+
+                <Field label="Тип входящего подключения">
+                  <Select
+                    value={form.inbound_connection_type}
+                    onValueChange={(v) => set("inbound_connection_type", v as "phone" | "sip_uri")}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="phone">Свой SIP-номер (PSTN)</SelectItem>
+                      <SelectItem value="sip_uri">SIP URI (прямое подключение)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                {form.inbound_connection_type === "sip_uri" ? (
+                  <Field label="SIP URI идентификатор" hint="латиница, цифры, . _ -">
+                    <Input
+                      value={form.inbound_sip_uri_user}
+                      onChange={(e) => set("inbound_sip_uri_user", e.target.value)}
+                      placeholder="agent-name"
+                    />
+                    {form.inbound_sip_uri_user && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Полный URI: <code className="font-mono">sip:{form.inbound_sip_uri_user}@{inboundSip?.sip_domain || "<домен после создания>"}</code>
+                      </p>
+                    )}
+                  </Field>
+                ) : (
+                  <Field label="Ваш входящий SIP-номер (E.164)" hint="номер, который провайдер будет слать на агента">
+                    <Input
+                      value={form.twilio_number_e164}
+                      onChange={(e) => set("twilio_number_e164", e.target.value)}
+                      placeholder="+37360123456"
+                    />
+                  </Field>
+                )}
+
                 {inboundSip ? (
                   <div className="space-y-3">
                     {[
@@ -645,6 +682,7 @@ function AgentEditor() {
                   </Button>
                 )}
               </div>
+
 
               <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
                 <h4 className="font-medium text-sm">Исходящий SIP trunk</h4>

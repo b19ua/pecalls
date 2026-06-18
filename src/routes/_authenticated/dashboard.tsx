@@ -11,6 +11,7 @@ import {
   Plus, Upload, Sparkles, CheckCircle2, ArrowRight, Lightbulb, Activity,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { UserBanner } from "@/components/UserBanner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: DashboardPage,
@@ -78,6 +79,7 @@ function DashboardPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+      <UserBanner />
       <PageHeader title={t("dash.title")} description={t("dash.subtitle")} />
 
       {/* Tip banner */}

@@ -372,6 +372,37 @@ function AgentEditor() {
     reader.readAsText(file);
   }
 
+  async function handleConnectTelegram() {
+    if (isNew) { toast.error("Сначала сохраните агента"); return; }
+    const token = tgToken.trim();
+    if (!token) { toast.error("Введите токен от @BotFather"); return; }
+    setTgBusy(true);
+    try {
+      const res = await connectTelegramFn({ data: { agentId, token } });
+      setTelegramUsername(res.username);
+      setTgToken("");
+      toast.success(`Подключено: @${res.username}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось подключить");
+    } finally {
+      setTgBusy(false);
+    }
+  }
+
+  async function handleDisconnectTelegram() {
+    if (!confirm("Отключить Telegram бота?")) return;
+    setTgBusy(true);
+    try {
+      await disconnectTelegramFn({ data: { agentId } });
+      setTelegramUsername(null);
+      toast.success("Telegram отключён");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setTgBusy(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-8 flex items-center gap-2 text-muted-foreground">

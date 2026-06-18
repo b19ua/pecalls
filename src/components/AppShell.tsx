@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Bot, PhoneCall, Megaphone, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench, Server, Plug } from "lucide-react";
-import { AppLogo } from "./AppLogo";
+import { LayoutDashboard, Bot, PhoneCall, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench, Server, Plug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,7 +16,7 @@ const NAV = [
   { to: "/calls",      key: "nav.calls",      icon: PhoneCall },
   { to: "/live",       key: "nav.live",       icon: Radio },
   { to: "/analytics",  key: "nav.analytics",  icon: BarChart3 },
-  { to: "/campaigns",  key: "nav.campaigns",  icon: Megaphone },
+  
   { to: "/data-residency", key: "nav.residency", icon: Server },
   { to: "/crm",        key: "nav.crm",        icon: Plug },
   { to: "/settings",   key: "nav.settings",   icon: Settings },
@@ -38,11 +37,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-      <div className="p-3 border-b border-sidebar-border">
-        <div className="rounded-lg bg-white p-2.5 flex items-center justify-center">
-          <AppLogo size="md" />
-        </div>
-      </div>
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {NAV.map(({ to, key, icon: Icon }) => {
           const active = location.pathname === to || location.pathname.startsWith(to + "/");
@@ -116,7 +110,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <SidebarContent onNavigate={() => setOpen(false)} />
           </SheetContent>
         </Sheet>
-        <AppLogo size="sm" />
+        <div className="flex-1" />
         <div className="w-10" />
       </div>
 

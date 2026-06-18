@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/AppLogo";
-import logoPE from "@/assets/logo.png";
+import lunaraVoxAsset from "@/assets/lunara-vox.png.asset.json";
 import starnetAsset from "@/assets/starnet-logo.png.asset.json";
 import { toast } from "sonner";
 import { Loader2, Lock } from "lucide-react";

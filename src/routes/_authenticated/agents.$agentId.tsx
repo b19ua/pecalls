@@ -93,12 +93,21 @@ function AgentEditor() {
   const deleteAgentFn = useServerFn(deleteAgent);
   const provisionSipFn = useServerFn(provisionInboundSip);
   const deleteSipFn = useServerFn(deleteInboundSip);
+  const syncNumbersFn = useServerFn(syncTwilioNumbers);
+  const configureNumberFn = useServerFn(configureTwilioNumber);
+  const outboundCallFn = useServerFn(placeOutboundCall);
   const [form, setForm] = useState<AgentForm>(DEFAULTS);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
   const [inboundSip, setInboundSip] = useState<{ sip_domain: string; username: string; password: string } | null>(null);
   const [provisioning, setProvisioning] = useState(false);
+  const [twilioNumbers, setTwilioNumbers] = useState<Array<{ id: string; phone_e164: string; friendly_name: string | null; agent_id: string | null }>>([]);
+  const [numbersLoading, setNumbersLoading] = useState(false);
+  const [syncingNumbers, setSyncingNumbers] = useState(false);
+  const [testToNumber, setTestToNumber] = useState("");
+  const [bulkText, setBulkText] = useState("");
+  const [bulkDialing, setBulkDialing] = useState(false);
 
   useEffect(() => {
     if (isNew) return;

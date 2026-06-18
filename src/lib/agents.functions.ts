@@ -55,11 +55,12 @@ const AgentSchema = z.object({
 });
 
 export const saveAgent = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((i) =>
     z.object({ id: z.string().uuid().nullable(), data: AgentSchema }).parse(i),
   )
-  .handler(async ({ data }) => {
-    const ownerId = await getAdminUserId();
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
     const payload = {
       ...data.data,
       description: data.data.description || null,
@@ -67,15 +68,14 @@ export const saveAgent = createServerFn({ method: "POST" })
       inbound_sip_uri_user: data.data.inbound_sip_uri_user
         ? data.data.inbound_sip_uri_user.trim().toLowerCase()
         : null,
-      owner_id: ownerId,
+      owner_id: userId,
     };
 
     if (!data.id) {
-      // Auto-attach first Twilio number on create when phone mode and none provided
       if (payload.inbound_connection_type === "phone" && !payload.twilio_number_e164) {
         payload.twilio_number_e164 = await fetchFirstTwilioNumber();
       }
-      const { data: row, error } = await supabaseAdmin
+      const { data: row, error } = await supabase
         .from("agents")
         .insert(payload)
         .select("id")
@@ -84,24 +84,25 @@ export const saveAgent = createServerFn({ method: "POST" })
       return { id: row!.id };
     }
 
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from("agents")
       .update(payload)
       .eq("id", data.id)
-      .eq("owner_id", ownerId);
+      .eq("owner_id", userId);
     if (error) throw new Error(error.message);
     return { id: data.id };
   });
 
 export const deleteAgent = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((i) => z.object({ id: z.string().uuid() }).parse(i))
-  .handler(async ({ data }) => {
-    const ownerId = await getAdminUserId();
-    const { error } = await supabaseAdmin
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
       .from("agents")
       .delete()
       .eq("id", data.id)
-      .eq("owner_id", ownerId);
+      .eq("owner_id", userId);
     if (error) throw new Error(error.message);
     return { ok: true as const };
   });

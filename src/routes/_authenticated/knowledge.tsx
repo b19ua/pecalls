@@ -2,8 +2,6 @@ import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/use-auth";
-import { useServerFn } from "@tanstack/react-start";
-import { processDocument } from "@/lib/knowledge.functions";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { BookOpen, Upload, FileText, Loader2, Trash2, RefreshCw, AlertCircle, CheckCircle2, Lightbulb, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
+
+async function triggerProcessing(documentId: string) {
+  const { error } = await supabase.functions.invoke("process-knowledge", {
+    body: { documentId },
+  });
+  if (error) throw new Error(error.message);
+}
 
 export const Route = createFileRoute("/_authenticated/knowledge")({
   component: KnowledgePage,

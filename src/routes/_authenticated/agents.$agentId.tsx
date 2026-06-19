@@ -71,7 +71,7 @@ const DEFAULTS: AgentForm = {
   is_active: true,
   record_calls: true,
   silence_timeout_seconds: 2,
-  max_call_seconds: 600,
+  
   handoff_enabled: true,
   handoff_dtmf_digit: "0",
   handoff_trigger_phrases: ["соедини с менеджером", "оператор", "human", "manager"],

@@ -42,7 +42,7 @@ type AgentForm = {
   is_active: boolean;
   record_calls: boolean;
   silence_timeout_seconds: number;
-  max_call_seconds: number;
+  
   handoff_enabled: boolean;
   handoff_dtmf_digit: string;
   handoff_trigger_phrases: string[];

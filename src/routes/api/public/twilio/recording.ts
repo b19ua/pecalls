@@ -90,13 +90,13 @@ async function analyzeSentimentInline(callId: string) {
       .eq("id", callId)
       .maybeSingle();
     if (!c) return;
-    const transcript = Array.isArray(c.transcript) ? c.transcript : [];
+    const transcript = (Array.isArray(c.transcript) ? c.transcript : []) as Array<{ role?: string; source?: string; text?: string }>;
     if (!transcript.length) return;
     const text = transcript
-      .map((i: { role?: string; source?: string; text?: string }) => {
-        const role = (i.role ?? i.source ?? "").toLowerCase();
+      .map((i) => {
+        const role = (i?.role ?? i?.source ?? "").toLowerCase();
         const who = role === "agent" || role === "assistant" ? "AGENT" : "CALLER";
-        return `${who}: ${(i.text ?? "").trim()}`;
+        return `${who}: ${(i?.text ?? "").trim()}`;
       })
       .filter((l) => !l.endsWith(":"))
       .join("\n")
@@ -118,13 +118,14 @@ async function analyzeSentimentInline(callId: string) {
     if (!r.ok) { console.error("[recording] sentiment failed", r.status); return; }
     const j = await r.json();
     const content: string = j?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "{}";
-    let a: Record<string, unknown> = {};
-    try { a = JSON.parse(content); } catch { return; }
+    type Analysis = { sentiment?: string; sentiment_score?: number; complaint_flag?: boolean; competitor_mentioned?: boolean; competitor_names?: string[]; topics?: string[]; short_summary?: string };
+    let a: Analysis = {};
+    try { a = JSON.parse(content) as Analysis; } catch { return; }
     await supabaseAdmin.from("calls").update({
-      sentiment: a.sentiment,
-      sentiment_score: a.sentiment_score,
-      complaint_flag: a.complaint_flag,
-      competitor_mentioned: a.competitor_mentioned,
+      sentiment: (a.sentiment ?? null) as "positive" | "neutral" | "negative" | null,
+      sentiment_score: a.sentiment_score ?? null,
+      complaint_flag: a.complaint_flag ?? false,
+      competitor_mentioned: a.competitor_mentioned ?? false,
       competitor_names: a.competitor_names ?? [],
       topics: a.topics ?? [],
       analyzed_at: new Date().toISOString(),

@@ -293,8 +293,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   const checkSilence = () => {
     if (twilio.readyState !== 1) return;
     const idleMs = Date.now() - lastUserAudioAt;
-    // Just hang up after long silence — don't inject text mid-call, it disrupts the audio session.
-    if (idleMs >= 25_000) {
+    // Hang up only after 30s of complete silence from the caller.
+    if (idleMs >= 30_000) {
       setTimeout(() => { try { twilio.close(); } catch { /* noop */ } }, 500);
       if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
     }

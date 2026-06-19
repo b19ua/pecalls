@@ -101,7 +101,7 @@ function KnowledgePage() {
       await loadDocs(agentId);
       toast.success("OK");
       try {
-        await processFn({ data: { documentId: doc.id } });
+        await triggerProcessing(doc.id);
         toast.success("OK");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "err");
@@ -118,7 +118,7 @@ function KnowledgePage() {
   async function reindex(doc: Doc) {
     setBusy(doc.id);
     try {
-      await processFn({ data: { documentId: doc.id } });
+      await triggerProcessing(doc.id);
       toast.success("OK");
       await loadDocs(agentId);
     } catch (err) {

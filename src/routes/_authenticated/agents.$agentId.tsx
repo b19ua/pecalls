@@ -42,7 +42,7 @@ type AgentForm = {
   is_active: boolean;
   record_calls: boolean;
   silence_timeout_seconds: number;
-  max_call_seconds: number;
+  
   handoff_enabled: boolean;
   handoff_dtmf_digit: string;
   handoff_trigger_phrases: string[];
@@ -71,7 +71,7 @@ const DEFAULTS: AgentForm = {
   is_active: true,
   record_calls: true,
   silence_timeout_seconds: 2,
-  max_call_seconds: 600,
+  
   handoff_enabled: true,
   handoff_dtmf_digit: "0",
   handoff_trigger_phrases: ["соедини с менеджером", "оператор", "human", "manager"],
@@ -143,7 +143,7 @@ function AgentEditor() {
           is_active: data.is_active,
           record_calls: data.record_calls,
           silence_timeout_seconds: data.silence_timeout_seconds,
-          max_call_seconds: data.max_call_seconds,
+          
           handoff_enabled: data.handoff_enabled,
           handoff_dtmf_digit: data.handoff_dtmf_digit ?? "0",
           handoff_trigger_phrases: data.handoff_trigger_phrases ?? [],

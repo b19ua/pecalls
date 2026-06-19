@@ -40,7 +40,7 @@ const AgentSchema = z.object({
   is_active: z.boolean(),
   record_calls: z.boolean(),
   silence_timeout_seconds: z.number().int().min(1).max(120),
-  max_call_seconds: z.number().int().min(10).max(7200),
+  max_call_seconds: z.number().int().min(10).max(86400).optional().default(86400),
   handoff_enabled: z.boolean(),
   handoff_dtmf_digit: z.string().max(2),
   handoff_trigger_phrases: z.array(z.string().max(200)).max(50),

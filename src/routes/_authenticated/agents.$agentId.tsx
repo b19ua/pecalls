@@ -143,7 +143,7 @@ function AgentEditor() {
           is_active: data.is_active,
           record_calls: data.record_calls,
           silence_timeout_seconds: data.silence_timeout_seconds,
-          max_call_seconds: data.max_call_seconds,
+          
           handoff_enabled: data.handoff_enabled,
           handoff_dtmf_digit: data.handoff_dtmf_digit ?? "0",
           handoff_trigger_phrases: data.handoff_trigger_phrases ?? [],

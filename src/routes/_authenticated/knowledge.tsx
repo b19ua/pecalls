@@ -42,7 +42,7 @@ function KnowledgePage() {
   const { t } = useI18n();
   const { user } = useAuth();
   const search = useSearch({ from: "/_authenticated/knowledge" });
-  const processFn = useServerFn(processDocument);
+  
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentId, setAgentId] = useState<string>(search.agent ?? "");
   const [docs, setDocs] = useState<Doc[]>([]);

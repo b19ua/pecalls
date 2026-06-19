@@ -831,11 +831,21 @@ async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promis
     const tid = setTimeout(() => ctl.abort(), timeout);
     const r = await fetch(url, { method, headers, body, signal: ctl.signal });
     clearTimeout(tid);
-    const txt = await r.text();
+    let txt = await r.text();
+    // Cap at ~60k chars so the full payload reaches the model without
+    // breaking the websocket frame. Most APIs return far less.
+    if (txt.length > 60000) txt = txt.slice(0, 60000) + "\n…[truncated]";
     let parsed: unknown = txt;
     try { parsed = JSON.parse(txt); } catch { /* keep as text */ }
-    log("tool", tool.name, "→", r.status);
-    return { status: r.status, ok: r.ok, data: parsed };
+    log("tool", tool.name, "→", r.status, "bytes:", txt.length);
+    return {
+      status: r.status,
+      ok: r.ok,
+      data: parsed,
+      instructions:
+        (cfg.response_hint || "").trim() ||
+        "Use ALL relevant fields from `data` to answer the caller. Read the full payload before replying; do not skip nested objects or arrays.",
+    };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }

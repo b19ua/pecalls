@@ -1,15 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
-
-const ADMIN_EMAIL = "admin@premier.local";
-async function getAdminUserId(): Promise<string> {
-  const { data, error } = await supabaseAdmin.auth.admin.listUsers();
-  if (error) throw new Error(error.message);
-  const u = data.users.find((x) => x.email === ADMIN_EMAIL);
-  if (!u) throw new Error("Admin user not found.");
-  return u.id;
-}
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const ParamSchema = z.object({
   name: z.string().min(1).max(40).regex(/^[a-zA-Z][a-zA-Z0-9_]*$/),
@@ -25,8 +16,8 @@ const WebhookConfig = z.object({
   auth_header_value: z.string().max(2000).default(""),
   static_headers: z.record(z.string(), z.string().max(1000)).default({}),
   parameters: z.array(ParamSchema).max(20).default([]),
-  timeout_ms: z.number().int().min(500).max(20000).default(8000),
-  response_hint: z.string().max(500).default(""),
+  timeout_ms: z.number().int().min(500).max(30000).default(15000),
+  response_hint: z.string().max(2000).default(""),
 });
 
 const CrmConfig = z.object({
@@ -34,14 +25,12 @@ const CrmConfig = z.object({
   base_url: z.string().url().max(1000),
   auth_header_name: z.string().max(100).default("Authorization"),
   auth_header_value: z.string().max(2000).default(""),
-  // for lookup: GET path template, e.g. /contacts/search?phone={phone}
-  // for write: POST path template
   path: z.string().max(500).default(""),
   method: z.enum(["GET", "POST", "PUT", "PATCH"]).default("GET"),
   parameters: z.array(ParamSchema).max(20).default([]),
   body_template: z.string().max(4000).default(""),
-  timeout_ms: z.number().int().min(500).max(20000).default(8000),
-  response_hint: z.string().max(500).default(""),
+  timeout_ms: z.number().int().min(500).max(30000).default(15000),
+  response_hint: z.string().max(2000).default(""),
 });
 
 const ToolSchema = z.object({
@@ -59,13 +48,14 @@ function validateConfig(type: string, config: unknown) {
 }
 
 export const listTools = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((i) => z.object({ agentId: z.string().uuid().optional() }).parse(i))
-  .handler(async ({ data }) => {
-    const ownerId = await getAdminUserId();
-    let q = supabaseAdmin
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    let q = supabase
       .from("agent_tools")
       .select("*")
-      .eq("owner_id", ownerId)
+      .eq("owner_id", userId)
       .order("created_at", { ascending: false });
     if (data.agentId) q = q.eq("agent_id", data.agentId);
     const { data: rows, error } = await q;
@@ -74,15 +64,16 @@ export const listTools = createServerFn({ method: "POST" })
   });
 
 export const saveTool = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((i) =>
     z.object({ id: z.string().uuid().nullable(), data: ToolSchema }).parse(i),
   )
-  .handler(async ({ data }) => {
-    const ownerId = await getAdminUserId();
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
     const config = validateConfig(data.data.type, data.data.config);
-    const payload = { ...data.data, config, owner_id: ownerId };
+    const payload = { ...data.data, config, owner_id: userId };
     if (!data.id) {
-      const { data: row, error } = await supabaseAdmin
+      const { data: row, error } = await supabase
         .from("agent_tools")
         .insert(payload)
         .select("id")
@@ -90,35 +81,38 @@ export const saveTool = createServerFn({ method: "POST" })
       if (error) throw new Error(error.message);
       return { id: row!.id };
     }
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from("agent_tools")
       .update(payload)
       .eq("id", data.id)
-      .eq("owner_id", ownerId);
+      .eq("owner_id", userId);
     if (error) throw new Error(error.message);
     return { id: data.id };
   });
 
 export const deleteTool = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((i) => z.object({ id: z.string().uuid() }).parse(i))
-  .handler(async ({ data }) => {
-    const ownerId = await getAdminUserId();
-    const { error } = await supabaseAdmin
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
       .from("agent_tools")
       .delete()
       .eq("id", data.id)
-      .eq("owner_id", ownerId);
+      .eq("owner_id", userId);
     if (error) throw new Error(error.message);
     return { ok: true as const };
   });
 
-export const listAgentsForTools = createServerFn({ method: "GET" }).handler(async () => {
-  const ownerId = await getAdminUserId();
-  const { data, error } = await supabaseAdmin
-    .from("agents")
-    .select("id, name")
-    .eq("owner_id", ownerId)
-    .order("name");
-  if (error) throw new Error(error.message);
-  return { agents: data ?? [] };
-});
+export const listAgentsForTools = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("agents")
+      .select("id, name")
+      .eq("owner_id", userId)
+      .order("name");
+    if (error) throw new Error(error.message);
+    return { agents: data ?? [] };
+  });

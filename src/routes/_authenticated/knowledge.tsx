@@ -2,8 +2,6 @@ import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/use-auth";
-import { useServerFn } from "@tanstack/react-start";
-import { processDocument } from "@/lib/knowledge.functions";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { BookOpen, Upload, FileText, Loader2, Trash2, RefreshCw, AlertCircle, CheckCircle2, Lightbulb, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
+
+async function triggerProcessing(documentId: string) {
+  const { error } = await supabase.functions.invoke("process-knowledge", {
+    body: { documentId },
+  });
+  if (error) throw new Error(error.message);
+}
 
 export const Route = createFileRoute("/_authenticated/knowledge")({
   component: KnowledgePage,
@@ -37,7 +42,7 @@ function KnowledgePage() {
   const { t } = useI18n();
   const { user } = useAuth();
   const search = useSearch({ from: "/_authenticated/knowledge" });
-  const processFn = useServerFn(processDocument);
+  
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentId, setAgentId] = useState<string>(search.agent ?? "");
   const [docs, setDocs] = useState<Doc[]>([]);
@@ -96,7 +101,7 @@ function KnowledgePage() {
       await loadDocs(agentId);
       toast.success("OK");
       try {
-        await processFn({ data: { documentId: doc.id } });
+        await triggerProcessing(doc.id);
         toast.success("OK");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "err");
@@ -113,7 +118,7 @@ function KnowledgePage() {
   async function reindex(doc: Doc) {
     setBusy(doc.id);
     try {
-      await processFn({ data: { documentId: doc.id } });
+      await triggerProcessing(doc.id);
       toast.success("OK");
       await loadDocs(agentId);
     } catch (err) {

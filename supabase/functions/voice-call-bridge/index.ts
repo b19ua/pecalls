@@ -151,10 +151,13 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           realtime_input_config: {
             automatic_activity_detection: {
               disabled: false,
-              start_of_speech_sensitivity: "START_SENSITIVITY_LOW",
+              // HIGH start sensitivity → detect even soft / overlapping caller speech
+              // so an interjection while AI is talking still gets transcribed.
+              start_of_speech_sensitivity: "START_SENSITIVITY_HIGH",
+              // LOW end sensitivity → don't cut caller off mid-sentence.
               end_of_speech_sensitivity: "END_SENSITIVITY_LOW",
-              prefix_padding_ms: 400,
-              silence_duration_ms: 1100,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 800,
             },
             activity_handling: "NO_INTERRUPTION",
           },

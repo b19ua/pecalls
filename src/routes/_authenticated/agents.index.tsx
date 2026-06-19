@@ -86,9 +86,24 @@ function AgentsPage() {
                     <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
                       <Bot className="h-5 w-5 text-primary" />
                     </div>
-                    <Badge variant={a.is_active ? "default" : "secondary"}>
-                      {a.is_active ? t("common.active") : t("common.inactive")}
-                    </Badge>
+                    <div className="flex items-center gap-2" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                      <Badge variant={a.is_active ? "default" : "secondary"}>
+                        {a.is_active ? t("common.active") : t("common.inactive")}
+                      </Badge>
+                      <Switch
+                        checked={a.is_active}
+                        onCheckedChange={async (v) => {
+                          setAgents((prev) => prev.map((x) => x.id === a.id ? { ...x, is_active: v } : x));
+                          const { error } = await supabase.from("agents").update({ is_active: v }).eq("id", a.id);
+                          if (error) {
+                            setAgents((prev) => prev.map((x) => x.id === a.id ? { ...x, is_active: !v } : x));
+                            toast.error(error.message);
+                          } else {
+                            toast.success(v ? t("common.active") : t("common.inactive"));
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
                   <h3 className="font-display text-lg font-semibold">{a.name}</h3>
                   {a.description && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{a.description}</p>}

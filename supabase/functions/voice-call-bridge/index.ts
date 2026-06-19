@@ -151,10 +151,13 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           realtime_input_config: {
             automatic_activity_detection: {
               disabled: false,
-              start_of_speech_sensitivity: "START_SENSITIVITY_LOW",
+              // HIGH start sensitivity → detect even soft / overlapping caller speech
+              // so an interjection while AI is talking still gets transcribed.
+              start_of_speech_sensitivity: "START_SENSITIVITY_HIGH",
+              // LOW end sensitivity → don't cut caller off mid-sentence.
               end_of_speech_sensitivity: "END_SENSITIVITY_LOW",
-              prefix_padding_ms: 400,
-              silence_duration_ms: 1100,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 800,
             },
             activity_handling: "NO_INTERRUPTION",
           },
@@ -525,6 +528,17 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   twilio.onclose = async () => {
     if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
     if (transcriptSaveTimer !== null) { clearInterval(transcriptSaveTimer); transcriptSaveTimer = null; }
+    // Force Gemini to flush any pending inputTranscription for the caller's
+    // last utterance before we tear down the WS — otherwise the final user
+    // phrase that was still mid-VAD when Twilio dropped gets lost.
+    try {
+      if (gemini && gemini.readyState === 1) {
+        gemini.send(JSON.stringify({
+          realtime_input: { activity_end: {} },
+        }));
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    } catch { /* noop */ }
     try { gemini?.close(); } catch { /* noop */ }
     if (callSid && transcript.length) {
       try {

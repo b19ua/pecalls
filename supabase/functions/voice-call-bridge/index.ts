@@ -830,35 +830,44 @@ async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promis
 
 async function loadKnowledgeContext(agentId: string, ownerId: string, seedText: string): Promise<string> {
   try {
+    // First: try to load ALL chunks. If the corpus is small (<= ~24k chars),
+    // give the model the full knowledge base — better than partial RAG.
+    const { data: all } = await supa
+      .from("knowledge_chunks")
+      .select("content,chunk_index")
+      .eq("agent_id", agentId)
+      .eq("owner_id", ownerId)
+      .order("chunk_index", { ascending: true })
+      .limit(200);
+
+    const allText = (all || [])
+      .map((row) => String(row.content || "").trim())
+      .filter(Boolean)
+      .join("\n");
+
+    if (allText.length > 0 && allText.length <= 24000) {
+      return allText;
+    }
+
+    // Large corpus: semantic RAG with relaxed threshold and more chunks.
     const embedding = await embedText(seedText.slice(0, 3000));
     if (embedding?.length) {
       const { data, error } = await supa.rpc("match_chunks", {
         query_embedding: embedding,
         p_agent_id: agentId,
         p_owner_id: ownerId,
-        match_count: 6,
+        match_count: 16,
       });
       if (!error && Array.isArray(data) && data.length) {
         return data
-          .filter((row) => Number(row.similarity ?? 0) >= 0.55)
+          .filter((row) => Number(row.similarity ?? 0) >= 0.3)
           .map((row) => `- ${String(row.content || "").trim()}`)
           .join("\n")
-          .slice(0, 6000);
+          .slice(0, 18000);
       }
     }
 
-    const { data: recent } = await supa
-      .from("knowledge_chunks")
-      .select("content")
-      .eq("agent_id", agentId)
-      .eq("owner_id", ownerId)
-      .order("chunk_index", { ascending: true })
-      .limit(6);
-
-    return (recent || [])
-      .map((row) => `- ${String(row.content || "").trim()}`)
-      .join("\n")
-      .slice(0, 6000);
+    return allText.slice(0, 18000);
   } catch (error) {
     console.error("knowledge context", error);
     return "";

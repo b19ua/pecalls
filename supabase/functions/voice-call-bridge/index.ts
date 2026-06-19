@@ -528,6 +528,17 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   twilio.onclose = async () => {
     if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
     if (transcriptSaveTimer !== null) { clearInterval(transcriptSaveTimer); transcriptSaveTimer = null; }
+    // Force Gemini to flush any pending inputTranscription for the caller's
+    // last utterance before we tear down the WS — otherwise the final user
+    // phrase that was still mid-VAD when Twilio dropped gets lost.
+    try {
+      if (gemini && gemini.readyState === 1) {
+        gemini.send(JSON.stringify({
+          realtime_input: { activity_end: {} },
+        }));
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    } catch { /* noop */ }
     try { gemini?.close(); } catch { /* noop */ }
     if (callSid && transcript.length) {
       try {

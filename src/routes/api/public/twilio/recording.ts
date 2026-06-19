@@ -243,21 +243,35 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
             })
             .eq("id", call.id);
 
-          const transcript = await transcribeWithGemini(audio, lang);
-          if (transcript) {
-            const { data: latest } = await supabaseAdmin
-              .from("calls")
-              .select("transcript")
-              .eq("id", call.id)
-              .maybeSingle();
-            const existingTranscript = Array.isArray(latest?.transcript) ? latest.transcript : [];
-            if (existingTranscript.length === 0) {
+          const rawTranscript = await transcribeWithGemini(audio, lang);
+          if (rawTranscript) {
+            const structured = parseSpeakerTranscript(rawTranscript);
+            // Audio-derived transcript is more accurate (captures overlapping
+            // speech and final user utterances) — make it canonical, but keep
+            // the live one as a fallback if Gemini returned nothing parseable.
+            if (structured.length > 0) {
               await supabaseAdmin
                 .from("calls")
-                .update({ transcript: [{ source: "gemini", text: transcript, at: new Date().toISOString() }] })
+                .update({ transcript: structured })
                 .eq("id", call.id);
+            } else {
+              const { data: latest } = await supabaseAdmin
+                .from("calls")
+                .select("transcript")
+                .eq("id", call.id)
+                .maybeSingle();
+              const existingTranscript = Array.isArray(latest?.transcript) ? latest.transcript : [];
+              if (existingTranscript.length === 0) {
+                await supabaseAdmin
+                  .from("calls")
+                  .update({ transcript: [{ source: "gemini", text: rawTranscript, at: new Date().toISOString() }] })
+                  .eq("id", call.id);
+              }
             }
           }
+          // Auto-run sentiment / topic / complaint analysis immediately after
+          // the recording is processed — no manual button click required.
+          await analyzeSentimentInline(call.id);
         } catch (e) {
           console.error("[recording] processing failed", e);
           await supabaseAdmin

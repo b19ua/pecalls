@@ -620,7 +620,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 async function loadContext(agentId: string): Promise<Ctx> {
   const { data: agent } = await supa
     .from("agents")
-    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix")
+    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix, objection_handling_enabled, objection_aaa_enabled, objection_categories, objection_custom_responses, emotion_tracking_enabled")
     .eq("id", agentId)
     .maybeSingle();
   if (!agent) {
@@ -631,6 +631,7 @@ async function loadContext(agentId: string): Promise<Ctx> {
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
       handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
       outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
+      objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false,
     };
   }
   const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
@@ -659,7 +660,42 @@ async function loadContext(agentId: string): Promise<Ctx> {
     sipFromNumber: agent.sip_from_number || "",
     sipRoutePrefix: agent.sip_route_prefix || "",
     tools,
+    objectionEnabled: !!agent.objection_handling_enabled,
+    objectionAaaEnabled: agent.objection_aaa_enabled !== false,
+    objectionCategories: Array.isArray(agent.objection_categories) ? agent.objection_categories : [],
+    objectionCustomResponses: (agent.objection_custom_responses && typeof agent.objection_custom_responses === "object")
+      ? agent.objection_custom_responses as Record<string, string>
+      : {},
+    emotionTrackingEnabled: agent.emotion_tracking_enabled !== false,
   };
+}
+
+async function logObjectionEvent(
+  ctx: Ctx | null,
+  callSid: string,
+  args: Record<string, unknown>,
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  if (!ctx?.ownerId) return { ok: false, error: "no owner" };
+  try {
+    const row = {
+      owner_id: ctx.ownerId,
+      agent_id: ctx.agentId,
+      call_sid: callSid || null,
+      channel: "voice",
+      objection_type: String(args.objection_type || "unknown").slice(0, 50),
+      raw_quote: args.raw_quote ? String(args.raw_quote).slice(0, 2000) : null,
+      customer_emotion: args.customer_emotion ? String(args.customer_emotion).slice(0, 50) : null,
+      strategy_used: args.strategy_used ? String(args.strategy_used).slice(0, 200) : null,
+      ai_response: args.ai_response ? String(args.ai_response).slice(0, 2000) : null,
+      outcome: String(args.outcome || "unresolved").slice(0, 30),
+    };
+    const { data, error } = await supa.from("objection_events").insert(row).select("id").single();
+    if (error) { console.error("log_objection", error); return { ok: false, error: error.message }; }
+    log("[objection]", row.objection_type, "/", row.customer_emotion, "→", row.outcome);
+    return { ok: true, id: data?.id };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 async function handleHandoffAction(req: Request, url: URL): Promise<Response> {

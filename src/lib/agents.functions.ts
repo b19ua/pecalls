@@ -52,6 +52,11 @@ const AgentSchema = z.object({
   sip_transport: z.enum(["tls", "tcp", "udp"]).default("tls"),
   sip_from_number: z.string().max(50).nullable().optional(),
   sip_route_prefix: z.string().max(20).nullable().optional(),
+  objection_handling_enabled: z.boolean().optional().default(false),
+  objection_aaa_enabled: z.boolean().optional().default(true),
+  objection_categories: z.array(z.string().max(40)).max(20).optional().default([]),
+  objection_custom_responses: z.record(z.string(), z.string().max(2000)).optional().default({}),
+  emotion_tracking_enabled: z.boolean().optional().default(true),
 });
 
 export const saveAgent = createServerFn({ method: "POST" })

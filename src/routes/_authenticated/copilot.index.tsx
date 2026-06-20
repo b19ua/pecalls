@@ -27,6 +27,8 @@ function CopilotHome() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [testOpen, setTestOpen] = useState(false);
+
 
   const reload = async () => {
     try {

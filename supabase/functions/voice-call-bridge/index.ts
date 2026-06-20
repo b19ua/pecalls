@@ -843,8 +843,8 @@ async function loadTools(agentId: string, ownerId: string): Promise<ToolRow[]> {
   } catch (e) { console.error("loadTools", e); return []; }
 }
 
-function buildToolDeclarations(tools: ToolRow[]) {
-  return tools.map((t) => {
+function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
+  const decls = tools.map((t) => {
     const params = t.config.parameters ?? [];
     const properties: Record<string, { type: string; description?: string }> = {};
     const required: string[] = [];
@@ -859,6 +859,26 @@ function buildToolDeclarations(tools: ToolRow[]) {
       parameters: { type: "object", properties, required },
     };
   });
+  if (ctx?.objectionEnabled) {
+    const cats = (ctx.objectionCategories || []).filter((k) => OBJECTION_CATEGORY_LABELS[k]);
+    decls.push({
+      name: "log_objection",
+      description: "Log a customer objection or strong emotion the moment it appears. Call SILENTLY (the caller must not notice) right after you reply to the objection. Used for analytics and to make the agent smarter.",
+      parameters: {
+        type: "object",
+        properties: {
+          objection_type: { type: "string", description: `One of: ${(cats.length ? cats : Object.keys(OBJECTION_CATEGORY_LABELS)).join(", ")}` },
+          raw_quote: { type: "string", description: "Caller's exact words (verbatim) that expressed the objection." },
+          customer_emotion: { type: "string", description: "One word: calm, curious, hesitant, frustrated, angry, excited, sad, neutral." },
+          strategy_used: { type: "string", description: "Short tag for the tactic you used, e.g. 'AAA+ROI', 'social_proof', 'discount', 'urgency', 'reframe'." },
+          ai_response: { type: "string", description: "One-line summary of how you replied." },
+          outcome: { type: "string", description: "One of: resolved, booked, lost, followup, unresolved." },
+        },
+        required: ["objection_type", "raw_quote", "outcome"],
+      },
+    });
+  }
+  return decls;
 }
 
 function fillTemplate(tmpl: string, args: Record<string, unknown>): string {

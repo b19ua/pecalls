@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Bot, Phone, Lightbulb } from "lucide-react";
+import { Plus, Bot, Phone, Lightbulb, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ type Agent = {
   language: string;
   twilio_number_e164: string | null;
   is_active: boolean;
+  objection_handling_enabled: boolean;
 };
 
 function AgentsPage() {

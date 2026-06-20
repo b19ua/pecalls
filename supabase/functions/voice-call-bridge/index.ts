@@ -162,11 +162,12 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const handoffInstr = c.handoffEnabled && c.handoffNumbers.length
         ? `Human handoff rule: if the caller asks for an operator, manager, human, specialist, or transfer, do NOT say that you are transferring immediately and NEVER speak, dictate or read any phone number out loud (the system handles dialing). Just tell the caller in one short sentence to press ${c.handoffDigit || "0"} on the phone keypad to connect to the operator. Do not ask extra questions, do not mention digits other than ${c.handoffDigit || "0"}.`
         : "";
-      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, handoffInstr]
+      const objectionInstr = buildObjectionInstructions(c);
+      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, handoffInstr, objectionInstr]
         .filter(Boolean)
         .join("\n\n");
       // Lunara-proven payload shape (snake_case, NO languageCode lock).
-      const toolDecls = buildToolDeclarations(c.tools);
+      const toolDecls = buildToolDeclarations(c.tools, c);
       const setupMsg: Record<string, unknown> = {
         setup: {
           model,

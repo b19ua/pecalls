@@ -33,10 +33,10 @@ function AgentsPage() {
   useEffect(() => {
     supabase
       .from("agents")
-      .select("id,name,description,voice,language,twilio_number_e164,is_active")
+      .select("id,name,description,voice,language,twilio_number_e164,is_active,objection_handling_enabled")
       .order("created_at", { ascending: false })
       .then(({ data }) => {
-        setAgents(data ?? []);
+        setAgents((data as Agent[] | null) ?? []);
         setLoading(false);
       });
   }, []);

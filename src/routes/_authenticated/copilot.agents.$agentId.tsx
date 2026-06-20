@@ -129,12 +129,25 @@ function Page() {
         title={isNew ? "Новый copilot-агент" : agent.name || "Copilot-агент"}
         description="Конфигурация ИИ-наблюдателя для звонков менеджеров. Поведение можно менять без перезапуска."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {!isNew && agent.enabled && (
+              <Button variant="default" className="bg-gradient-to-r from-primary to-primary/70" onClick={() => setTestOpen(true)}>
+                <PhoneCall className="h-4 w-4 mr-1" /> Тестовый звонок
+              </Button>
+            )}
             {!isNew && <Button variant="outline" onClick={onDelete}><Trash2 className="h-4 w-4 mr-1" />Удалить</Button>}
             <Button onClick={onSave} disabled={saving}><Save className="h-4 w-4 mr-1" />{saving ? "Сохранение…" : "Сохранить"}</Button>
           </div>
         }
       />
+      {!isNew && (
+        <TestCallDialog
+          agents={[{ id: agentId, name: agent.name || "Copilot", enabled: !!agent.enabled }]}
+          defaultAgentId={agentId}
+          open={testOpen}
+          onOpenChange={setTestOpen}
+        />
+      )}
 
       <div className="grid gap-4">
         <Card><CardContent className="p-5 space-y-4">

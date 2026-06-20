@@ -28,6 +28,7 @@ import { Route as AuthenticatedCampaignsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedCallsRouteImport } from './routes/_authenticated/calls'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated/agents'
+import { Route as AuthenticatedCopilotIndexRouteImport } from './routes/_authenticated/copilot.index'
 import { Route as AuthenticatedAgentsIndexRouteImport } from './routes/_authenticated/agents.index'
 import { Route as ApiAudioCallIdRouteImport } from './routes/api/audio.$callId'
 import { Route as AuthenticatedCallsCallIdRouteImport } from './routes/_authenticated/calls.$callId'
@@ -136,6 +137,12 @@ const AuthenticatedAgentsRoute = AuthenticatedAgentsRouteImport.update({
   path: '/agents',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedCopilotIndexRoute =
+  AuthenticatedCopilotIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedCopilotRoute,
+  } as any)
 const AuthenticatedAgentsIndexRoute =
   AuthenticatedAgentsIndexRouteImport.update({
     id: '/',
@@ -212,7 +219,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/calls': typeof AuthenticatedCallsRouteWithChildren
   '/campaigns': typeof AuthenticatedCampaignsRoute
-  '/copilot': typeof AuthenticatedCopilotRoute
+  '/copilot': typeof AuthenticatedCopilotRouteWithChildren
   '/crm': typeof AuthenticatedCrmRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/data-residency': typeof AuthenticatedDataResidencyRoute
@@ -225,6 +232,7 @@ export interface FileRoutesByFullPath {
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
   '/agents/': typeof AuthenticatedAgentsIndexRoute
+  '/copilot/': typeof AuthenticatedCopilotIndexRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
   '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
@@ -243,7 +251,6 @@ export interface FileRoutesByTo {
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/calls': typeof AuthenticatedCallsRouteWithChildren
   '/campaigns': typeof AuthenticatedCampaignsRoute
-  '/copilot': typeof AuthenticatedCopilotRoute
   '/crm': typeof AuthenticatedCrmRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/data-residency': typeof AuthenticatedDataResidencyRoute
@@ -256,6 +263,7 @@ export interface FileRoutesByTo {
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
   '/agents': typeof AuthenticatedAgentsIndexRoute
+  '/copilot': typeof AuthenticatedCopilotIndexRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
   '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
@@ -277,7 +285,7 @@ export interface FileRoutesById {
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/calls': typeof AuthenticatedCallsRouteWithChildren
   '/_authenticated/campaigns': typeof AuthenticatedCampaignsRoute
-  '/_authenticated/copilot': typeof AuthenticatedCopilotRoute
+  '/_authenticated/copilot': typeof AuthenticatedCopilotRouteWithChildren
   '/_authenticated/crm': typeof AuthenticatedCrmRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/data-residency': typeof AuthenticatedDataResidencyRoute
@@ -290,6 +298,7 @@ export interface FileRoutesById {
   '/_authenticated/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
   '/_authenticated/agents/': typeof AuthenticatedAgentsIndexRoute
+  '/_authenticated/copilot/': typeof AuthenticatedCopilotIndexRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
   '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
@@ -324,6 +333,7 @@ export interface FileRouteTypes {
     | '/calls/$callId'
     | '/api/audio/$callId'
     | '/agents/'
+    | '/copilot/'
     | '/api/public/crm/calls'
     | '/api/public/jambonz/call'
     | '/api/public/jambonz/status'
@@ -342,7 +352,6 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/calls'
     | '/campaigns'
-    | '/copilot'
     | '/crm'
     | '/dashboard'
     | '/data-residency'
@@ -355,6 +364,7 @@ export interface FileRouteTypes {
     | '/calls/$callId'
     | '/api/audio/$callId'
     | '/agents'
+    | '/copilot'
     | '/api/public/crm/calls'
     | '/api/public/jambonz/call'
     | '/api/public/jambonz/status'
@@ -388,6 +398,7 @@ export interface FileRouteTypes {
     | '/_authenticated/calls/$callId'
     | '/api/audio/$callId'
     | '/_authenticated/agents/'
+    | '/_authenticated/copilot/'
     | '/api/public/crm/calls'
     | '/api/public/jambonz/call'
     | '/api/public/jambonz/status'
@@ -551,6 +562,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgentsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/copilot/': {
+      id: '/_authenticated/copilot/'
+      path: '/'
+      fullPath: '/copilot/'
+      preLoaderRoute: typeof AuthenticatedCopilotIndexRouteImport
+      parentRoute: typeof AuthenticatedCopilotRoute
+    }
     '/_authenticated/agents/': {
       id: '/_authenticated/agents/'
       path: '/'
@@ -662,12 +680,23 @@ const AuthenticatedCallsRouteChildren: AuthenticatedCallsRouteChildren = {
 const AuthenticatedCallsRouteWithChildren =
   AuthenticatedCallsRoute._addFileChildren(AuthenticatedCallsRouteChildren)
 
+interface AuthenticatedCopilotRouteChildren {
+  AuthenticatedCopilotIndexRoute: typeof AuthenticatedCopilotIndexRoute
+}
+
+const AuthenticatedCopilotRouteChildren: AuthenticatedCopilotRouteChildren = {
+  AuthenticatedCopilotIndexRoute: AuthenticatedCopilotIndexRoute,
+}
+
+const AuthenticatedCopilotRouteWithChildren =
+  AuthenticatedCopilotRoute._addFileChildren(AuthenticatedCopilotRouteChildren)
+
 interface AuthenticatedRouteChildren {
   AuthenticatedAgentsRoute: typeof AuthenticatedAgentsRouteWithChildren
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedCallsRoute: typeof AuthenticatedCallsRouteWithChildren
   AuthenticatedCampaignsRoute: typeof AuthenticatedCampaignsRoute
-  AuthenticatedCopilotRoute: typeof AuthenticatedCopilotRoute
+  AuthenticatedCopilotRoute: typeof AuthenticatedCopilotRouteWithChildren
   AuthenticatedCrmRoute: typeof AuthenticatedCrmRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDataResidencyRoute: typeof AuthenticatedDataResidencyRoute
@@ -683,7 +712,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedCallsRoute: AuthenticatedCallsRouteWithChildren,
   AuthenticatedCampaignsRoute: AuthenticatedCampaignsRoute,
-  AuthenticatedCopilotRoute: AuthenticatedCopilotRoute,
+  AuthenticatedCopilotRoute: AuthenticatedCopilotRouteWithChildren,
   AuthenticatedCrmRoute: AuthenticatedCrmRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDataResidencyRoute: AuthenticatedDataResidencyRoute,

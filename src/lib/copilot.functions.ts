@@ -139,3 +139,118 @@ export const acknowledgeSuggestion = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+// ─────────────────────────────────────────────────────────────────────────
+// TEST CALL — Sales Demo
+// Initiates outbound Twilio call to user's phone with TwiML pointing at the
+// copilot test endpoint. The dashboard immediately shows the live session,
+// transcript and AI suggestions stream as the user talks.
+// ─────────────────────────────────────────────────────────────────────────
+
+const GATEWAY = "https://connector-gateway.lovable.dev/twilio";
+
+function publicBaseUrl(): string {
+  const envUrl = process.env.COPILOT_PUBLIC_BASE_URL || process.env.PUBLIC_APP_URL;
+  if (envUrl) return envUrl.replace(/\/$/, "");
+  const projectId = process.env.SUPABASE_PROJECT_ID || process.env.VITE_SUPABASE_PROJECT_ID;
+  if (projectId) return `https://project--${projectId}.lovable.app`;
+  return "https://pecalls.lovable.app";
+}
+
+export const startCopilotTestCall = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) =>
+    z
+      .object({
+        agentId: z.string().uuid(),
+        phone: z.string().regex(/^\+[1-9]\d{6,14}$/, "Используйте E.164: +37360123456"),
+      })
+      .parse(i),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const lov = process.env.LOVABLE_API_KEY;
+    const tw = process.env.TWILIO_API_KEY;
+    if (!lov || !tw) throw new Error("Twilio не подключён. Подключите Twilio в Connectors.");
+
+    const { data: agent, error: aErr } = await supabase
+      .from("copilot_agents")
+      .select("*")
+      .eq("id", data.agentId)
+      .eq("owner_id", userId)
+      .single();
+    if (aErr || !agent) throw new Error("Copilot-агент не найден");
+    if (!agent.enabled) throw new Error("Агент выключен — включите его перед тестовым звонком");
+
+    // Pick a From number: agent.twilio_number_id → fallback to first owned number.
+    let fromNumber: string | null = null;
+    if (agent.twilio_number_id) {
+      const { data: n } = await supabase
+        .from("twilio_numbers")
+        .select("phone_e164")
+        .eq("id", agent.twilio_number_id)
+        .eq("owner_id", userId)
+        .maybeSingle();
+      fromNumber = (n as { phone_e164?: string } | null)?.phone_e164 ?? null;
+    }
+    if (!fromNumber) {
+      const { data: nums } = await supabase
+        .from("twilio_numbers")
+        .select("phone_e164")
+        .eq("owner_id", userId)
+        .limit(1);
+      fromNumber = (nums as Array<{ phone_e164: string }> | null)?.[0]?.phone_e164 ?? null;
+    }
+    if (!fromNumber) throw new Error("Не найден Twilio-номер. Подключите номер в разделе Telephony.");
+
+    // Create session up-front so dashboard shows the call instantly.
+    const { data: session, error: sErr } = await supabase
+      .from("copilot_sessions")
+      .insert({
+        owner_id: userId,
+        agent_id: agent.id,
+        manager_name: "Test Call",
+        customer_phone: data.phone,
+        status: "active",
+        is_test: true,
+      })
+      .select("id")
+      .single();
+    if (sErr || !session) throw new Error(sErr?.message || "Не удалось создать сессию");
+
+    const base = publicBaseUrl();
+    const twimlUrl = `${base}/api/public/twilio/copilot-test-twiml?agent_id=${encodeURIComponent(agent.id)}&session_id=${encodeURIComponent(session.id)}&lang=${encodeURIComponent(agent.language || "ru")}`;
+
+    const params = new URLSearchParams();
+    params.append("To", data.phone);
+    params.append("From", fromNumber);
+    params.append("Url", twimlUrl);
+    params.append("Method", "POST");
+    params.append("Timeout", "30");
+
+    const r = await fetch(`${GATEWAY}/Calls.json`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lov}`,
+        "X-Connection-Api-Key": tw,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params,
+    });
+    const body = await r.json();
+    if (!r.ok) {
+      await supabase
+        .from("copilot_sessions")
+        .update({ status: "ended", ended_at: new Date().toISOString(), summary: `Ошибка запуска: ${JSON.stringify(body)}` })
+        .eq("id", session.id);
+      throw new Error(`Twilio ${r.status}: ${(body as { message?: string }).message || JSON.stringify(body)}`);
+    }
+
+    // Save Twilio CallSid back onto the session.
+    const callSid = (body as { sid?: string }).sid;
+    if (callSid) {
+      await supabase.from("copilot_sessions").update({ call_sid: callSid }).eq("id", session.id);
+    }
+
+    return { sessionId: session.id, callSid: callSid ?? null };
+  });

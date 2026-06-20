@@ -497,6 +497,248 @@ export type Database = {
           },
         ]
       }
+      copilot_agents: {
+        Row: {
+          channel_binding: string | null
+          competitor_context: string | null
+          created_at: string
+          description: string | null
+          emotion_tracking_enabled: boolean
+          enabled: boolean
+          id: string
+          knowledge_hint: string | null
+          language: string
+          min_suggestion_interval_ms: number
+          name: string
+          objection_handling_enabled: boolean
+          owner_id: string
+          pricing_context: string | null
+          product_context: string | null
+          suggestion_categories: Json
+          system_prompt: string
+          twilio_number_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          channel_binding?: string | null
+          competitor_context?: string | null
+          created_at?: string
+          description?: string | null
+          emotion_tracking_enabled?: boolean
+          enabled?: boolean
+          id?: string
+          knowledge_hint?: string | null
+          language?: string
+          min_suggestion_interval_ms?: number
+          name: string
+          objection_handling_enabled?: boolean
+          owner_id: string
+          pricing_context?: string | null
+          product_context?: string | null
+          suggestion_categories?: Json
+          system_prompt?: string
+          twilio_number_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          channel_binding?: string | null
+          competitor_context?: string | null
+          created_at?: string
+          description?: string | null
+          emotion_tracking_enabled?: boolean
+          enabled?: boolean
+          id?: string
+          knowledge_hint?: string | null
+          language?: string
+          min_suggestion_interval_ms?: number
+          name?: string
+          objection_handling_enabled?: boolean
+          owner_id?: string
+          pricing_context?: string | null
+          product_context?: string | null
+          suggestion_categories?: Json
+          system_prompt?: string
+          twilio_number_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_agents_twilio_number_id_fkey"
+            columns: ["twilio_number_id"]
+            isOneToOne: false
+            referencedRelation: "twilio_numbers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_sessions: {
+        Row: {
+          agent_id: string
+          call_sid: string | null
+          channel_id: string | null
+          created_at: string
+          customer_phone: string | null
+          ended_at: string | null
+          id: string
+          manager_id: string | null
+          manager_name: string | null
+          metrics: Json
+          owner_id: string
+          recording_url: string | null
+          started_at: string
+          status: string
+          summary: string | null
+          transcript_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          call_sid?: string | null
+          channel_id?: string | null
+          created_at?: string
+          customer_phone?: string | null
+          ended_at?: string | null
+          id?: string
+          manager_id?: string | null
+          manager_name?: string | null
+          metrics?: Json
+          owner_id: string
+          recording_url?: string | null
+          started_at?: string
+          status?: string
+          summary?: string | null
+          transcript_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          call_sid?: string | null
+          channel_id?: string | null
+          created_at?: string
+          customer_phone?: string | null
+          ended_at?: string | null
+          id?: string
+          manager_id?: string | null
+          manager_name?: string | null
+          metrics?: Json
+          owner_id?: string
+          recording_url?: string | null
+          started_at?: string
+          status?: string
+          summary?: string | null
+          transcript_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_sessions_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_suggestions: {
+        Row: {
+          acknowledged: boolean
+          category: string | null
+          created_at: string
+          emotion: string | null
+          id: string
+          metadata: Json
+          owner_id: string
+          priority: string
+          rationale: string | null
+          session_id: string
+          speaker: string | null
+          suggestion_text: string
+          trigger_quote: string | null
+          ts: string
+          used: boolean
+        }
+        Insert: {
+          acknowledged?: boolean
+          category?: string | null
+          created_at?: string
+          emotion?: string | null
+          id?: string
+          metadata?: Json
+          owner_id: string
+          priority?: string
+          rationale?: string | null
+          session_id: string
+          speaker?: string | null
+          suggestion_text: string
+          trigger_quote?: string | null
+          ts?: string
+          used?: boolean
+        }
+        Update: {
+          acknowledged?: boolean
+          category?: string | null
+          created_at?: string
+          emotion?: string | null
+          id?: string
+          metadata?: Json
+          owner_id?: string
+          priority?: string
+          rationale?: string | null
+          session_id?: string
+          speaker?: string | null
+          suggestion_text?: string
+          trigger_quote?: string | null
+          ts?: string
+          used?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_suggestions_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_transcript: {
+        Row: {
+          created_at: string
+          id: string
+          owner_id: string
+          session_id: string
+          speaker: string
+          text: string
+          ts: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          owner_id: string
+          session_id: string
+          speaker: string
+          text: string
+          ts?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          owner_id?: string
+          session_id?: string
+          speaker?: string
+          text?: string
+          ts?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_transcript_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       data_residency_configs: {
         Row: {
           created_at: string

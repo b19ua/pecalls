@@ -117,6 +117,30 @@ function AgentsPage() {
                       <Phone className="h-3 w-3" /> {a.twilio_number_e164}
                     </div>
                   )}
+                  <div
+                    className="mt-3 flex items-center justify-between rounded-md border border-border/50 bg-muted/30 px-2.5 py-1.5"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <Target className={`h-3.5 w-3.5 ${a.objection_handling_enabled ? "text-primary" : "text-muted-foreground"}`} />
+                      <span className={a.objection_handling_enabled ? "text-foreground font-medium" : "text-muted-foreground"}>
+                        Возражения + эмоции
+                      </span>
+                    </div>
+                    <Switch
+                      checked={a.objection_handling_enabled}
+                      onCheckedChange={async (v) => {
+                        setAgents((prev) => prev.map((x) => x.id === a.id ? { ...x, objection_handling_enabled: v } : x));
+                        const { error } = await supabase.from("agents").update({ objection_handling_enabled: v } as never).eq("id", a.id);
+                        if (error) {
+                          setAgents((prev) => prev.map((x) => x.id === a.id ? { ...x, objection_handling_enabled: !v } : x));
+                          toast.error(error.message);
+                        } else {
+                          toast.success(v ? "Objection handling вкл." : "Objection handling выкл.");
+                        }
+                      }}
+                    />
+                  </div>
                 </CardContent>
               </Card>
             </Link>

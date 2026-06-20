@@ -23,6 +23,8 @@ type Session = {
   id: string; status: string; started_at: string; ended_at: string | null;
   customer_phone: string | null; manager_name: string | null; call_sid: string | null;
   summary: string | null;
+  summary_data: Record<string, unknown> | null;
+  is_test?: boolean | null;
 };
 
 function priorityColor(p: string) {

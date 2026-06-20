@@ -293,6 +293,11 @@ async function handle(twilio: WebSocket, p: Params) {
     if (finalized) return;
     finalized = true;
     try { gemini.close(); } catch { /* noop */ }
+    try {
+      await generateAndSaveSummary(sessionId, agent);
+    } catch (e) {
+      console.error("summary failed", e);
+    }
     await supa
       .from("copilot_sessions")
       .update({ status: "ended", ended_at: new Date().toISOString() })
@@ -300,3 +305,64 @@ async function handle(twilio: WebSocket, p: Params) {
     log("session ended", sessionId);
   }
 }
+
+// ── Post-call summary via Gemini Flash ────────────────────────────────
+async function generateAndSaveSummary(sessionId: string, agent: Agent) {
+  const [{ data: transcript }, { data: suggestions }] = await Promise.all([
+    supa.from("copilot_transcript").select("speaker,text,ts").eq("session_id", sessionId).order("ts", { ascending: true }),
+    supa.from("copilot_suggestions").select("category,priority,suggestion_text,emotion,trigger_quote").eq("session_id", sessionId),
+  ]);
+  const lines = (transcript ?? []).map((r: { speaker: string; text: string }) => `${r.speaker.toUpperCase()}: ${r.text}`).join("\n");
+  if (!lines.trim()) {
+    await supa.from("copilot_sessions").update({ summary: "Звонок не содержал распознанной речи." }).eq("id", sessionId);
+    return;
+  }
+  const lang = agent.language || "ru";
+  const prompt = `Ты — аналитик отдела продаж. На основе расшифровки звонка между менеджером и клиентом сделай краткий пост-call отчёт на языке "${lang}".
+
+Контекст продукта: ${agent.product_context || "—"}
+Конкуренты: ${agent.competitor_context || "—"}
+Цены: ${agent.pricing_context || "—"}
+
+РАСШИФРОВКА:
+${lines.slice(0, 16000)}
+
+Подсказки, которые AI Copilot выдал в реальном времени: ${(suggestions ?? []).map((s: { suggestion_text: string }) => "• " + s.suggestion_text).join("\n").slice(0, 4000) || "—"}
+
+Верни СТРОГО JSON следующего вида (без markdown, без \`\`\`):
+{
+  "summary": "3–5 предложений: что обсуждалось, чем закончилось",
+  "customer_intent": "одна короткая фраза",
+  "objections": ["возражение 1", "возражение 2"],
+  "next_steps": ["шаг 1", "шаг 2"],
+  "sentiment": "positive|neutral|negative",
+  "outcome": "won|lost|follow_up|info_only|unknown",
+  "manager_score": 1-10,
+  "coaching_tips": ["совет 1", "совет 2"]
+}`;
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, responseMimeType: "application/json" },
+      }),
+    },
+  );
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`gemini summary ${r.status}: ${t}`);
+  }
+  const j = await r.json();
+  const text = j?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  let parsed: Record<string, unknown> | null = null;
+  try { parsed = JSON.parse(text); } catch { /* keep null */ }
+  const summaryText = (parsed?.summary as string) || text.slice(0, 1500);
+  await supa
+    .from("copilot_sessions")
+    .update({ summary: summaryText, summary_data: parsed ?? { raw: text } })
+    .eq("id", sessionId);
+}
+

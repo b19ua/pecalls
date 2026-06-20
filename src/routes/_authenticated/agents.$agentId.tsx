@@ -54,7 +54,22 @@ type AgentForm = {
   sip_transport: "tls" | "tcp" | "udp";
   sip_from_number: string;
   sip_route_prefix: string;
+  objection_handling_enabled: boolean;
+  objection_aaa_enabled: boolean;
+  objection_categories: string[];
+  objection_custom_responses: Record<string, string>;
+  emotion_tracking_enabled: boolean;
 };
+
+const OBJECTION_CATEGORIES: { key: string; label: string; hint: string; placeholder: string }[] = [
+  { key: "price", label: "💰 Цена / бюджет", hint: "«Дорого», «нет денег», «дешевле есть»", placeholder: "ROI окупается за 3 мес, есть рассрочка 0%..." },
+  { key: "timing", label: "⏰ Тайминг", hint: "«Не сейчас», «позже», «занят»", placeholder: "Чем дольше ждём — тем дороже. 15 мин сейчас экономят..." },
+  { key: "trust", label: "🤝 Доверие / авторитет", hint: "«Кто вы такие», «боюсь обмана»", placeholder: "Работаем с 2019, 200+ клиентов, кейс — ..." },
+  { key: "competitor", label: "🔄 Конкурент", hint: "«Уже работаем с X»", placeholder: "Уважаем X. У нас отличает то, что..." },
+  { key: "stall", label: "🤔 Откладывание", hint: "«Я подумаю», «пришлите на почту»", placeholder: "Конечно. Что именно хотите обдумать — цену или функционал?" },
+  { key: "emotional", label: "😤 Эмоциональное", hint: "Раздражение, гнев", placeholder: "Понимаю ваши чувства, давайте разберёмся..." },
+  { key: "clarification", label: "❓ Уточнение", hint: "Не понял, путаница", placeholder: "Поясню проще: ..." },
+];
 
 const DEFAULTS: AgentForm = {
   name: "",
@@ -83,6 +98,11 @@ const DEFAULTS: AgentForm = {
   sip_transport: "tls",
   sip_from_number: "",
   sip_route_prefix: "",
+  objection_handling_enabled: false,
+  objection_aaa_enabled: true,
+  objection_categories: ["price", "timing", "trust", "competitor", "stall", "emotional", "clarification"],
+  objection_custom_responses: {},
+  emotion_tracking_enabled: true,
 };
 
 function AgentEditor() {

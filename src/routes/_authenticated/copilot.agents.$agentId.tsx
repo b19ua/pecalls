@@ -10,8 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Save, Trash2, ArrowLeft, Copy, ExternalLink, Phone, Plug, AlertCircle } from "lucide-react";
+import { Save, Trash2, ArrowLeft, Copy, ExternalLink, Phone, Plug, AlertCircle, PhoneCall } from "lucide-react";
 import { getCopilotAgent, saveCopilotAgent, deleteCopilotAgent } from "@/lib/copilot.functions";
+import { TestCallDialog } from "@/components/copilot/TestCallDialog";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/copilot/agents/$agentId")({ component: Page });

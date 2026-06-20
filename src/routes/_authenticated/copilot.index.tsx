@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Headphones, Plus, Radio, Bot, MessagesSquare, Settings2 } from "lucide-react";
+import { Headphones, Plus, Radio, Bot, MessagesSquare, Settings2, Lightbulb } from "lucide-react";
 import { listCopilotAgents, listCopilotSessions } from "@/lib/copilot.functions";
 import { toast } from "sonner";
 

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Headphones, Plus, Radio, Bot, MessagesSquare, Settings2 } from "lucide-react";
+import { Headphones, Plus, Radio, Bot, MessagesSquare, Settings2, Lightbulb } from "lucide-react";
 import { listCopilotAgents, listCopilotSessions } from "@/lib/copilot.functions";
 import { toast } from "sonner";
 
@@ -71,7 +71,22 @@ function CopilotHome() {
         }
       />
 
+      <Card className="mb-4 border-primary/30 bg-primary/5">
+        <CardContent className="p-4 flex gap-3 items-start text-sm">
+          <Lightbulb className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-medium">Как это работает за 3 шага</div>
+            <ol className="list-decimal list-inside text-muted-foreground space-y-0.5 text-xs">
+              <li>Создайте copilot-агента → задайте промпт, продукт, категории подсказок.</li>
+              <li>В карточке агента откройте блок <b>«Как подключить»</b> и скопируйте Twilio Voice webhook URL — вставьте его в настройки номера в Twilio Console.</li>
+              <li>Звоните: транскрипт и подсказки появятся здесь в реальном времени, без вмешательства в разговор менеджера и клиента.</li>
+            </ol>
+          </div>
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="live" className="mt-4">
+
         <TabsList>
           <TabsTrigger value="live"><Radio className="h-4 w-4 mr-1.5" />Live ({active.length})</TabsTrigger>
           <TabsTrigger value="history"><MessagesSquare className="h-4 w-4 mr-1.5" />История</TabsTrigger>

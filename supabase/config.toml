@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.report-error]
 verify_jwt = false
+
+[functions.copilot-bridge]
+verify_jwt = false

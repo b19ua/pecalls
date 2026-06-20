@@ -84,7 +84,41 @@ type Ctx = {
   sipFromNumber: string;
   sipRoutePrefix: string;
   tools: ToolRow[];
+  objectionEnabled: boolean;
+  objectionAaaEnabled: boolean;
+  objectionCategories: string[];
+  objectionCustomResponses: Record<string, string>;
+  emotionTrackingEnabled: boolean;
 };
+
+const OBJECTION_CATEGORY_LABELS: Record<string, string> = {
+  price: "💰 Price / Budget — клиент говорит «дорого», «нет бюджета», «дешевле есть»",
+  timing: "⏰ Timing — «не сейчас», «позже», «занят», «перезвоните через месяц»",
+  trust: "🤝 Trust / Authority — «кто вы такие», «не слышал о вас», «боюсь обмана»",
+  competitor: "🔄 Competitor — «уже работаем с X», «у нас есть решение»",
+  stall: "🤔 Stall — «я подумаю», «надо посоветоваться», «пришлите на почту»",
+  emotional: "😤 Emotional — раздражение, гнев, разочарование, агрессия",
+  clarification: "❓ Clarification — непонимание, нужны уточнения, путаница",
+};
+
+function buildObjectionInstructions(c: Ctx): string {
+  if (!c.objectionEnabled) return "";
+  const cats = (c.objectionCategories || []).filter((k) => OBJECTION_CATEGORY_LABELS[k]);
+  const catsBlock = cats.length
+    ? cats.map((k) => `  - ${k}: ${OBJECTION_CATEGORY_LABELS[k]}`).join("\n")
+    : "  (all categories)";
+  const customBlock = Object.entries(c.objectionCustomResponses || {})
+    .filter(([k, v]) => cats.includes(k) && String(v || "").trim())
+    .map(([k, v]) => `  - ${k}: ${String(v).trim()}`)
+    .join("\n");
+  const aaa = c.objectionAaaEnabled
+    ? `\nALWAYS structure your reply to an objection using the AAA framework:\n  1) ACKNOWLEDGE the feeling in 1 short sentence ("Понимаю, что бюджет важен.")\n  2) ASK one clarifying question to uncover the real reason ("Дорого относительно чего — суммы или окупаемости?")\n  3) ANSWER with a concrete counter-argument (ROI, кейс, рассрочка, гарантия, социальное доказательство).`
+    : "";
+  const emo = c.emotionTrackingEnabled
+    ? `\nEMOTION TRACKING: continuously monitor the caller's tone (calm / curious / hesitant / frustrated / angry / excited / sad). Adapt your pace, warmth and word choice to match. If frustration or anger rises, slow down, lower energy, validate explicitly, and never argue.`
+    : "";
+  return `\n\n=== DYNAMIC OBJECTION HANDLING ===\nYou are trained to recognise and resolve customer objections in real time. Categories to detect:\n${catsBlock}${aaa}${emo}${customBlock ? `\n\nCUSTOM REBUTTAL HINTS (use these exact angles for the listed categories):\n${customBlock}` : ""}\n\nEvery time the caller voices an objection (or shows strong emotion), you MUST silently call the function \`log_objection\` with: objection_type (one of the categories), raw_quote (caller's exact words), customer_emotion (one word), strategy_used (short: e.g. "AAA+ROI", "social_proof", "discount"), ai_response (a 1-line summary of how you replied), outcome (one of: resolved, booked, lost, followup, unresolved). Call it after you reply. Do NOT mention this tool to the caller.\n=== END OBJECTION HANDLING ===`;
+}
 
 
 async function handle(twilio: WebSocket, agentId: string, callSid: string) {

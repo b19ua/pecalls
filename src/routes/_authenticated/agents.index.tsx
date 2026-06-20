@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Bot, Phone, Lightbulb } from "lucide-react";
+import { Plus, Bot, Phone, Lightbulb, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ type Agent = {
   language: string;
   twilio_number_e164: string | null;
   is_active: boolean;
+  objection_handling_enabled: boolean;
 };
 
 function AgentsPage() {
@@ -32,10 +33,10 @@ function AgentsPage() {
   useEffect(() => {
     supabase
       .from("agents")
-      .select("id,name,description,voice,language,twilio_number_e164,is_active")
+      .select("id,name,description,voice,language,twilio_number_e164,is_active,objection_handling_enabled")
       .order("created_at", { ascending: false })
       .then(({ data }) => {
-        setAgents(data ?? []);
+        setAgents((data as Agent[] | null) ?? []);
         setLoading(false);
       });
   }, []);
@@ -116,6 +117,30 @@ function AgentsPage() {
                       <Phone className="h-3 w-3" /> {a.twilio_number_e164}
                     </div>
                   )}
+                  <div
+                    className="mt-3 flex items-center justify-between rounded-md border border-border/50 bg-muted/30 px-2.5 py-1.5"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <Target className={`h-3.5 w-3.5 ${a.objection_handling_enabled ? "text-primary" : "text-muted-foreground"}`} />
+                      <span className={a.objection_handling_enabled ? "text-foreground font-medium" : "text-muted-foreground"}>
+                        Возражения + эмоции
+                      </span>
+                    </div>
+                    <Switch
+                      checked={a.objection_handling_enabled}
+                      onCheckedChange={async (v) => {
+                        setAgents((prev) => prev.map((x) => x.id === a.id ? { ...x, objection_handling_enabled: v } : x));
+                        const { error } = await supabase.from("agents").update({ objection_handling_enabled: v } as never).eq("id", a.id);
+                        if (error) {
+                          setAgents((prev) => prev.map((x) => x.id === a.id ? { ...x, objection_handling_enabled: !v } : x));
+                          toast.error(error.message);
+                        } else {
+                          toast.success(v ? "Objection handling вкл." : "Objection handling выкл.");
+                        }
+                      }}
+                    />
+                  </div>
                 </CardContent>
               </Card>
             </Link>

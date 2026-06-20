@@ -84,7 +84,41 @@ type Ctx = {
   sipFromNumber: string;
   sipRoutePrefix: string;
   tools: ToolRow[];
+  objectionEnabled: boolean;
+  objectionAaaEnabled: boolean;
+  objectionCategories: string[];
+  objectionCustomResponses: Record<string, string>;
+  emotionTrackingEnabled: boolean;
 };
+
+const OBJECTION_CATEGORY_LABELS: Record<string, string> = {
+  price: "💰 Price / Budget — клиент говорит «дорого», «нет бюджета», «дешевле есть»",
+  timing: "⏰ Timing — «не сейчас», «позже», «занят», «перезвоните через месяц»",
+  trust: "🤝 Trust / Authority — «кто вы такие», «не слышал о вас», «боюсь обмана»",
+  competitor: "🔄 Competitor — «уже работаем с X», «у нас есть решение»",
+  stall: "🤔 Stall — «я подумаю», «надо посоветоваться», «пришлите на почту»",
+  emotional: "😤 Emotional — раздражение, гнев, разочарование, агрессия",
+  clarification: "❓ Clarification — непонимание, нужны уточнения, путаница",
+};
+
+function buildObjectionInstructions(c: Ctx): string {
+  if (!c.objectionEnabled) return "";
+  const cats = (c.objectionCategories || []).filter((k) => OBJECTION_CATEGORY_LABELS[k]);
+  const catsBlock = cats.length
+    ? cats.map((k) => `  - ${k}: ${OBJECTION_CATEGORY_LABELS[k]}`).join("\n")
+    : "  (all categories)";
+  const customBlock = Object.entries(c.objectionCustomResponses || {})
+    .filter(([k, v]) => cats.includes(k) && String(v || "").trim())
+    .map(([k, v]) => `  - ${k}: ${String(v).trim()}`)
+    .join("\n");
+  const aaa = c.objectionAaaEnabled
+    ? `\nALWAYS structure your reply to an objection using the AAA framework:\n  1) ACKNOWLEDGE the feeling in 1 short sentence ("Понимаю, что бюджет важен.")\n  2) ASK one clarifying question to uncover the real reason ("Дорого относительно чего — суммы или окупаемости?")\n  3) ANSWER with a concrete counter-argument (ROI, кейс, рассрочка, гарантия, социальное доказательство).`
+    : "";
+  const emo = c.emotionTrackingEnabled
+    ? `\nEMOTION TRACKING: continuously monitor the caller's tone (calm / curious / hesitant / frustrated / angry / excited / sad). Adapt your pace, warmth and word choice to match. If frustration or anger rises, slow down, lower energy, validate explicitly, and never argue.`
+    : "";
+  return `\n\n=== DYNAMIC OBJECTION HANDLING ===\nYou are trained to recognise and resolve customer objections in real time. Categories to detect:\n${catsBlock}${aaa}${emo}${customBlock ? `\n\nCUSTOM REBUTTAL HINTS (use these exact angles for the listed categories):\n${customBlock}` : ""}\n\nEvery time the caller voices an objection (or shows strong emotion), you MUST silently call the function \`log_objection\` with: objection_type (one of the categories), raw_quote (caller's exact words), customer_emotion (one word), strategy_used (short: e.g. "AAA+ROI", "social_proof", "discount"), ai_response (a 1-line summary of how you replied), outcome (one of: resolved, booked, lost, followup, unresolved). Call it after you reply. Do NOT mention this tool to the caller.\n=== END OBJECTION HANDLING ===`;
+}
 
 
 async function handle(twilio: WebSocket, agentId: string, callSid: string) {
@@ -128,11 +162,12 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const handoffInstr = c.handoffEnabled && c.handoffNumbers.length
         ? `Human handoff rule: if the caller asks for an operator, manager, human, specialist, or transfer, do NOT say that you are transferring immediately and NEVER speak, dictate or read any phone number out loud (the system handles dialing). Just tell the caller in one short sentence to press ${c.handoffDigit || "0"} on the phone keypad to connect to the operator. Do not ask extra questions, do not mention digits other than ${c.handoffDigit || "0"}.`
         : "";
-      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, handoffInstr]
+      const objectionInstr = buildObjectionInstructions(c);
+      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, handoffInstr, objectionInstr]
         .filter(Boolean)
         .join("\n\n");
       // Lunara-proven payload shape (snake_case, NO languageCode lock).
-      const toolDecls = buildToolDeclarations(c.tools);
+      const toolDecls = buildToolDeclarations(c.tools, c);
       const setupMsg: Record<string, unknown> = {
         setup: {
           model,
@@ -228,10 +263,15 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         } else if (msg.toolCall) {
           const calls = msg.toolCall?.functionCalls || [];
           for (const fc of calls) {
-            const tool = ctx?.tools.find((t) => t.name === fc.name);
-            const result = tool
-              ? await executeTool(tool, (fc.args || {}) as Record<string, unknown>)
-              : { error: `unknown tool ${fc.name}` };
+            let result: unknown;
+            if (fc.name === "log_objection") {
+              result = await logObjectionEvent(ctx, callSid, (fc.args || {}) as Record<string, unknown>);
+            } else {
+              const tool = ctx?.tools.find((t) => t.name === fc.name);
+              result = tool
+                ? await executeTool(tool, (fc.args || {}) as Record<string, unknown>)
+                : { error: `unknown tool ${fc.name}` };
+            }
             try {
               gemini!.send(JSON.stringify({
                 tool_response: {
@@ -567,6 +607,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
         handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
         outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
+        objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false,
       };
       ctx = fb;
       ctxResolver?.(fb);
@@ -579,7 +620,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 async function loadContext(agentId: string): Promise<Ctx> {
   const { data: agent } = await supa
     .from("agents")
-    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix")
+    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix, objection_handling_enabled, objection_aaa_enabled, objection_categories, objection_custom_responses, emotion_tracking_enabled")
     .eq("id", agentId)
     .maybeSingle();
   if (!agent) {
@@ -590,6 +631,7 @@ async function loadContext(agentId: string): Promise<Ctx> {
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
       handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
       outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
+      objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false,
     };
   }
   const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
@@ -618,7 +660,42 @@ async function loadContext(agentId: string): Promise<Ctx> {
     sipFromNumber: agent.sip_from_number || "",
     sipRoutePrefix: agent.sip_route_prefix || "",
     tools,
+    objectionEnabled: !!agent.objection_handling_enabled,
+    objectionAaaEnabled: agent.objection_aaa_enabled !== false,
+    objectionCategories: Array.isArray(agent.objection_categories) ? agent.objection_categories : [],
+    objectionCustomResponses: (agent.objection_custom_responses && typeof agent.objection_custom_responses === "object")
+      ? agent.objection_custom_responses as Record<string, string>
+      : {},
+    emotionTrackingEnabled: agent.emotion_tracking_enabled !== false,
   };
+}
+
+async function logObjectionEvent(
+  ctx: Ctx | null,
+  callSid: string,
+  args: Record<string, unknown>,
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  if (!ctx?.ownerId) return { ok: false, error: "no owner" };
+  try {
+    const row = {
+      owner_id: ctx.ownerId,
+      agent_id: ctx.agentId,
+      call_sid: callSid || null,
+      channel: "voice",
+      objection_type: String(args.objection_type || "unknown").slice(0, 50),
+      raw_quote: args.raw_quote ? String(args.raw_quote).slice(0, 2000) : null,
+      customer_emotion: args.customer_emotion ? String(args.customer_emotion).slice(0, 50) : null,
+      strategy_used: args.strategy_used ? String(args.strategy_used).slice(0, 200) : null,
+      ai_response: args.ai_response ? String(args.ai_response).slice(0, 2000) : null,
+      outcome: String(args.outcome || "unresolved").slice(0, 30),
+    };
+    const { data, error } = await supa.from("objection_events").insert(row).select("id").single();
+    if (error) { console.error("log_objection", error); return { ok: false, error: error.message }; }
+    log("[objection]", row.objection_type, "/", row.customer_emotion, "→", row.outcome);
+    return { ok: true, id: data?.id };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 async function handleHandoffAction(req: Request, url: URL): Promise<Response> {
@@ -766,8 +843,8 @@ async function loadTools(agentId: string, ownerId: string): Promise<ToolRow[]> {
   } catch (e) { console.error("loadTools", e); return []; }
 }
 
-function buildToolDeclarations(tools: ToolRow[]) {
-  return tools.map((t) => {
+function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
+  const decls = tools.map((t) => {
     const params = t.config.parameters ?? [];
     const properties: Record<string, { type: string; description?: string }> = {};
     const required: string[] = [];
@@ -782,6 +859,26 @@ function buildToolDeclarations(tools: ToolRow[]) {
       parameters: { type: "object", properties, required },
     };
   });
+  if (ctx?.objectionEnabled) {
+    const cats = (ctx.objectionCategories || []).filter((k) => OBJECTION_CATEGORY_LABELS[k]);
+    decls.push({
+      name: "log_objection",
+      description: "Log a customer objection or strong emotion the moment it appears. Call SILENTLY (the caller must not notice) right after you reply to the objection. Used for analytics and to make the agent smarter.",
+      parameters: {
+        type: "object",
+        properties: {
+          objection_type: { type: "string", description: `One of: ${(cats.length ? cats : Object.keys(OBJECTION_CATEGORY_LABELS)).join(", ")}` },
+          raw_quote: { type: "string", description: "Caller's exact words (verbatim) that expressed the objection." },
+          customer_emotion: { type: "string", description: "One word: calm, curious, hesitant, frustrated, angry, excited, sad, neutral." },
+          strategy_used: { type: "string", description: "Short tag for the tactic you used, e.g. 'AAA+ROI', 'social_proof', 'discount', 'urgency', 'reframe'." },
+          ai_response: { type: "string", description: "One-line summary of how you replied." },
+          outcome: { type: "string", description: "One of: resolved, booked, lost, followup, unresolved." },
+        },
+        required: ["objection_type", "raw_quote", "outcome"],
+      },
+    });
+  }
+  return decls;
 }
 
 function fillTemplate(tmpl: string, args: Record<string, unknown>): string {

@@ -263,10 +263,15 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         } else if (msg.toolCall) {
           const calls = msg.toolCall?.functionCalls || [];
           for (const fc of calls) {
-            const tool = ctx?.tools.find((t) => t.name === fc.name);
-            const result = tool
-              ? await executeTool(tool, (fc.args || {}) as Record<string, unknown>)
-              : { error: `unknown tool ${fc.name}` };
+            let result: unknown;
+            if (fc.name === "log_objection") {
+              result = await logObjectionEvent(ctx, callSid, (fc.args || {}) as Record<string, unknown>);
+            } else {
+              const tool = ctx?.tools.find((t) => t.name === fc.name);
+              result = tool
+                ? await executeTool(tool, (fc.args || {}) as Record<string, unknown>)
+                : { error: `unknown tool ${fc.name}` };
+            }
             try {
               gemini!.send(JSON.stringify({
                 tool_response: {

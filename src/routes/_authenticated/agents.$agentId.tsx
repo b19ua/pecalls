@@ -175,6 +175,11 @@ function AgentEditor() {
           sip_transport: (data.sip_transport as "tls" | "tcp" | "udp") ?? "tls",
           sip_from_number: data.sip_from_number ?? "",
           sip_route_prefix: data.sip_route_prefix ?? "",
+          objection_handling_enabled: (data as any).objection_handling_enabled ?? false,
+          objection_aaa_enabled: (data as any).objection_aaa_enabled ?? true,
+          objection_categories: (data as any).objection_categories ?? DEFAULTS.objection_categories,
+          objection_custom_responses: ((data as any).objection_custom_responses as Record<string, string>) ?? {},
+          emotion_tracking_enabled: (data as any).emotion_tracking_enabled ?? true,
         });
         if (data.inbound_sip_domain && data.inbound_sip_username && data.inbound_sip_password) {
           setInboundSip({

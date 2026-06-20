@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Bot, PhoneCall, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench, Server, Plug } from "lucide-react";
+import { LayoutDashboard, Bot, PhoneCall, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench, Server, Plug, Headphones } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,6 +15,7 @@ const NAV = [
   { to: "/numbers",    key: "nav.numbers",    icon: Phone },
   { to: "/calls",      key: "nav.calls",      icon: PhoneCall },
   { to: "/live",       key: "nav.live",       icon: Radio },
+  { to: "/copilot",    key: "nav.copilot",    icon: Headphones },
   { to: "/analytics",  key: "nav.analytics",  icon: BarChart3 },
   
   { to: "/data-residency", key: "nav.residency", icon: Server },

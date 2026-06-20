@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Save, Trash2, ArrowLeft } from "lucide-react";
+import { Save, Trash2, ArrowLeft, Copy, ExternalLink, Phone, Plug, AlertCircle } from "lucide-react";
 import { getCopilotAgent, saveCopilotAgent, deleteCopilotAgent } from "@/lib/copilot.functions";
 import { toast } from "sonner";
 
@@ -236,8 +236,10 @@ function Page() {
           </div>
         </CardContent></Card>
 
+        <ConnectPanel agentId={isNew ? null : agentId} />
+
         <Card><CardContent className="p-5 space-y-4">
-          <div className="font-semibold text-sm">Привязка канала</div>
+          <div className="font-semibold text-sm">Привязка канала (на будущее)</div>
           <div>
             <Label>Channel binding (необязательно)</Label>
             <Input
@@ -246,11 +248,117 @@ function Page() {
               placeholder="Напр. имя очереди, SIP trunk или Twilio sub-account"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              MVP: copilot-bridge получает CallSid от Twilio Media Stream. Поле зарезервировано для будущей интеграции с Asterisk / 3CX через AudioSocket.
+              MVP работает на Twilio Media Streams (см. блок «Как подключить» выше). Это поле зарезервировано для Phase&nbsp;2 — подключения Asterisk/3CX/FreePBX через AudioSocket.
             </p>
           </div>
         </CardContent></Card>
       </div>
     </div>
+  );
+}
+
+function copy(text: string) {
+  navigator.clipboard.writeText(text).then(
+    () => toast.success("Скопировано"),
+    () => toast.error("Не удалось скопировать"),
+  );
+}
+
+function CopyRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <div className="flex gap-2 mt-1">
+        <Input value={value} readOnly className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+        <Button type="button" variant="outline" size="icon" onClick={() => copy(value)} title="Копировать">
+          <Copy className="h-4 w-4" />
+        </Button>
+      </div>
+      {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+function ConnectPanel({ agentId }: { agentId: string | null }) {
+  if (!agentId) {
+    return (
+      <Card className="border-dashed">
+        <CardContent className="p-5 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+          <div className="text-sm text-muted-foreground">
+            Сохраните агента — после этого появится блок «Как подключить» с готовыми ссылками для Twilio и инструкцией шаг за шагом.
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const isPreview = origin.includes("lovable.app") && origin.includes("preview");
+  const baseHttps = origin || "https://<ваш-домен>";
+  // Twilio Voice webhook (TwiML): listens silently + dials manager
+  const twimlUrl = `${baseHttps}/api/public/twilio/copilot-stream?agent_id=${agentId}&dial=<E164_номер_менеджера>&manager=<имя>`;
+  const wssBase = baseHttps.replace(/^https?:/, "wss:");
+  const directWss = `${wssBase}/api/public/voice-ws/copilot?agent_id=${agentId}`; // reserved for AudioSocket / Asterisk
+
+  return (
+    <Card className="border-primary/40">
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Plug className="h-5 w-5 text-primary" />
+          <div className="font-semibold">Как подключить copilot к звонкам</div>
+        </div>
+
+        <div className="rounded-lg bg-muted/40 p-3 text-sm space-y-1">
+          <div className="font-medium">Вариант A — Twilio (рекомендуется для MVP)</div>
+          <ol className="list-decimal list-inside space-y-1 text-muted-foreground text-xs">
+            <li>В Twilio Console → <b>Phone Numbers</b> выберите номер, на который будут приходить клиенты.</li>
+            <li>В разделе <b>A call comes in</b> выберите <b>Webhook</b>, метод <b>HTTP POST</b>.</li>
+            <li>Вставьте URL ниже, заменив <code>&lt;E164_номер_менеджера&gt;</code> на реальный номер (например <code>+37360123456</code>).</li>
+            <li>Сохраните. Звонок пойдёт менеджеру как обычно, а copilot будет слушать оба трека и подсказывать в дашборде.</li>
+          </ol>
+        </div>
+
+        <CopyRow
+          label="Twilio Voice webhook URL"
+          value={twimlUrl}
+          hint="Параметры: agent_id (этот copilot), dial (E.164 номер менеджера), manager (имя для дашборда)."
+        />
+
+        <div className="rounded-lg bg-muted/40 p-3 text-sm space-y-1">
+          <div className="font-medium flex items-center gap-1.5"><Phone className="h-4 w-4" /> Вариант B — исходящий звонок менеджера через Twilio</div>
+          <p className="text-xs text-muted-foreground">
+            Если менеджер сам инициирует звонок через ваш softphone/CRM, направьте исходящий маршрут на Twilio SIP-домен и используйте этот же webhook как <b>A call comes in</b> на Twilio TwiML App. <code>dial</code> подставится из поля To автоматически.
+          </p>
+        </div>
+
+        <div className="rounded-lg bg-muted/40 p-3 text-sm space-y-1">
+          <div className="font-medium">Вариант C — Asterisk / 3CX / FreePBX (Phase 2)</div>
+          <p className="text-xs text-muted-foreground">
+            Пока что для не-Twilio PBX рекомендуем направить trunk на Twilio (вариант A). В следующей фазе мы добавим прямой приёмник AudioSocket по адресу ниже — поле зарезервировано:
+          </p>
+        </div>
+
+        <CopyRow
+          label="WebSocket для AudioSocket (зарезервировано)"
+          value={directWss}
+          hint="Phase 2. Пока не работает — используйте Twilio TwiML выше."
+        />
+
+        {isPreview && (
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs flex gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              Сейчас открыт <b>preview-домен</b>. Twilio должен видеть стабильный URL — после публикации проекта замените домен в URL на <code>https://&lt;ваш-проект&gt;.lovable.app</code> или ваш custom domain.
+              <a className="underline ml-1 inline-flex items-center gap-0.5" href="https://www.twilio.com/console/phone-numbers/incoming" target="_blank" rel="noreferrer">Twilio Console <ExternalLink className="h-3 w-3" /></a>
+            </div>
+          </div>
+        )}
+
+        <div className="text-xs text-muted-foreground border-t pt-3">
+          <b>Что произойдёт после подключения:</b> при входящем звонке Twilio отправит TwiML-запрос на этот URL → мы создадим запись в <b>copilot_sessions</b> → запустим параллельный <code>&lt;Stream&gt;</code> на <code>copilot-bridge</code> → в карточке сессии в реальном времени появятся транскрипт и подсказки (Realtime через Supabase). Менеджер при этом просто разговаривает обычно.
+        </div>
+      </CardContent>
+    </Card>
   );
 }

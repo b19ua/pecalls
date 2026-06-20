@@ -33,6 +33,7 @@ import { Route as AuthenticatedAgentsIndexRouteImport } from './routes/_authenti
 import { Route as ApiAudioCallIdRouteImport } from './routes/api/audio.$callId'
 import { Route as AuthenticatedCallsCallIdRouteImport } from './routes/_authenticated/calls.$callId'
 import { Route as AuthenticatedAgentsAgentIdRouteImport } from './routes/_authenticated/agents.$agentId'
+import { Route as AuthenticatedCopilotAgentsIndexRouteImport } from './routes/_authenticated/copilot.agents.index'
 import { Route as ApiPublicTwilioVoiceRouteImport } from './routes/api/public/twilio/voice'
 import { Route as ApiPublicTwilioStatusRouteImport } from './routes/api/public/twilio/status'
 import { Route as ApiPublicTwilioRecordingRouteImport } from './routes/api/public/twilio/recording'
@@ -40,6 +41,8 @@ import { Route as ApiPublicTwilioHandoffRouteImport } from './routes/api/public/
 import { Route as ApiPublicJambonzStatusRouteImport } from './routes/api/public/jambonz/status'
 import { Route as ApiPublicJambonzCallRouteImport } from './routes/api/public/jambonz/call'
 import { Route as ApiPublicCrmCallsRouteImport } from './routes/api/public/crm/calls'
+import { Route as AuthenticatedCopilotSessionsSessionIdRouteImport } from './routes/_authenticated/copilot.sessions.$sessionId'
+import { Route as AuthenticatedCopilotAgentsAgentIdRouteImport } from './routes/_authenticated/copilot.agents.$agentId'
 import { Route as ApiPublicTelegramWebhookAgentIdRouteImport } from './routes/api/public/telegram/webhook.$agentId'
 
 const SnRoute = SnRouteImport.update({
@@ -166,6 +169,12 @@ const AuthenticatedAgentsAgentIdRoute =
     path: '/$agentId',
     getParentRoute: () => AuthenticatedAgentsRoute,
   } as any)
+const AuthenticatedCopilotAgentsIndexRoute =
+  AuthenticatedCopilotAgentsIndexRouteImport.update({
+    id: '/agents/',
+    path: '/agents/',
+    getParentRoute: () => AuthenticatedCopilotRoute,
+  } as any)
 const ApiPublicTwilioVoiceRoute = ApiPublicTwilioVoiceRouteImport.update({
   id: '/api/public/twilio/voice',
   path: '/api/public/twilio/voice',
@@ -202,6 +211,18 @@ const ApiPublicCrmCallsRoute = ApiPublicCrmCallsRouteImport.update({
   path: '/api/public/crm/calls',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedCopilotSessionsSessionIdRoute =
+  AuthenticatedCopilotSessionsSessionIdRouteImport.update({
+    id: '/sessions/$sessionId',
+    path: '/sessions/$sessionId',
+    getParentRoute: () => AuthenticatedCopilotRoute,
+  } as any)
+const AuthenticatedCopilotAgentsAgentIdRoute =
+  AuthenticatedCopilotAgentsAgentIdRouteImport.update({
+    id: '/agents/$agentId',
+    path: '/agents/$agentId',
+    getParentRoute: () => AuthenticatedCopilotRoute,
+  } as any)
 const ApiPublicTelegramWebhookAgentIdRoute =
   ApiPublicTelegramWebhookAgentIdRouteImport.update({
     id: '/api/public/telegram/webhook/$agentId',
@@ -233,6 +254,8 @@ export interface FileRoutesByFullPath {
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
   '/agents/': typeof AuthenticatedAgentsIndexRoute
   '/copilot/': typeof AuthenticatedCopilotIndexRoute
+  '/copilot/agents/$agentId': typeof AuthenticatedCopilotAgentsAgentIdRoute
+  '/copilot/sessions/$sessionId': typeof AuthenticatedCopilotSessionsSessionIdRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
   '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
@@ -240,6 +263,7 @@ export interface FileRoutesByFullPath {
   '/api/public/twilio/recording': typeof ApiPublicTwilioRecordingRoute
   '/api/public/twilio/status': typeof ApiPublicTwilioStatusRoute
   '/api/public/twilio/voice': typeof ApiPublicTwilioVoiceRoute
+  '/copilot/agents/': typeof AuthenticatedCopilotAgentsIndexRoute
   '/api/public/telegram/webhook/$agentId': typeof ApiPublicTelegramWebhookAgentIdRoute
 }
 export interface FileRoutesByTo {
@@ -264,6 +288,8 @@ export interface FileRoutesByTo {
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
   '/agents': typeof AuthenticatedAgentsIndexRoute
   '/copilot': typeof AuthenticatedCopilotIndexRoute
+  '/copilot/agents/$agentId': typeof AuthenticatedCopilotAgentsAgentIdRoute
+  '/copilot/sessions/$sessionId': typeof AuthenticatedCopilotSessionsSessionIdRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
   '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
@@ -271,6 +297,7 @@ export interface FileRoutesByTo {
   '/api/public/twilio/recording': typeof ApiPublicTwilioRecordingRoute
   '/api/public/twilio/status': typeof ApiPublicTwilioStatusRoute
   '/api/public/twilio/voice': typeof ApiPublicTwilioVoiceRoute
+  '/copilot/agents': typeof AuthenticatedCopilotAgentsIndexRoute
   '/api/public/telegram/webhook/$agentId': typeof ApiPublicTelegramWebhookAgentIdRoute
 }
 export interface FileRoutesById {
@@ -299,6 +326,8 @@ export interface FileRoutesById {
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
   '/_authenticated/agents/': typeof AuthenticatedAgentsIndexRoute
   '/_authenticated/copilot/': typeof AuthenticatedCopilotIndexRoute
+  '/_authenticated/copilot/agents/$agentId': typeof AuthenticatedCopilotAgentsAgentIdRoute
+  '/_authenticated/copilot/sessions/$sessionId': typeof AuthenticatedCopilotSessionsSessionIdRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
   '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
@@ -306,6 +335,7 @@ export interface FileRoutesById {
   '/api/public/twilio/recording': typeof ApiPublicTwilioRecordingRoute
   '/api/public/twilio/status': typeof ApiPublicTwilioStatusRoute
   '/api/public/twilio/voice': typeof ApiPublicTwilioVoiceRoute
+  '/_authenticated/copilot/agents/': typeof AuthenticatedCopilotAgentsIndexRoute
   '/api/public/telegram/webhook/$agentId': typeof ApiPublicTelegramWebhookAgentIdRoute
 }
 export interface FileRouteTypes {
@@ -334,6 +364,8 @@ export interface FileRouteTypes {
     | '/api/audio/$callId'
     | '/agents/'
     | '/copilot/'
+    | '/copilot/agents/$agentId'
+    | '/copilot/sessions/$sessionId'
     | '/api/public/crm/calls'
     | '/api/public/jambonz/call'
     | '/api/public/jambonz/status'
@@ -341,6 +373,7 @@ export interface FileRouteTypes {
     | '/api/public/twilio/recording'
     | '/api/public/twilio/status'
     | '/api/public/twilio/voice'
+    | '/copilot/agents/'
     | '/api/public/telegram/webhook/$agentId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -365,6 +398,8 @@ export interface FileRouteTypes {
     | '/api/audio/$callId'
     | '/agents'
     | '/copilot'
+    | '/copilot/agents/$agentId'
+    | '/copilot/sessions/$sessionId'
     | '/api/public/crm/calls'
     | '/api/public/jambonz/call'
     | '/api/public/jambonz/status'
@@ -372,6 +407,7 @@ export interface FileRouteTypes {
     | '/api/public/twilio/recording'
     | '/api/public/twilio/status'
     | '/api/public/twilio/voice'
+    | '/copilot/agents'
     | '/api/public/telegram/webhook/$agentId'
   id:
     | '__root__'
@@ -399,6 +435,8 @@ export interface FileRouteTypes {
     | '/api/audio/$callId'
     | '/_authenticated/agents/'
     | '/_authenticated/copilot/'
+    | '/_authenticated/copilot/agents/$agentId'
+    | '/_authenticated/copilot/sessions/$sessionId'
     | '/api/public/crm/calls'
     | '/api/public/jambonz/call'
     | '/api/public/jambonz/status'
@@ -406,6 +444,7 @@ export interface FileRouteTypes {
     | '/api/public/twilio/recording'
     | '/api/public/twilio/status'
     | '/api/public/twilio/voice'
+    | '/_authenticated/copilot/agents/'
     | '/api/public/telegram/webhook/$agentId'
   fileRoutesById: FileRoutesById
 }
@@ -597,6 +636,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgentsAgentIdRouteImport
       parentRoute: typeof AuthenticatedAgentsRoute
     }
+    '/_authenticated/copilot/agents/': {
+      id: '/_authenticated/copilot/agents/'
+      path: '/agents'
+      fullPath: '/copilot/agents/'
+      preLoaderRoute: typeof AuthenticatedCopilotAgentsIndexRouteImport
+      parentRoute: typeof AuthenticatedCopilotRoute
+    }
     '/api/public/twilio/voice': {
       id: '/api/public/twilio/voice'
       path: '/api/public/twilio/voice'
@@ -646,6 +692,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicCrmCallsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/copilot/sessions/$sessionId': {
+      id: '/_authenticated/copilot/sessions/$sessionId'
+      path: '/sessions/$sessionId'
+      fullPath: '/copilot/sessions/$sessionId'
+      preLoaderRoute: typeof AuthenticatedCopilotSessionsSessionIdRouteImport
+      parentRoute: typeof AuthenticatedCopilotRoute
+    }
+    '/_authenticated/copilot/agents/$agentId': {
+      id: '/_authenticated/copilot/agents/$agentId'
+      path: '/agents/$agentId'
+      fullPath: '/copilot/agents/$agentId'
+      preLoaderRoute: typeof AuthenticatedCopilotAgentsAgentIdRouteImport
+      parentRoute: typeof AuthenticatedCopilotRoute
+    }
     '/api/public/telegram/webhook/$agentId': {
       id: '/api/public/telegram/webhook/$agentId'
       path: '/api/public/telegram/webhook/$agentId'
@@ -682,10 +742,18 @@ const AuthenticatedCallsRouteWithChildren =
 
 interface AuthenticatedCopilotRouteChildren {
   AuthenticatedCopilotIndexRoute: typeof AuthenticatedCopilotIndexRoute
+  AuthenticatedCopilotAgentsAgentIdRoute: typeof AuthenticatedCopilotAgentsAgentIdRoute
+  AuthenticatedCopilotSessionsSessionIdRoute: typeof AuthenticatedCopilotSessionsSessionIdRoute
+  AuthenticatedCopilotAgentsIndexRoute: typeof AuthenticatedCopilotAgentsIndexRoute
 }
 
 const AuthenticatedCopilotRouteChildren: AuthenticatedCopilotRouteChildren = {
   AuthenticatedCopilotIndexRoute: AuthenticatedCopilotIndexRoute,
+  AuthenticatedCopilotAgentsAgentIdRoute:
+    AuthenticatedCopilotAgentsAgentIdRoute,
+  AuthenticatedCopilotSessionsSessionIdRoute:
+    AuthenticatedCopilotSessionsSessionIdRoute,
+  AuthenticatedCopilotAgentsIndexRoute: AuthenticatedCopilotAgentsIndexRoute,
 }
 
 const AuthenticatedCopilotRouteWithChildren =

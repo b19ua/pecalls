@@ -57,6 +57,7 @@ export type Database = {
         Row: {
           created_at: string
           description: string | null
+          emotion_tracking_enabled: boolean
           greeting: string
           handoff_dtmf_digit: string | null
           handoff_enabled: boolean
@@ -76,6 +77,10 @@ export type Database = {
           max_call_seconds: number
           model: string
           name: string
+          objection_aaa_enabled: boolean
+          objection_categories: string[]
+          objection_custom_responses: Json
+          objection_handling_enabled: boolean
           outbound_mode: string
           owner_id: string
           record_calls: boolean
@@ -98,6 +103,7 @@ export type Database = {
         Insert: {
           created_at?: string
           description?: string | null
+          emotion_tracking_enabled?: boolean
           greeting?: string
           handoff_dtmf_digit?: string | null
           handoff_enabled?: boolean
@@ -117,6 +123,10 @@ export type Database = {
           max_call_seconds?: number
           model?: string
           name: string
+          objection_aaa_enabled?: boolean
+          objection_categories?: string[]
+          objection_custom_responses?: Json
+          objection_handling_enabled?: boolean
           outbound_mode?: string
           owner_id: string
           record_calls?: boolean
@@ -139,6 +149,7 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string | null
+          emotion_tracking_enabled?: boolean
           greeting?: string
           handoff_dtmf_digit?: string | null
           handoff_enabled?: boolean
@@ -158,6 +169,10 @@ export type Database = {
           max_call_seconds?: number
           model?: string
           name?: string
+          objection_aaa_enabled?: boolean
+          objection_categories?: string[]
+          objection_custom_responses?: Json
+          objection_handling_enabled?: boolean
           outbound_mode?: string
           owner_id?: string
           record_calls?: boolean
@@ -666,6 +681,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "knowledge_documents_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      objection_events: {
+        Row: {
+          agent_id: string | null
+          ai_response: string | null
+          call_sid: string | null
+          channel: string
+          created_at: string
+          customer_emotion: string | null
+          id: string
+          objection_type: string
+          outcome: string
+          owner_id: string
+          raw_quote: string | null
+          strategy_used: string | null
+        }
+        Insert: {
+          agent_id?: string | null
+          ai_response?: string | null
+          call_sid?: string | null
+          channel?: string
+          created_at?: string
+          customer_emotion?: string | null
+          id?: string
+          objection_type: string
+          outcome?: string
+          owner_id: string
+          raw_quote?: string | null
+          strategy_used?: string | null
+        }
+        Update: {
+          agent_id?: string | null
+          ai_response?: string | null
+          call_sid?: string | null
+          channel?: string
+          created_at?: string
+          customer_emotion?: string | null
+          id?: string
+          objection_type?: string
+          outcome?: string
+          owner_id?: string
+          raw_quote?: string | null
+          strategy_used?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "objection_events_agent_id_fkey"
             columns: ["agent_id"]
             isOneToOne: false
             referencedRelation: "agents"

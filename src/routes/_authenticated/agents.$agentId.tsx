@@ -535,6 +535,91 @@ function AgentEditor() {
           </div>
         </Section>
 
+        <CollapsibleSection title="🎯 Динамическая работа с возражениями + эмоции" defaultOpen={form.objection_handling_enabled}>
+          <div className="flex items-start justify-between gap-3 rounded-md border border-primary/20 bg-primary/5 p-3">
+            <div className="text-sm">
+              <div className="font-medium">Dynamic Objection Handling</div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                ИИ распознаёт возражения клиента (цена, тайминг, доверие, конкурент, «подумаю», эмоции),
+                отвечает по фреймворку AAA (Acknowledge → Ask → Answer), и логирует каждый случай для
+                аналитики и обучения. Можно настроить кастомные ответы на топ-возражения вашего продукта.
+              </p>
+            </div>
+            <Switch checked={form.objection_handling_enabled} onCheckedChange={(v) => set("objection_handling_enabled", v)} />
+          </div>
+
+          {form.objection_handling_enabled && (
+            <>
+              <div className="flex items-center justify-between rounded-md border border-border/50 p-3">
+                <div>
+                  <Label className="text-sm">AAA-фреймворк (Acknowledge → Ask → Answer)</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">Сначала валидировать чувство, потом уточнить, потом контр-аргумент.</p>
+                </div>
+                <Switch checked={form.objection_aaa_enabled} onCheckedChange={(v) => set("objection_aaa_enabled", v)} />
+              </div>
+
+              <div className="flex items-center justify-between rounded-md border border-border/50 p-3">
+                <div>
+                  <Label className="text-sm">Трекинг эмоций клиента</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">ИИ непрерывно отслеживает тон (спокойствие / любопытство / раздражение / гнев) и адаптирует ответ.</p>
+                </div>
+                <Switch checked={form.emotion_tracking_enabled} onCheckedChange={(v) => set("emotion_tracking_enabled", v)} />
+              </div>
+
+              <Field label="Активные категории возражений" hint="Отключите ненужные. Активные категории ИИ детектирует и логирует.">
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {OBJECTION_CATEGORIES.map((c) => {
+                    const active = form.objection_categories.includes(c.key);
+                    return (
+                      <label key={c.key} className={`flex items-start gap-2 rounded-md border p-2.5 cursor-pointer transition ${active ? "border-primary/40 bg-primary/5" : "border-border/50"}`}>
+                        <input
+                          type="checkbox"
+                          checked={active}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...form.objection_categories, c.key]
+                              : form.objection_categories.filter((k) => k !== c.key);
+                            set("objection_categories", next);
+                          }}
+                          className="mt-0.5"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium">{c.label}</div>
+                          <div className="text-xs text-muted-foreground">{c.hint}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              <Field label="Кастомные контр-аргументы" hint="Подскажите ИИ, какой именно угол использовать в ответ на каждое возражение (специфика вашего продукта/цен/кейсов). Оставьте пустым — ИИ будет импровизировать.">
+                <div className="space-y-2">
+                  {OBJECTION_CATEGORIES.filter((c) => form.objection_categories.includes(c.key)).map((c) => (
+                    <div key={c.key} className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">{c.label}</Label>
+                      <Textarea
+                        rows={2}
+                        placeholder={c.placeholder}
+                        value={form.objection_custom_responses[c.key] ?? ""}
+                        onChange={(e) =>
+                          set("objection_custom_responses", { ...form.objection_custom_responses, [c.key]: e.target.value })
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </Field>
+
+              <div className="rounded-md border border-border/40 bg-muted/30 p-3 text-xs text-muted-foreground">
+                💡 После каждого звонка возражения и эмоции логируются в таблицу <code>objection_events</code>.
+                Используйте раздел Analytics, чтобы видеть топ возражений, win-rate по категориям и какие тактики
+                реально закрывают сделки.
+              </div>
+            </>
+          )}
+        </CollapsibleSection>
+
         <CollapsibleSection title={t("agent.section.telephony")} defaultOpen>
           <Field label="Маршрут звонка" hint="Применяется ко всем звонкам — и входящим, и исходящим.">
             <Select value={form.outbound_mode} onValueChange={(v) => setOutboundMode(v as "twilio_number" | "sip_trunk")}>

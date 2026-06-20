@@ -580,6 +580,7 @@ export type Database = {
           customer_phone: string | null
           ended_at: string | null
           id: string
+          is_test: boolean
           manager_id: string | null
           manager_name: string | null
           metrics: Json
@@ -588,6 +589,7 @@ export type Database = {
           started_at: string
           status: string
           summary: string | null
+          summary_data: Json | null
           transcript_url: string | null
           updated_at: string
         }
@@ -599,6 +601,7 @@ export type Database = {
           customer_phone?: string | null
           ended_at?: string | null
           id?: string
+          is_test?: boolean
           manager_id?: string | null
           manager_name?: string | null
           metrics?: Json
@@ -607,6 +610,7 @@ export type Database = {
           started_at?: string
           status?: string
           summary?: string | null
+          summary_data?: Json | null
           transcript_url?: string | null
           updated_at?: string
         }
@@ -618,6 +622,7 @@ export type Database = {
           customer_phone?: string | null
           ended_at?: string | null
           id?: string
+          is_test?: boolean
           manager_id?: string | null
           manager_name?: string | null
           metrics?: Json
@@ -626,6 +631,7 @@ export type Database = {
           started_at?: string
           status?: string
           summary?: string | null
+          summary_data?: Json | null
           transcript_url?: string | null
           updated_at?: string
         }

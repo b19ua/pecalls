@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Headphones, Plus, Radio, Bot, MessagesSquare, Settings2, Lightbulb } from "lucide-react";
+import { Headphones, Plus, Radio, Bot, MessagesSquare, Settings2, Lightbulb, PhoneCall } from "lucide-react";
 import { listCopilotAgents, listCopilotSessions } from "@/lib/copilot.functions";
+import { TestCallDialog } from "@/components/copilot/TestCallDialog";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/copilot/")({ component: CopilotHome });
@@ -26,6 +27,8 @@ function CopilotHome() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [testOpen, setTestOpen] = useState(false);
+
 
   const reload = async () => {
     try {
@@ -60,16 +63,32 @@ function CopilotHome() {
         title="AI Copilot Manager"
         description="ИИ-«третий слушатель» подсказывает менеджеру в реальном времени: возражения, эмоции, апсейл, следующий шаг."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="default"
+              className="bg-gradient-to-r from-primary to-primary/70 hover:opacity-90"
+              onClick={() => {
+                if (agents.filter((a) => a.enabled).length === 0) {
+                  toast.error("Сначала создайте и включите хотя бы одного агента");
+                  return;
+                }
+                setTestOpen(true);
+              }}
+            >
+              <PhoneCall className="h-4 w-4 mr-1" /> Тестовый звонок
+            </Button>
             <Button variant="outline" asChild>
               <Link to="/copilot/agents"><Settings2 className="h-4 w-4 mr-1" /> Агенты</Link>
             </Button>
-            <Button onClick={() => navigate({ to: "/copilot/agents/new" })}>
+            <Button variant="outline" onClick={() => navigate({ to: "/copilot/agents/new" })}>
               <Plus className="h-4 w-4 mr-1" /> Новый copilot
             </Button>
           </div>
         }
       />
+
+      <TestCallDialog agents={agents} open={testOpen} onOpenChange={setTestOpen} />
+
 
       <Card className="mb-4 border-primary/30 bg-primary/5">
         <CardContent className="p-4 flex gap-3 items-start text-sm">

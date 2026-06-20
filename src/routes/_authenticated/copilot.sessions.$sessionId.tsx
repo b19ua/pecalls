@@ -23,6 +23,8 @@ type Session = {
   id: string; status: string; started_at: string; ended_at: string | null;
   customer_phone: string | null; manager_name: string | null; call_sid: string | null;
   summary: string | null;
+  summary_data: Record<string, unknown> | null;
+  is_test?: boolean | null;
 };
 
 function priorityColor(p: string) {
@@ -149,12 +151,61 @@ function Page() {
         </CardContent></Card>
       </div>
 
-      {session.summary && (
-        <Card className="mt-4"><CardContent className="p-5">
-          <div className="font-semibold text-sm mb-2">Резюме</div>
-          <div className="text-sm text-muted-foreground whitespace-pre-wrap">{session.summary}</div>
-        </CardContent></Card>
+      {session.summary && <SummaryCard summary={session.summary} data={session.summary_data} />}
+    </div>
+  );
+}
+
+function SummaryCard({ summary, data }: { summary: string; data: Record<string, unknown> | null }) {
+  const d = (data ?? {}) as {
+    customer_intent?: string; objections?: string[]; next_steps?: string[];
+    sentiment?: string; outcome?: string; manager_score?: number; coaching_tips?: string[];
+  };
+  return (
+    <Card className="mt-4 border-primary/20"><CardContent className="p-5 space-y-4">
+      <div>
+        <div className="font-semibold text-sm mb-2 flex items-center gap-2">
+          <Lightbulb className="h-4 w-4 text-primary" /> AI-резюме звонка
+        </div>
+        <div className="text-sm whitespace-pre-wrap">{summary}</div>
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+        {d.customer_intent && <Field label="Намерение клиента" value={d.customer_intent} />}
+        {d.sentiment && <Field label="Эмоция" value={d.sentiment} />}
+        {d.outcome && <Field label="Итог" value={d.outcome} />}
+        {typeof d.manager_score === "number" && (
+          <Field label="Оценка менеджера" value={`${d.manager_score} / 10`} />
+        )}
+      </div>
+      {d.objections && d.objections.length > 0 && (
+        <ListBlock title="Возражения" items={d.objections} />
       )}
+      {d.next_steps && d.next_steps.length > 0 && (
+        <ListBlock title="Следующие шаги" items={d.next_steps} />
+      )}
+      {d.coaching_tips && d.coaching_tips.length > 0 && (
+        <ListBlock title="Советы менеджеру" items={d.coaching_tips} />
+      )}
+    </CardContent></Card>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-muted/30 p-2">
+      <div className="text-[10px] uppercase text-muted-foreground tracking-wide">{label}</div>
+      <div className="text-sm font-medium truncate">{value}</div>
+    </div>
+  );
+}
+
+function ListBlock({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold text-muted-foreground mb-1">{title}</div>
+      <ul className="list-disc pl-5 space-y-0.5 text-sm">
+        {items.map((it, i) => <li key={i}>{it}</li>)}
+      </ul>
     </div>
   );
 }

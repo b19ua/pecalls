@@ -248,6 +248,19 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (it) {
             transcript.push({ role: "user", text: it, ts: new Date().toISOString() });
             handoffPromptIssued = maybeHandoffByPhrase(it);
+            // ── Fast keyword fast-path: instant red without waiting for LLM ──
+            const hit = scanCustomerText(it);
+            if (hit && ctx?.ownerId) {
+              // Need the call row id; persist first to ensure row exists, then flag.
+              void (async () => {
+                try {
+                  await persistTranscript();
+                  const { data: row } = await supa.from("calls")
+                    .select("id").eq("twilio_call_sid", callSid).maybeSingle();
+                  if (row?.id) await applyFastRed(supa, "calls", row.id, ctx!.ownerId, hit, it);
+                } catch (e) { console.error("[fast-red call]", e); }
+              })();
+            }
           }
           const parts = msg.serverContent?.modelTurn?.parts || [];
           if (!handoffPromptIssued) {

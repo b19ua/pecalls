@@ -192,7 +192,13 @@ function LivePage() {
         <Badge variant="secondary" className="gap-1"><Activity className="h-3 w-3" /> {sorted.length} live</Badge>
         {redCount > 0 && <Badge className="gap-1 bg-red-500/15 text-red-400 border border-red-500/30"><ShieldAlert className="h-3 w-3" /> {redCount} red</Badge>}
         {amberCount > 0 && <Badge className="gap-1 bg-amber-500/15 text-amber-400 border border-amber-500/30"><AlertTriangle className="h-3 w-3" /> {amberCount} amber</Badge>}
+        <div className="ml-auto">
+          <Button size="sm" variant="outline" onClick={() => setRulesOpen(true)} className="gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" /> Rules
+          </Button>
+        </div>
       </div>
+
 
       {topAlert?.risk_reason && (
         <Card className={cn(

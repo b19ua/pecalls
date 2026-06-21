@@ -166,8 +166,8 @@ function LivePage() {
       });
   }, [items, now]);
 
-  const redCount = items.filter((i) => i.risk_level === "red").length;
-  const amberCount = items.filter((i) => i.risk_level === "amber").length;
+  const redCount = sorted.filter((i) => i.risk_level === "red").length;
+  const amberCount = sorted.filter((i) => i.risk_level === "amber").length;
   const topAlert = sorted.find((i) => i.risk_level === "red") || sorted.find((i) => i.risk_level === "amber");
 
   return (

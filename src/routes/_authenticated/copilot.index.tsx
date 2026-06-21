@@ -11,6 +11,7 @@ import { Headphones, Plus, Radio, Bot, MessagesSquare, Settings2, Lightbulb, Pho
 import { listCopilotAgents, listCopilotSessions } from "@/lib/copilot.functions";
 import { TestCallDialog } from "@/components/copilot/TestCallDialog";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/copilot/")({ component: CopilotHome });
 
@@ -22,6 +23,7 @@ type Session = {
 
 function CopilotHome() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const fetchAgents = useServerFn(listCopilotAgents);
   const fetchSessions = useServerFn(listCopilotSessions);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -60,8 +62,8 @@ function CopilotHome() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
       <PageHeader
-        title="AI Copilot Manager"
-        description="ИИ-«третий слушатель» подсказывает менеджеру в реальном времени: возражения, эмоции, апсейл, следующий шаг."
+        title={t("cop.pageTitle")}
+        description={t("cop.pageDesc")}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -69,19 +71,19 @@ function CopilotHome() {
               className="bg-gradient-to-r from-primary to-primary/70 hover:opacity-90"
               onClick={() => {
                 if (agents.filter((a) => a.enabled).length === 0) {
-                  toast.error("Сначала создайте и включите хотя бы одного агента");
+                  toast.error(t("cop.noAgentEnabled"));
                   return;
                 }
                 setTestOpen(true);
               }}
             >
-              <PhoneCall className="h-4 w-4 mr-1" /> Тестовый звонок
+              <PhoneCall className="h-4 w-4 mr-1" /> {t("cop.testCall")}
             </Button>
             <Button variant="outline" asChild>
-              <Link to="/copilot/agents"><Settings2 className="h-4 w-4 mr-1" /> Агенты</Link>
+              <Link to="/copilot/agents"><Settings2 className="h-4 w-4 mr-1" /> {t("cop.agentsBtn")}</Link>
             </Button>
             <Button variant="outline" onClick={() => navigate({ to: "/copilot/agents/new" })}>
-              <Plus className="h-4 w-4 mr-1" /> Новый copilot
+              <Plus className="h-4 w-4 mr-1" /> {t("cop.newCopilot")}
             </Button>
           </div>
         }
@@ -94,11 +96,11 @@ function CopilotHome() {
         <CardContent className="p-4 flex gap-3 items-start text-sm">
           <Lightbulb className="h-5 w-5 text-primary shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <div className="font-medium">Как это работает за 3 шага</div>
+            <div className="font-medium">{t("cop.howItWorksTitle")}</div>
             <ol className="list-decimal list-inside text-muted-foreground space-y-0.5 text-xs">
-              <li>Создайте copilot-агента → задайте промпт, продукт, категории подсказок.</li>
+              <li>{t("cop.howItWorksStep1")}</li>
               <li>В карточке агента откройте блок <b>«Как подключить»</b> и скопируйте Twilio Voice webhook URL — вставьте его в настройки номера в Twilio Console.</li>
-              <li>Звоните: транскрипт и подсказки появятся здесь в реальном времени, без вмешательства в разговор менеджера и клиента.</li>
+              <li>{t("cop.howItWorksStep3")}</li>
             </ol>
           </div>
         </CardContent>
@@ -108,16 +110,16 @@ function CopilotHome() {
 
         <TabsList>
           <TabsTrigger value="live"><Radio className="h-4 w-4 mr-1.5" />Live ({active.length})</TabsTrigger>
-          <TabsTrigger value="history"><MessagesSquare className="h-4 w-4 mr-1.5" />История</TabsTrigger>
-          <TabsTrigger value="agents"><Bot className="h-4 w-4 mr-1.5" />Агенты ({agents.length})</TabsTrigger>
+          <TabsTrigger value="history"><MessagesSquare className="h-4 w-4 mr-1.5" />{t("cop.tabHistory")}</TabsTrigger>
+          <TabsTrigger value="agents"><Bot className="h-4 w-4 mr-1.5" />{t("cop.agentsBtn")} ({agents.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="live" className="mt-4">
           {loading ? <SkeletonGrid /> : active.length === 0 ? (
             <EmptyState
               icon={<Radio className="h-10 w-10 text-muted-foreground" />}
-              title="Сейчас нет активных звонков"
-              body="Подключите менеджерский номер к copilot-агенту — каждый новый разговор будет анализироваться в реальном времени и подсказки появятся здесь."
+              title={t("cop.noActiveCalls")}
+              body={t("cop.noActiveCallsBody")}
             />
           ) : (
             <div className="grid sm:grid-cols-2 gap-4">
@@ -130,8 +132,8 @@ function CopilotHome() {
           {history.length === 0 ? (
             <EmptyState
               icon={<MessagesSquare className="h-10 w-10 text-muted-foreground" />}
-              title="История пуста"
-              body="Здесь будут завершённые сессии с расшифровкой, подсказками и метриками."
+              title={t("cop.historyEmpty")}
+              body={t("cop.historyEmptyBody")}
             />
           ) : (
             <div className="grid sm:grid-cols-2 gap-4">
@@ -144,9 +146,9 @@ function CopilotHome() {
           {agents.length === 0 ? (
             <EmptyState
               icon={<Headphones className="h-10 w-10 text-muted-foreground" />}
-              title="Ещё нет copilot-агентов"
-              body="Создайте первого — это конфигурация ИИ-наблюдателя: язык, фокус подсказок, контекст продукта."
-              action={<Button onClick={() => navigate({ to: "/copilot/agents/new" })}><Plus className="h-4 w-4 mr-1" />Создать</Button>}
+              title={t("cop.noAgents")}
+              body={t("cop.noAgentsBody")}
+              action={<Button onClick={() => navigate({ to: "/copilot/agents/new" })}><Plus className="h-4 w-4 mr-1" />{t("cop.create")}</Button>}
             />
           ) : (
             <div className="grid sm:grid-cols-2 gap-4">
@@ -182,6 +184,7 @@ function CopilotHome() {
 }
 
 function SessionCard({ s, agents, live }: { s: Session; agents: Agent[]; live?: boolean }) {
+  const { t } = useI18n();
   const agent = agents.find((a) => a.id === s.agent_id);
   return (
     <Link to="/copilot/sessions/$sessionId" params={{ sessionId: s.id }}>
@@ -192,7 +195,7 @@ function SessionCard({ s, agents, live }: { s: Session; agents: Agent[]; live?: 
               <Radio className={`h-5 w-5 ${live ? "text-success" : "text-muted-foreground"}`} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="font-medium truncate">{s.customer_phone || s.call_sid || "Без номера"}</div>
+              <div className="font-medium truncate">{s.customer_phone || s.call_sid || t("cop.noPhone")}</div>
               <div className="text-xs text-muted-foreground">
                 {agent?.name ?? "—"} · {s.manager_name ?? "—"} · {new Date(s.started_at).toLocaleString()}
               </div>

@@ -8,12 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Headphones } from "lucide-react";
 import { listCopilotAgents } from "@/lib/copilot.functions";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/copilot/agents/")({ component: Page });
 
 type Agent = { id: string; name: string; description: string | null; enabled: boolean; language: string; suggestion_categories: string[] | null };
 
 function Page() {
+  const { t } = useI18n();
   const fetchAgents = useServerFn(listCopilotAgents);
   const [agents, setAgents] = useState<Agent[]>([]);
 
@@ -26,12 +28,12 @@ function Page() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
       <PageHeader
-        title="Copilot-агенты"
-        description="Конфигурации ИИ-наблюдателя для звонков менеджеров."
+        title={t("cop.agentsTitle")}
+        description={t("cop.agentsDesc")}
         actions={
           <Button asChild>
             <Link to="/copilot/agents/$agentId" params={{ agentId: "new" }}>
-              <Plus className="h-4 w-4 mr-1" /> Новый агент
+              <Plus className="h-4 w-4 mr-1" /> {t("cop.newAgent")}
             </Link>
           </Button>
         }
@@ -41,9 +43,9 @@ function Page() {
         <Card className="bg-gradient-card border-dashed border-2">
           <CardContent className="py-16 text-center">
             <Headphones className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-            <h3 className="font-display text-xl font-semibold mb-2">Пока нет агентов</h3>
+            <h3 className="font-display text-xl font-semibold mb-2">{t("cop.noAgentsYet")}</h3>
             <p className="text-muted-foreground text-sm max-w-md mx-auto">
-              Создайте первого copilot-агента и привяжите к нему звонки менеджера.
+              {t("cop.noAgentsYetBody")}
             </p>
           </CardContent>
         </Card>

@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Pencil, Loader2, Wrench, Webhook, Database } from "lucide-react";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/tools")({
   component: ToolsPage,
@@ -31,12 +32,6 @@ type ToolRow = {
   description: string;
   enabled: boolean;
   config: Record<string, unknown>;
-};
-
-const TYPE_LABEL: Record<ToolType, string> = {
-  webhook: "Webhook (мой API)",
-  crm_lookup: "CRM — поиск контакта",
-  crm_write: "CRM — создать запись",
 };
 
 const TYPE_ICON: Record<ToolType, typeof Wrench> = {
@@ -72,6 +67,7 @@ function emptyConfig(type: ToolType) {
 }
 
 function ToolsPage() {
+  const { t } = useI18n();
   const listFn = useServerFn(listTools);
   const saveFn = useServerFn(saveTool);
   const delFn = useServerFn(deleteTool);
@@ -84,14 +80,17 @@ function ToolsPage() {
   const [editing, setEditing] = useState<ToolRow | null>(null);
   const [open, setOpen] = useState(false);
 
+  const typeLabel = (type: ToolType) =>
+    ({ webhook: t("tools.type_webhook"), crm_lookup: t("tools.type_crm_lookup"), crm_write: t("tools.type_crm_write") }[type]);
+
   const load = async () => {
     setLoading(true);
     try {
-      const [t, a] = await Promise.all([listFn({ data: {} }), listAgentsFn()]);
-      setTools(t.tools as ToolRow[]);
-      setAgents(a.agents);
+      const [toolsData, agentsData] = await Promise.all([listFn({ data: {} }), listAgentsFn()]);
+      setTools(toolsData.tools as ToolRow[]);
+      setAgents(agentsData.agents);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Ошибка загрузки");
+      toast.error(e instanceof Error ? e.message : t("tools.error_load"));
     } finally {
       setLoading(false);
     }
@@ -103,14 +102,14 @@ function ToolsPage() {
   }, []);
 
   const filtered = useMemo(
-    () => (agentFilter === "all" ? tools : tools.filter((t) => t.agent_id === agentFilter)),
+    () => (agentFilter === "all" ? tools : tools.filter((tool) => tool.agent_id === agentFilter)),
     [tools, agentFilter],
   );
 
   const startCreate = () => {
     const firstAgent = agents[0]?.id;
     if (!firstAgent) {
-      toast.error("Сначала создайте агента");
+      toast.error(t("tools.error_no_agent"));
       return;
     }
     setEditing({
@@ -125,40 +124,40 @@ function ToolsPage() {
     setOpen(true);
   };
 
-  const startEdit = (t: ToolRow) => {
-    setEditing(JSON.parse(JSON.stringify(t)));
+  const startEdit = (tool: ToolRow) => {
+    setEditing(JSON.parse(JSON.stringify(tool)));
     setOpen(true);
   };
 
   const remove = async (id: string) => {
-    if (!confirm("Удалить инструмент?")) return;
+    if (!confirm(t("tools.confirm_delete"))) return;
     try {
       await delFn({ data: { id } });
-      toast.success("Удалено");
+      toast.success(t("tools.deleted"));
       void load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Ошибка");
+      toast.error(e instanceof Error ? e.message : t("tools.error"));
     }
   };
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
       <PageHeader
-        title="Инструменты"
-        description="Webhook и CRM-интеграции, которые ассистент использует во время разговора"
+        title={t("tools.title")}
+        description={t("tools.subtitle")}
         actions={
           <Button onClick={startCreate} className="bg-gradient-primary shadow-elegant">
-            <Plus className="h-4 w-4 mr-1.5" /> Новый инструмент
+            <Plus className="h-4 w-4 mr-1.5" /> {t("tools.new_tool")}
           </Button>
         }
       />
 
       <div className="mb-4 flex items-center gap-3">
-        <Label className="text-sm">Агент:</Label>
+        <Label className="text-sm">{t("tools.agent")}:</Label>
         <Select value={agentFilter} onValueChange={setAgentFilter}>
           <SelectTrigger className="w-72"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Все агенты</SelectItem>
+            <SelectItem value="all">{t("tools.all_agents")}</SelectItem>
             {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
           </SelectContent>
         </Select>
@@ -166,41 +165,40 @@ function ToolsPage() {
 
       {loading ? (
         <div className="flex items-center gap-2 text-muted-foreground p-8">
-          <Loader2 className="h-4 w-4 animate-spin" /> Загрузка...
+          <Loader2 className="h-4 w-4 animate-spin" /> {t("tools.loading")}
         </div>
       ) : filtered.length === 0 ? (
         <Card className="bg-gradient-card shadow-soft">
           <CardContent className="p-8 text-center text-muted-foreground">
             <Wrench className="h-10 w-10 mx-auto mb-3 opacity-50" />
-            Пока нет инструментов. Добавьте первый — агент сможет дёргать ваш API,
-            искать клиента в CRM или создавать заявки.
+            {t("tools.empty")}
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3">
-          {filtered.map((t) => {
-            const Icon = TYPE_ICON[t.type];
-            const agent = agents.find((a) => a.id === t.agent_id);
+          {filtered.map((tool) => {
+            const Icon = TYPE_ICON[tool.type];
+            const agent = agents.find((a) => a.id === tool.agent_id);
             return (
-              <Card key={t.id} className="bg-gradient-card shadow-soft">
+              <Card key={tool.id} className="bg-gradient-card shadow-soft">
                 <CardContent className="p-4 flex items-start gap-4">
                   <div className="p-2 rounded-lg bg-primary/10 text-primary"><Icon className="h-5 w-5" /></div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold">{t.name}</h3>
-                      <Badge variant="secondary">{TYPE_LABEL[t.type]}</Badge>
+                      <h3 className="font-semibold">{tool.name}</h3>
+                      <Badge variant="secondary">{typeLabel(tool.type)}</Badge>
                       {agent && <Badge variant="outline">{agent.name}</Badge>}
-                      {!t.enabled && <Badge variant="destructive">Выкл.</Badge>}
+                      {!tool.enabled && <Badge variant="destructive">{t("tools.disabled")}</Badge>}
                     </div>
-                    {t.description && <p className="text-sm text-muted-foreground mt-1">{t.description}</p>}
+                    {tool.description && <p className="text-sm text-muted-foreground mt-1">{tool.description}</p>}
                     <p className="text-xs text-muted-foreground mt-1 font-mono break-all">
-                      {String((t.config as { url?: string; base_url?: string; path?: string }).url
-                        ?? `${(t.config as { base_url?: string }).base_url ?? ""}${(t.config as { path?: string }).path ?? ""}`)}
+                      {String((tool.config as { url?: string; base_url?: string; path?: string }).url
+                        ?? `${(tool.config as { base_url?: string }).base_url ?? ""}${(tool.config as { path?: string }).path ?? ""}`)}
                     </p>
                   </div>
                   <div className="flex gap-1.5">
-                    <Button variant="ghost" size="icon" onClick={() => startEdit(t)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => remove(t.id)}><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => startEdit(tool)}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => remove(tool.id)}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </CardContent>
               </Card>
@@ -214,27 +212,27 @@ function ToolsPage() {
         agents={agents}
         open={open}
         onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}
-        onSave={async (t) => {
+        onSave={async (tool) => {
           try {
             await saveFn({
               data: {
-                id: t.id || null,
+                id: tool.id || null,
                 data: {
-                  agent_id: t.agent_id,
-                  type: t.type,
-                  name: t.name,
-                  description: t.description,
-                  enabled: t.enabled,
-                  config: t.config,
+                  agent_id: tool.agent_id,
+                  type: tool.type,
+                  name: tool.name,
+                  description: tool.description,
+                  enabled: tool.enabled,
+                  config: tool.config,
                 },
               },
             });
-            toast.success("Сохранено");
+            toast.success(t("tools.saved"));
             setOpen(false);
             setEditing(null);
             void load();
           } catch (e) {
-            toast.error(e instanceof Error ? e.message : "Ошибка");
+            toast.error(e instanceof Error ? e.message : t("tools.error"));
           }
         }}
       />
@@ -249,16 +247,17 @@ function ToolEditor({
   agents: { id: string; name: string }[];
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onSave: (t: ToolRow) => Promise<void>;
+  onSave: (row: ToolRow) => Promise<void>;
 }) {
-  const [t, setT] = useState<ToolRow | null>(tool);
+  const { t } = useI18n();
+  const [row, setRow] = useState<ToolRow | null>(tool);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { setT(tool); }, [tool]);
+  useEffect(() => { setRow(tool); }, [tool]);
 
-  if (!t) return null;
-  const cfg = t.config as Record<string, unknown>;
-  const setCfg = (patch: Record<string, unknown>) => setT({ ...t, config: { ...cfg, ...patch } });
+  if (!row) return null;
+  const cfg = row.config as Record<string, unknown>;
+  const setCfg = (patch: Record<string, unknown>) => setRow({ ...row, config: { ...cfg, ...patch } });
   const params = (cfg.parameters as Param[]) ?? [];
   const setParams = (p: Param[]) => setCfg({ parameters: p });
 
@@ -266,14 +265,14 @@ function ToolEditor({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{t.id ? "Редактировать инструмент" : "Новый инструмент"}</DialogTitle>
+          <DialogTitle>{row.id ? t("tools.edit_tool") : t("tools.new_tool")}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="grid md:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Агент</Label>
-              <Select value={t.agent_id} onValueChange={(v) => setT({ ...t, agent_id: v })}>
+              <Label>{t("tools.agent")}</Label>
+              <Select value={row.agent_id} onValueChange={(v) => setRow({ ...row, agent_id: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
@@ -281,51 +280,51 @@ function ToolEditor({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Тип</Label>
+              <Label>{t("tools.type")}</Label>
               <Select
-                value={t.type}
+                value={row.type}
                 onValueChange={(v) => {
                   const newType = v as ToolType;
-                  setT({ ...t, type: newType, config: emptyConfig(newType) });
+                  setRow({ ...row, type: newType, config: emptyConfig(newType) });
                 }}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="webhook">Webhook (мой API)</SelectItem>
-                  <SelectItem value="crm_lookup">CRM — поиск (по номеру и т.д.)</SelectItem>
-                  <SelectItem value="crm_write">CRM — создать лид/тикет</SelectItem>
+                  <SelectItem value="webhook">{t("tools.type_webhook")}</SelectItem>
+                  <SelectItem value="crm_lookup">{t("tools.type_crm_lookup_full")}</SelectItem>
+                  <SelectItem value="crm_write">{t("tools.type_crm_write_full")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label>Имя функции (латиницей, без пробелов)</Label>
+            <Label>{t("tools.func_name")}</Label>
             <Input
-              value={t.name}
-              onChange={(e) => setT({ ...t, name: e.target.value.replace(/[^a-zA-Z0-9_]/g, "") })}
+              value={row.name}
+              onChange={(e) => setRow({ ...row, name: e.target.value.replace(/[^a-zA-Z0-9_]/g, "") })}
               placeholder="get_order_status"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label>Описание для ИИ — когда вызывать</Label>
+            <Label>{t("tools.description_label")}</Label>
             <Textarea
               rows={2}
-              value={t.description}
-              onChange={(e) => setT({ ...t, description: e.target.value })}
-              placeholder="Получить статус заказа по номеру. Используй когда клиент спрашивает 'где мой заказ'."
+              value={row.description}
+              onChange={(e) => setRow({ ...row, description: e.target.value })}
+              placeholder={t("tools.description_placeholder")}
             />
           </div>
 
           <div className="flex items-center justify-between">
-            <Label>Включено</Label>
-            <Switch checked={t.enabled} onCheckedChange={(v) => setT({ ...t, enabled: v })} />
+            <Label>{t("tools.enabled")}</Label>
+            <Switch checked={row.enabled} onCheckedChange={(v) => setRow({ ...row, enabled: v })} />
           </div>
 
           <Separator />
 
-          {t.type === "webhook" ? (
+          {row.type === "webhook" ? (
             <>
               <div className="grid grid-cols-[1fr_120px] gap-3">
                 <div className="space-y-1.5">
@@ -333,7 +332,7 @@ function ToolEditor({
                   <Input value={String(cfg.url ?? "")} onChange={(e) => setCfg({ url: e.target.value })} placeholder="https://api.example.com/orders" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Метод</Label>
+                  <Label>{t("tools.method")}</Label>
                   <Select value={String(cfg.method ?? "POST")} onValueChange={(v) => setCfg({ method: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -346,7 +345,7 @@ function ToolEditor({
           ) : (
             <>
               <div className="space-y-1.5">
-                <Label>Провайдер CRM</Label>
+                <Label>{t("tools.crm_provider")}</Label>
                 <Select value={String(cfg.provider ?? "custom")} onValueChange={(v) => setCfg({ provider: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -363,11 +362,11 @@ function ToolEditor({
               </div>
               <div className="grid grid-cols-[1fr_120px] gap-3">
                 <div className="space-y-1.5">
-                  <Label>Path (можно {`{параметр}`})</Label>
+                  <Label>{t("tools.path_label")}</Label>
                   <Input value={String(cfg.path ?? "")} onChange={(e) => setCfg({ path: e.target.value })} placeholder="/crm/v3/objects/contacts/search" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Метод</Label>
+                  <Label>{t("tools.method")}</Label>
                   <Select value={String(cfg.method ?? "GET")} onValueChange={(v) => setCfg({ method: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -376,9 +375,9 @@ function ToolEditor({
                   </Select>
                 </div>
               </div>
-              {t.type === "crm_write" && (
+              {row.type === "crm_write" && (
                 <div className="space-y-1.5">
-                  <Label>Тело запроса (JSON, {`{параметры}`} подставятся)</Label>
+                  <Label>{t("tools.body_label")}</Label>
                   <Textarea
                     rows={4}
                     className="font-mono text-xs"
@@ -393,11 +392,11 @@ function ToolEditor({
 
           <div className="grid md:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Auth Header (имя)</Label>
+              <Label>{t("tools.auth_header_name")}</Label>
               <Input value={String(cfg.auth_header_name ?? "")} onChange={(e) => setCfg({ auth_header_name: e.target.value })} placeholder="Authorization" />
             </div>
             <div className="space-y-1.5">
-              <Label>Auth Header (значение)</Label>
+              <Label>{t("tools.auth_header_value")}</Label>
               <Input type="password" value={String(cfg.auth_header_value ?? "")} onChange={(e) => setCfg({ auth_header_value: e.target.value })} placeholder="Bearer ..." />
             </div>
           </div>
@@ -406,22 +405,22 @@ function ToolEditor({
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Параметры, которые ИИ должен собрать</Label>
+              <Label>{t("tools.params_label")}</Label>
               <Button
                 type="button" size="sm" variant="outline"
                 onClick={() => setParams([...params, { name: "", type: "string", description: "", required: true }])}
               >
-                <Plus className="h-3.5 w-3.5 mr-1" /> Добавить
+                <Plus className="h-3.5 w-3.5 mr-1" /> {t("tools.add_param")}
               </Button>
             </div>
             {params.length === 0 && (
-              <p className="text-xs text-muted-foreground">Например: phone, order_id, email...</p>
+              <p className="text-xs text-muted-foreground">{t("tools.params_hint")}</p>
             )}
             {params.map((p, i) => (
               <div key={i} className="grid grid-cols-[1fr_110px_auto] gap-2 items-start border rounded-md p-2">
                 <div className="space-y-1">
                   <Input
-                    placeholder="имя (phone)"
+                    placeholder={t("tools.param_name_placeholder")}
                     value={p.name}
                     onChange={(e) => {
                       const np = [...params];
@@ -430,7 +429,7 @@ function ToolEditor({
                     }}
                   />
                   <Input
-                    placeholder="описание для ИИ"
+                    placeholder={t("tools.param_desc_placeholder")}
                     value={p.description}
                     onChange={(e) => {
                       const np = [...params]; np[i] = { ...p, description: e.target.value }; setParams(np);
@@ -457,7 +456,7 @@ function ToolEditor({
                       const np = [...params]; np[i] = { ...p, required: v }; setParams(np);
                     }}
                   />
-                  <span className="text-[10px] text-muted-foreground">обяз.</span>
+                  <span className="text-[10px] text-muted-foreground">{t("tools.required")}</span>
                   <Button variant="ghost" size="icon" className="h-7 w-7"
                     onClick={() => setParams(params.filter((_, j) => j !== i))}>
                     <Trash2 className="h-3.5 w-3.5" />
@@ -468,27 +467,27 @@ function ToolEditor({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Подсказка как использовать ответ (опционально)</Label>
+            <Label>{t("tools.response_hint_label")}</Label>
             <Textarea
               rows={2}
               value={String(cfg.response_hint ?? "")}
               onChange={(e) => setCfg({ response_hint: e.target.value })}
-              placeholder="Из ответа возьми поле status и скажи клиенту простыми словами."
+              placeholder={t("tools.response_hint_placeholder")}
             />
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Отмена</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("tools.cancel")}</Button>
           <Button
-            disabled={saving || !t.name || !t.agent_id}
+            disabled={saving || !row.name || !row.agent_id}
             onClick={async () => {
               setSaving(true);
-              try { await onSave(t); } finally { setSaving(false); }
+              try { await onSave(row); } finally { setSaving(false); }
             }}
           >
             {saving && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
-            Сохранить
+            {t("tools.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

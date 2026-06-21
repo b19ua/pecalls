@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, Check, Lightbulb, Radio } from "lucide-react";
+import { ArrowLeft, Check, Lightbulb, Radio, MessageSquare } from "lucide-react";
 import { getCopilotSession, acknowledgeSuggestion } from "@/lib/copilot.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/copilot/sessions/$sessionId")({ component: Page });
+
+type Whisper = { id: string; text: string; created_at: string; read_at: string | null };
 
 type Suggestion = {
   id: string; ts: string; category: string | null; priority: string;

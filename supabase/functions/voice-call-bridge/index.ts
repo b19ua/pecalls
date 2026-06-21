@@ -8,6 +8,7 @@ import {
   getModelCandidates,
   sanitizeSystemPrompt,
 } from "../_shared/live-config.ts";
+import { scanCustomerText, applyFastRed } from "../_shared/risk-keywords.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -247,6 +248,19 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (it) {
             transcript.push({ role: "user", text: it, ts: new Date().toISOString() });
             handoffPromptIssued = maybeHandoffByPhrase(it);
+            // ── Fast keyword fast-path: instant red without waiting for LLM ──
+            const hit = scanCustomerText(it);
+            if (hit && ctx?.ownerId) {
+              // Need the call row id; persist first to ensure row exists, then flag.
+              void (async () => {
+                try {
+                  await persistTranscript();
+                  const { data: row } = await supa.from("calls")
+                    .select("id").eq("twilio_call_sid", callSid).maybeSingle();
+                  if (row?.id) await applyFastRed(supa, "calls", row.id, ctx!.ownerId, hit, it);
+                } catch (e) { console.error("[fast-red call]", e); }
+              })();
+            }
           }
           const parts = msg.serverContent?.modelTurn?.parts || [];
           if (!handoffPromptIssued) {
@@ -595,12 +609,19 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       }
     } catch { /* noop */ }
     try { gemini?.close(); } catch { /* noop */ }
-    if (callSid && transcript.length) {
+    if (callSid) {
       try {
-        await supa.from("calls").update({ transcript }).eq("twilio_call_sid", callSid);
-      } catch (e) { console.error("save transcript", e); }
-      // Generate summary asynchronously
-      void generateSummary(callSid, transcript, ctx?.language || "ru-RU");
+        const patch: Record<string, unknown> = {
+          status: "completed",
+          ended_at: new Date().toISOString(),
+        };
+        if (transcript.length) patch.transcript = transcript;
+        await supa.from("calls").update(patch).eq("twilio_call_sid", callSid);
+      } catch (e) { console.error("save transcript / mark ended", e); }
+      if (transcript.length) {
+        // Generate summary asynchronously
+        void generateSummary(callSid, transcript, ctx?.language || "ru-RU");
+      }
     }
   };
   twilio.onerror = (e) => log("twilio ERROR", (e as ErrorEvent).message || String(e));

@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, Check, Lightbulb, Radio } from "lucide-react";
+import { ArrowLeft, Check, Lightbulb, Radio, MessageSquare } from "lucide-react";
 import { getCopilotSession, acknowledgeSuggestion } from "@/lib/copilot.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/copilot/sessions/$sessionId")({ component: Page });
+
+type Whisper = { id: string; text: string; created_at: string; read_at: string | null };
 
 type Suggestion = {
   id: string; ts: string; category: string | null; priority: string;
@@ -41,6 +43,7 @@ function Page() {
   const [session, setSession] = useState<Session | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [transcript, setTranscript] = useState<Transcript[]>([]);
+  const [whispers, setWhispers] = useState<Whisper[]>([]);
 
   const reload = async () => {
     try {
@@ -51,8 +54,30 @@ function Page() {
     } catch (e) { toast.error((e as Error).message); }
   };
 
+  // Auto-ack a whisper as "delivered" (read_at = now) so the supervisor
+  // knows it landed. Fire-and-forget; RLS scopes by owner_id.
+  const ackWhisperDelivered = async (w: Whisper) => {
+    if (w.read_at) return;
+    try {
+      await supabase.from("whispers")
+        .update({ read_at: new Date().toISOString() })
+        .eq("id", w.id).is("read_at", null);
+    } catch (e) { console.error("whisper ack", e); }
+  };
+
   useEffect(() => {
     reload();
+    // Load any whispers already addressed to this session, then mark delivered.
+    void (async () => {
+      const { data } = await supabase.from("whispers")
+        .select("id,text,created_at,read_at")
+        .eq("call_id", sessionId).eq("call_kind", "copilot_session")
+        .order("created_at", { ascending: true });
+      const list = (data ?? []) as Whisper[];
+      setWhispers(list);
+      list.filter((w) => !w.read_at).forEach((w) => void ackWhisperDelivered(w));
+    })();
+
     const ch = supabase
       .channel(`copilot-session-${sessionId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "copilot_suggestions", filter: `session_id=eq.${sessionId}` },
@@ -63,6 +88,15 @@ function Page() {
         (p) => setTranscript((t) => [...t, p.new as Transcript]))
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "copilot_sessions", filter: `id=eq.${sessionId}` },
         (p) => setSession(p.new as Session))
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "whispers", filter: `call_id=eq.${sessionId}` },
+        (p) => {
+          const w = p.new as Whisper;
+          setWhispers((arr) => [...arr, w]);
+          toast.info(`💬 Шёпот: ${w.text}`, { duration: 8000 });
+          void ackWhisperDelivered(w);
+        })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "whispers", filter: `call_id=eq.${sessionId}` },
+        (p) => setWhispers((arr) => arr.map((x) => x.id === (p.new as Whisper).id ? (p.new as Whisper) : x)))
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [sessionId]);
@@ -90,6 +124,29 @@ function Page() {
           </Badge>
         }
       />
+
+      {whispers.length > 0 && (
+        <Card className="mb-4 border-amber-500/40 bg-amber-500/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <MessageSquare className="h-4 w-4 text-amber-400" />
+              <span className="text-sm font-medium">Шёпот супервайзера</span>
+              <Badge variant="secondary" className="ml-auto">{whispers.length}</Badge>
+            </div>
+            <div className="space-y-1.5 max-h-40 overflow-auto">
+              {whispers.slice().reverse().map((w) => (
+                <div key={w.id} className="text-sm rounded-md bg-background/60 border px-3 py-2 flex items-start gap-2">
+                  <span className="flex-1">{w.text}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">
+                    {new Date(w.created_at).toLocaleTimeString()}
+                    {w.read_at && <span className="ml-1 text-emerald-400">✓</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card><CardContent className="p-0">

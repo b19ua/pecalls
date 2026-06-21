@@ -28,6 +28,7 @@ type LiveItem = {
   agent_name: string | null;
   customer: string | null;
   started_at: string | null;
+  risk_updated_at: string | null;
   risk_level: Risk;
   risk_score: number;
   risk_reason: string | null;
@@ -44,6 +45,7 @@ type RawCall = {
   direction: string | null;
   started_at: string | null;
   ended_at: string | null;
+  risk_updated_at: string | null;
   risk_level: Risk | null;
   risk_score: number | null;
   risk_reason: string | null;
@@ -60,6 +62,7 @@ type RawCopilot = {
   customer_phone: string | null;
   started_at: string | null;
   ended_at: string | null;
+  risk_updated_at: string | null;
   risk_level: Risk | null;
   risk_score: number | null;
   risk_reason: string | null;
@@ -68,6 +71,11 @@ type RawCopilot = {
   sentiment: string | null;
   copilot_agents?: { name: string | null } | null;
 };
+
+// Hide cards whose row has gone stale (no transcript / no analyzer update
+// for STALE_MS). Protects against bridges that crashed without writing
+// ended_at — the card would otherwise hang in the grid forever.
+const STALE_MS = 10 * 60 * 1000;
 
 const RISK_RANK: Record<Risk, number> = { red: 0, amber: 1, green: 2 };
 
@@ -93,12 +101,12 @@ function LivePage() {
   const load = async () => {
     const [{ data: c }, { data: cs }] = await Promise.all([
       supabase.from("calls")
-        .select("id,source,from_number,to_number,direction,started_at,ended_at,risk_level,risk_score,risk_reason,primary_signal,suggested_action,sentiment,agents(name)")
+        .select("id,source,from_number,to_number,direction,started_at,ended_at,risk_updated_at,risk_level,risk_score,risk_reason,primary_signal,suggested_action,sentiment,agents(name)")
         .is("ended_at", null)
         .in("status", ["queued", "ringing", "in_progress"])
         .order("started_at", { ascending: false }).limit(50),
       supabase.from("copilot_sessions")
-        .select("id,source,manager_name,customer_phone,started_at,ended_at,risk_level,risk_score,risk_reason,primary_signal,suggested_action,sentiment,copilot_agents(name)")
+        .select("id,source,manager_name,customer_phone,started_at,ended_at,risk_updated_at,risk_level,risk_score,risk_reason,primary_signal,suggested_action,sentiment,copilot_agents(name)")
         .is("ended_at", null).eq("status", "active")
         .order("started_at", { ascending: false }).limit(50),
     ]);
@@ -108,6 +116,7 @@ function LivePage() {
       agent_name: r.agents?.name ?? "AI Agent",
       customer: r.direction === "inbound" ? r.from_number : r.to_number,
       started_at: r.started_at,
+      risk_updated_at: r.risk_updated_at,
       risk_level: (r.risk_level ?? "green") as Risk,
       risk_score: r.risk_score ?? 0,
       risk_reason: r.risk_reason, primary_signal: r.primary_signal,
@@ -119,6 +128,7 @@ function LivePage() {
       agent_name: r.manager_name || r.copilot_agents?.name || "Manager",
       customer: r.customer_phone,
       started_at: r.started_at,
+      risk_updated_at: r.risk_updated_at,
       risk_level: (r.risk_level ?? "green") as Risk,
       risk_score: r.risk_score ?? 0,
       risk_reason: r.risk_reason, primary_signal: r.primary_signal,
@@ -137,16 +147,27 @@ function LivePage() {
     return () => { supabase.removeChannel(ch); clearInterval(poll); };
   }, []);
 
+  // Sort by risk, then by score. Filter zombie cards whose row hasn't been
+  // touched (no transcript / no analyzer update) for STALE_MS.
   const sorted = useMemo(() => {
-    return [...items].sort((a, b) => {
-      const r = RISK_RANK[a.risk_level] - RISK_RANK[b.risk_level];
-      if (r !== 0) return r;
-      return b.risk_score - a.risk_score;
-    });
-  }, [items]);
+    const cutoff = now - STALE_MS;
+    return [...items]
+      .filter((i) => {
+        const lastSeen = Math.max(
+          i.risk_updated_at ? new Date(i.risk_updated_at).getTime() : 0,
+          i.started_at ? new Date(i.started_at).getTime() : 0,
+        );
+        return lastSeen >= cutoff;
+      })
+      .sort((a, b) => {
+        const r = RISK_RANK[a.risk_level] - RISK_RANK[b.risk_level];
+        if (r !== 0) return r;
+        return b.risk_score - a.risk_score;
+      });
+  }, [items, now]);
 
-  const redCount = items.filter((i) => i.risk_level === "red").length;
-  const amberCount = items.filter((i) => i.risk_level === "amber").length;
+  const redCount = sorted.filter((i) => i.risk_level === "red").length;
+  const amberCount = sorted.filter((i) => i.risk_level === "amber").length;
   const topAlert = sorted.find((i) => i.risk_level === "red") || sorted.find((i) => i.risk_level === "amber");
 
   return (
@@ -161,7 +182,7 @@ function LivePage() {
           </span>
           <span className="text-muted-foreground">{t("live.realtime")}</span>
         </div>
-        <Badge variant="secondary" className="gap-1"><Activity className="h-3 w-3" /> {items.length} live</Badge>
+        <Badge variant="secondary" className="gap-1"><Activity className="h-3 w-3" /> {sorted.length} live</Badge>
         {redCount > 0 && <Badge className="gap-1 bg-red-500/15 text-red-400 border border-red-500/30"><ShieldAlert className="h-3 w-3" /> {redCount} red</Badge>}
         {amberCount > 0 && <Badge className="gap-1 bg-amber-500/15 text-amber-400 border border-amber-500/30"><AlertTriangle className="h-3 w-3" /> {amberCount} amber</Badge>}
       </div>
@@ -273,14 +294,17 @@ function CallCard({ item, now, onOpen }: { item: LiveItem; now: number; onOpen: 
 
 type TranscriptLine = { who: string; text: string; ts: string };
 
+type SentWhisper = { id: string; text: string; created_at: string; read_at: string | null };
+
 function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => void }) {
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [whisper, setWhisper] = useState("");
   const [sending, setSending] = useState(false);
+  const [sentWhispers, setSentWhispers] = useState<SentWhisper[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!item) { setLines([]); return; }
+    if (!item) { setLines([]); setSentWhispers([]); return; }
     let cancelled = false;
     const fetchTx = async () => {
       if (item.kind === "call") {
@@ -295,7 +319,15 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
         if (!cancelled) setLines(arr);
       }
     };
+    const fetchWhispers = async () => {
+      const { data } = await supabase.from("whispers")
+        .select("id,text,created_at,read_at")
+        .eq("call_id", item.id).eq("call_kind", item.kind)
+        .order("created_at", { ascending: false }).limit(8);
+      if (!cancelled) setSentWhispers((data ?? []) as SentWhisper[]);
+    };
     void fetchTx();
+    void fetchWhispers();
     const channels = [
       supabase.channel(`drawer-${item.kind}-${item.id}`)
         .on("postgres_changes",
@@ -303,6 +335,9 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
             ? { event: "UPDATE", schema: "public", table: "calls", filter: `id=eq.${item.id}` }
             : { event: "INSERT", schema: "public", table: "copilot_transcript", filter: `session_id=eq.${item.id}` },
           () => void fetchTx())
+        .on("postgres_changes",
+          { event: "*", schema: "public", table: "whispers", filter: `call_id=eq.${item.id}` },
+          () => void fetchWhispers())
         .subscribe(),
     ];
     return () => { cancelled = true; channels.forEach((c) => supabase.removeChannel(c)); };
@@ -366,17 +401,35 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
         </ScrollArea>
 
         {item?.source === "human" ? (
-          <div className="border-t border-border p-3 flex gap-2">
-            <Input
-              placeholder="Whisper to manager…"
-              value={whisper}
-              onChange={(e) => setWhisper(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendWhisper()}
-              disabled={sending}
-            />
-            <Button onClick={sendWhisper} disabled={sending || !whisper.trim()} size="icon">
-              <Send className="h-4 w-4" />
-            </Button>
+          <div className="border-t border-border p-3 space-y-2">
+            {sentWhispers.length > 0 && (
+              <div className="space-y-1 max-h-32 overflow-auto">
+                {sentWhispers.map((w) => (
+                  <div key={w.id} className="text-xs flex items-start gap-2 rounded-md bg-muted/40 px-2 py-1">
+                    <MessageSquare className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                    <span className="flex-1 truncate">{w.text}</span>
+                    <span className={cn(
+                      "text-[10px] shrink-0",
+                      w.read_at ? "text-emerald-400" : "text-muted-foreground"
+                    )}>
+                      {w.read_at ? "✓ доставлено" : "отправлено"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Whisper to manager…"
+                value={whisper}
+                onChange={(e) => setWhisper(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendWhisper()}
+                disabled={sending}
+              />
+              <Button onClick={sendWhisper} disabled={sending || !whisper.trim()} size="icon">
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         ) : item?.primary_signal === "handoff_needed" ? (
           <div className="border-t border-border p-3 flex gap-2">

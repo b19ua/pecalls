@@ -6,6 +6,7 @@
 // send audio back to Twilio — copilot is read-only.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { scanCustomerText, applyFastRed } from "../_shared/risk-keywords.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -226,13 +227,21 @@ async function handle(twilio: WebSocket, p: Params) {
           if (fc.name === "emit_transcript") {
             const a = fc.args as { speaker?: string; text?: string };
             if (a.text) {
+              const speaker = a.speaker || speakerHint;
               await supa.from("copilot_transcript").insert({
                 session_id: sessionId,
                 owner_id: agent.owner_id,
-                speaker: a.speaker || speakerHint,
+                speaker,
                 text: a.text,
               });
-              // Fire-and-forget supervisor risk analysis
+              // Fast keyword red-flag on customer utterances, no LLM wait.
+              if (speaker === "customer") {
+                const hit = scanCustomerText(a.text);
+                if (hit) {
+                  void applyFastRed(supa, "copilot_sessions", sessionId, agent.owner_id, hit, a.text);
+                }
+              }
+              // Fire-and-forget supervisor risk analysis (LLM, debounced per-row)
               fetch(`${SUPABASE_URL}/functions/v1/analyze-live-call`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE}` },

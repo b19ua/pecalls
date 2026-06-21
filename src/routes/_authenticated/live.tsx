@@ -437,6 +437,41 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
           </div>
         )}
 
+        {(violations.length > 0 || mustSayRules.length > 0) && (
+          <div className="mx-5 mt-3 rounded-lg border border-border bg-card/40 px-3 py-2.5 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <ShieldCheck className="h-3.5 w-3.5" /> Compliance
+            </div>
+            {violations.length > 0 && (
+              <div className="space-y-1.5">
+                {violations.map((v) => (
+                  <div key={v.rule_id} className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-xs">
+                    <div className="text-red-300 font-medium">⚠ {v.rule_text}</div>
+                    {v.correction && <div className="text-red-200/80 mt-0.5">Say instead: {v.correction}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {mustSayRules.length > 0 && (
+              <ul className="space-y-1">
+                {mustSayRules.map((r) => {
+                  const pending = missing.some((m) => m.rule_id === r.id);
+                  return (
+                    <li key={r.id} className="flex items-start gap-2 text-xs">
+                      {pending
+                        ? <span className="mt-0.5 h-3.5 w-3.5 rounded-full border border-amber-500/50 shrink-0" />
+                        : <Check className="h-3.5 w-3.5 mt-0.5 text-emerald-400 shrink-0" />}
+                      <span className={cn(pending ? "text-amber-300" : "text-muted-foreground line-through")}>{r.text}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+
+
+
         <ScrollArea className="flex-1 px-5 py-3" ref={scrollRef as never}>
           <div className="space-y-2">
             {lines.length === 0 && <div className="text-xs text-muted-foreground">Waiting for transcript…</div>}

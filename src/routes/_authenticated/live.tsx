@@ -284,10 +284,20 @@ function CallCard({ item, now, onOpen }: { item: LiveItem; now: number; onOpen: 
               ? "bg-red-500/10 border-red-500/30 text-red-300 font-semibold"
               : "bg-amber-500/10 border-amber-500/30 text-amber-300"
           )}>
-            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-            <span>{item.risk_reason}</span>
+            {item.primary_signal === "compliance_risk"
+              ? <ShieldCheck className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              : <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
+            <div className="min-w-0 flex-1">
+              {item.primary_signal === "compliance_risk" && (
+                <Badge className="mr-1.5 h-4 px-1.5 text-[9px] uppercase tracking-wider bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40 align-middle">
+                  Compliance
+                </Badge>
+              )}
+              <span>{item.risk_reason}</span>
+            </div>
           </div>
         )}
+
 
         <div className="mt-3 flex items-center gap-2">
           <Button size="sm" variant="secondary" className="h-7" onClick={onOpen}>Open</Button>

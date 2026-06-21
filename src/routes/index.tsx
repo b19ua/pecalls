@@ -5,6 +5,7 @@ import {
   Plug, Megaphone, FileBarChart, PhoneCall, Lock, Zap, Server, Globe2,
   CheckCircle2, Sparkles, Wand2, Building2, LogIn,
 } from "lucide-react";
+import lunaraLogo from "@/assets/lunara-logo.png.asset.json";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -35,7 +36,7 @@ const HEADING = { fontFamily: "'Space Grotesk', sans-serif" } as const;
 const BODY = { fontFamily: "'DM Sans', sans-serif" } as const;
 
 const WHATSAPP_URL =
-  "https://wa.me/37369085446?text=" +
+  "https://wa.me/37369085447?text=" +
   encodeURIComponent("Hi Lunara team, I'd like to book a demo of the platform.");
 
 function LandingPage() {
@@ -64,9 +65,7 @@ function Nav() {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:h-20 sm:px-6">
         <div className="flex items-center gap-10 min-w-0">
           <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 shadow-[0_4px_20px_rgba(16,185,129,0.25)]">
-              <Mic className="h-4 w-4 text-white" />
-            </div>
+            <img src={lunaraLogo.url} alt="Lunara" className="h-10 w-10 rounded-full object-contain" />
             <span className="text-xl font-bold tracking-tight text-slate-900" style={HEADING}>
               Lunara
             </span>
@@ -89,12 +88,6 @@ function Nav() {
           >
             <LogIn className="h-4 w-4" />
             <span>Login</span>
-          </Link>
-          <Link
-            to="/login"
-            className="hidden rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition-all hover:bg-emerald-100 sm:inline-flex"
-          >
-            Sign up
           </Link>
           <a
             href={WHATSAPP_URL}
@@ -698,9 +691,7 @@ function Footer() {
     <footer className="border-t border-slate-200 bg-white px-6 py-12">
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 text-xs text-slate-500 md:flex-row">
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-600">
-            <Mic className="h-3 w-3 text-white" />
-          </div>
+          <img src={lunaraLogo.url} alt="Lunara" className="h-7 w-7 rounded-full object-contain" />
           <span className="font-bold text-slate-900" style={HEADING}>Lunara</span>
           <span>© {new Date().getFullYear()} · Sovereign Voice AI</span>
         </div>

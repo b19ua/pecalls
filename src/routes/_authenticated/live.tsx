@@ -366,7 +366,7 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
         setViolations(Array.isArray(sig.compliance_violations) ? sig.compliance_violations : []);
         setMissing(Array.isArray(sig.missing_required) ? sig.missing_required : []);
       }
-      const { data: rules } = await supabase.from("compliance_rules" as never)
+      const { data: rules } = await supabase.from("compliance_rules")
         .select("id,text").eq("kind", "must_say").eq("active", true);
       if (!cancelled) setMustSayRules(((rules ?? []) as unknown) as { id: string; text: string }[]);
     };

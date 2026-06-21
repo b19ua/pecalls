@@ -30,7 +30,7 @@ export function ComplianceRulesSheet({ open, onOpenChange }: { open: boolean; on
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
-    const { data } = await supabase.from("compliance_rules" as never)
+    const { data } = await supabase.from("compliance_rules")
       .select("*").order("created_at", { ascending: false });
     setRules((data ?? []) as ComplianceRule[]);
   };
@@ -42,12 +42,12 @@ export function ComplianceRulesSheet({ open, onOpenChange }: { open: boolean; on
     setSaving(true);
     const { data: u } = await supabase.auth.getUser();
     const trigger_phrases = triggers.split(",").map((s) => s.trim()).filter(Boolean);
-    const { error } = await supabase.from("compliance_rules" as never).insert({
+    const { error } = await supabase.from("compliance_rules").insert({
       owner_id: u.user!.id,
       kind, text: text.trim(),
       correction: correction.trim() || null,
       trigger_phrases: trigger_phrases.length ? trigger_phrases : null,
-    } as never);
+    });
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     setText(""); setCorrection(""); setTriggers("");
@@ -56,12 +56,12 @@ export function ComplianceRulesSheet({ open, onOpenChange }: { open: boolean; on
   };
 
   const toggle = async (r: ComplianceRule) => {
-    await supabase.from("compliance_rules" as never).update({ active: !r.active } as never).eq("id", r.id);
+    await supabase.from("compliance_rules").update({ active: !r.active }).eq("id", r.id);
     void load();
   };
 
   const remove = async (r: ComplianceRule) => {
-    await supabase.from("compliance_rules" as never).delete().eq("id", r.id);
+    await supabase.from("compliance_rules").delete().eq("id", r.id);
     toast.success("Rule deleted");
     void load();
   };

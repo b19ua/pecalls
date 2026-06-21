@@ -333,8 +333,9 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
 
 
   useEffect(() => {
-    if (!item) { setLines([]); setSentWhispers([]); return; }
+    if (!item) { setLines([]); setSentWhispers([]); setViolations([]); setMissing([]); setMustSayRules([]); return; }
     let cancelled = false;
+
     const fetchTx = async () => {
       if (item.kind === "call") {
         const { data } = await supabase.from("calls").select("transcript").eq("id", item.id).maybeSingle();

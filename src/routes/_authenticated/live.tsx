@@ -10,11 +10,16 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Radio, AlertTriangle, Sparkles, Headphones, Send, PhoneOff, ArrowRightLeft,
-  Activity, ShieldAlert, MessageSquare,
+  Activity, ShieldAlert, MessageSquare, ShieldCheck, Check,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { ComplianceRulesSheet } from "@/components/live/ComplianceRulesSheet";
+
+type ComplianceViolation = { rule_id: string; rule_text: string; correction: string | null };
+type MissingRequired = { rule_id: string; rule_text: string };
+
 
 export const Route = createFileRoute("/_authenticated/live")({ component: LivePage });
 
@@ -92,6 +97,8 @@ function LivePage() {
   const [items, setItems] = useState<LiveItem[]>([]);
   const [now, setNow] = useState(Date.now());
   const [open, setOpen] = useState<LiveItem | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
+
 
   useEffect(() => {
     const tk = setInterval(() => setNow(Date.now()), 1000);
@@ -185,7 +192,13 @@ function LivePage() {
         <Badge variant="secondary" className="gap-1"><Activity className="h-3 w-3" /> {sorted.length} live</Badge>
         {redCount > 0 && <Badge className="gap-1 bg-red-500/15 text-red-400 border border-red-500/30"><ShieldAlert className="h-3 w-3" /> {redCount} red</Badge>}
         {amberCount > 0 && <Badge className="gap-1 bg-amber-500/15 text-amber-400 border border-amber-500/30"><AlertTriangle className="h-3 w-3" /> {amberCount} amber</Badge>}
+        <div className="ml-auto">
+          <Button size="sm" variant="outline" onClick={() => setRulesOpen(true)} className="gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" /> Rules
+          </Button>
+        </div>
       </div>
+
 
       {topAlert?.risk_reason && (
         <Card className={cn(
@@ -223,6 +236,8 @@ function LivePage() {
       )}
 
       <CallDrawer item={open} onClose={() => setOpen(null)} />
+      <ComplianceRulesSheet open={rulesOpen} onOpenChange={setRulesOpen} />
+
     </div>
   );
 }
@@ -269,10 +284,20 @@ function CallCard({ item, now, onOpen }: { item: LiveItem; now: number; onOpen: 
               ? "bg-red-500/10 border-red-500/30 text-red-300 font-semibold"
               : "bg-amber-500/10 border-amber-500/30 text-amber-300"
           )}>
-            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-            <span>{item.risk_reason}</span>
+            {item.primary_signal === "compliance_risk"
+              ? <ShieldCheck className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              : <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
+            <div className="min-w-0 flex-1">
+              {item.primary_signal === "compliance_risk" && (
+                <Badge className="mr-1.5 h-4 px-1.5 text-[9px] uppercase tracking-wider bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40 align-middle">
+                  Compliance
+                </Badge>
+              )}
+              <span>{item.risk_reason}</span>
+            </div>
           </div>
         )}
+
 
         <div className="mt-3 flex items-center gap-2">
           <Button size="sm" variant="secondary" className="h-7" onClick={onOpen}>Open</Button>
@@ -301,11 +326,16 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
   const [whisper, setWhisper] = useState("");
   const [sending, setSending] = useState(false);
   const [sentWhispers, setSentWhispers] = useState<SentWhisper[]>([]);
+  const [violations, setViolations] = useState<ComplianceViolation[]>([]);
+  const [missing, setMissing] = useState<MissingRequired[]>([]);
+  const [mustSayRules, setMustSayRules] = useState<{ id: string; text: string }[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+
   useEffect(() => {
-    if (!item) { setLines([]); setSentWhispers([]); return; }
+    if (!item) { setLines([]); setSentWhispers([]); setViolations([]); setMissing([]); setMustSayRules([]); return; }
     let cancelled = false;
+
     const fetchTx = async () => {
       if (item.kind === "call") {
         const { data } = await supabase.from("calls").select("transcript").eq("id", item.id).maybeSingle();
@@ -326,8 +356,23 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
         .order("created_at", { ascending: false }).limit(8);
       if (!cancelled) setSentWhispers((data ?? []) as SentWhisper[]);
     };
+    const fetchCompliance = async () => {
+      const { data: ev } = await supabase.from("call_analysis_events")
+        .select("signals")
+        .eq("call_id", item.id).eq("call_kind", item.kind)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const sig = (ev?.signals ?? {}) as { compliance_violations?: ComplianceViolation[]; missing_required?: MissingRequired[] };
+      if (!cancelled) {
+        setViolations(Array.isArray(sig.compliance_violations) ? sig.compliance_violations : []);
+        setMissing(Array.isArray(sig.missing_required) ? sig.missing_required : []);
+      }
+      const { data: rules } = await supabase.from("compliance_rules")
+        .select("id,text").eq("kind", "must_say").eq("active", true);
+      if (!cancelled) setMustSayRules(((rules ?? []) as unknown) as { id: string; text: string }[]);
+    };
     void fetchTx();
     void fetchWhispers();
+    void fetchCompliance();
     const channels = [
       supabase.channel(`drawer-${item.kind}-${item.id}`)
         .on("postgres_changes",
@@ -338,8 +383,12 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
         .on("postgres_changes",
           { event: "*", schema: "public", table: "whispers", filter: `call_id=eq.${item.id}` },
           () => void fetchWhispers())
+        .on("postgres_changes",
+          { event: "INSERT", schema: "public", table: "call_analysis_events", filter: `call_id=eq.${item.id}` },
+          () => void fetchCompliance())
         .subscribe(),
     ];
+
     return () => { cancelled = true; channels.forEach((c) => supabase.removeChannel(c)); };
   }, [item]);
 
@@ -387,6 +436,41 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
             </div>
           </div>
         )}
+
+        {(violations.length > 0 || mustSayRules.length > 0) && (
+          <div className="mx-5 mt-3 rounded-lg border border-border bg-card/40 px-3 py-2.5 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <ShieldCheck className="h-3.5 w-3.5" /> Compliance
+            </div>
+            {violations.length > 0 && (
+              <div className="space-y-1.5">
+                {violations.map((v) => (
+                  <div key={v.rule_id} className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-xs">
+                    <div className="text-red-300 font-medium">⚠ {v.rule_text}</div>
+                    {v.correction && <div className="text-red-200/80 mt-0.5">Say instead: {v.correction}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {mustSayRules.length > 0 && (
+              <ul className="space-y-1">
+                {mustSayRules.map((r) => {
+                  const pending = missing.some((m) => m.rule_id === r.id);
+                  return (
+                    <li key={r.id} className="flex items-start gap-2 text-xs">
+                      {pending
+                        ? <span className="mt-0.5 h-3.5 w-3.5 rounded-full border border-amber-500/50 shrink-0" />
+                        : <Check className="h-3.5 w-3.5 mt-0.5 text-emerald-400 shrink-0" />}
+                      <span className={cn(pending ? "text-amber-300" : "text-muted-foreground line-through")}>{r.text}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+
+
 
         <ScrollArea className="flex-1 px-5 py-3" ref={scrollRef as never}>
           <div className="space-y-2">

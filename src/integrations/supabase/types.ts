@@ -560,6 +560,42 @@ export type Database = {
           },
         ]
       }
+      compliance_rules: {
+        Row: {
+          active: boolean
+          correction: string | null
+          created_at: string
+          id: string
+          kind: string
+          owner_id: string
+          text: string
+          trigger_phrases: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          correction?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          owner_id?: string
+          text: string
+          trigger_phrases?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          correction?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          owner_id?: string
+          text?: string
+          trigger_phrases?: string[] | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       copilot_agents: {
         Row: {
           channel_binding: string | null

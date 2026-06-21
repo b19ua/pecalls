@@ -294,14 +294,17 @@ function CallCard({ item, now, onOpen }: { item: LiveItem; now: number; onOpen: 
 
 type TranscriptLine = { who: string; text: string; ts: string };
 
+type SentWhisper = { id: string; text: string; created_at: string; read_at: string | null };
+
 function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => void }) {
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [whisper, setWhisper] = useState("");
   const [sending, setSending] = useState(false);
+  const [sentWhispers, setSentWhispers] = useState<SentWhisper[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!item) { setLines([]); return; }
+    if (!item) { setLines([]); setSentWhispers([]); return; }
     let cancelled = false;
     const fetchTx = async () => {
       if (item.kind === "call") {
@@ -316,7 +319,15 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
         if (!cancelled) setLines(arr);
       }
     };
+    const fetchWhispers = async () => {
+      const { data } = await supabase.from("whispers")
+        .select("id,text,created_at,read_at")
+        .eq("call_id", item.id).eq("call_kind", item.kind)
+        .order("created_at", { ascending: false }).limit(8);
+      if (!cancelled) setSentWhispers((data ?? []) as SentWhisper[]);
+    };
     void fetchTx();
+    void fetchWhispers();
     const channels = [
       supabase.channel(`drawer-${item.kind}-${item.id}`)
         .on("postgres_changes",
@@ -324,6 +335,9 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
             ? { event: "UPDATE", schema: "public", table: "calls", filter: `id=eq.${item.id}` }
             : { event: "INSERT", schema: "public", table: "copilot_transcript", filter: `session_id=eq.${item.id}` },
           () => void fetchTx())
+        .on("postgres_changes",
+          { event: "*", schema: "public", table: "whispers", filter: `call_id=eq.${item.id}` },
+          () => void fetchWhispers())
         .subscribe(),
     ];
     return () => { cancelled = true; channels.forEach((c) => supabase.removeChannel(c)); };
@@ -387,17 +401,35 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
         </ScrollArea>
 
         {item?.source === "human" ? (
-          <div className="border-t border-border p-3 flex gap-2">
-            <Input
-              placeholder="Whisper to manager…"
-              value={whisper}
-              onChange={(e) => setWhisper(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendWhisper()}
-              disabled={sending}
-            />
-            <Button onClick={sendWhisper} disabled={sending || !whisper.trim()} size="icon">
-              <Send className="h-4 w-4" />
-            </Button>
+          <div className="border-t border-border p-3 space-y-2">
+            {sentWhispers.length > 0 && (
+              <div className="space-y-1 max-h-32 overflow-auto">
+                {sentWhispers.map((w) => (
+                  <div key={w.id} className="text-xs flex items-start gap-2 rounded-md bg-muted/40 px-2 py-1">
+                    <MessageSquare className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                    <span className="flex-1 truncate">{w.text}</span>
+                    <span className={cn(
+                      "text-[10px] shrink-0",
+                      w.read_at ? "text-emerald-400" : "text-muted-foreground"
+                    )}>
+                      {w.read_at ? "✓ доставлено" : "отправлено"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Whisper to manager…"
+                value={whisper}
+                onChange={(e) => setWhisper(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendWhisper()}
+                disabled={sending}
+              />
+              <Button onClick={sendWhisper} disabled={sending || !whisper.trim()} size="icon">
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         ) : item?.primary_signal === "handoff_needed" ? (
           <div className="border-t border-border p-3 flex gap-2">

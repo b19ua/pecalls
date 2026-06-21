@@ -43,6 +43,7 @@ function Page() {
   const [session, setSession] = useState<Session | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [transcript, setTranscript] = useState<Transcript[]>([]);
+  const [whispers, setWhispers] = useState<Whisper[]>([]);
 
   const reload = async () => {
     try {
@@ -53,8 +54,30 @@ function Page() {
     } catch (e) { toast.error((e as Error).message); }
   };
 
+  // Auto-ack a whisper as "delivered" (read_at = now) so the supervisor
+  // knows it landed. Fire-and-forget; RLS scopes by owner_id.
+  const ackWhisperDelivered = async (w: Whisper) => {
+    if (w.read_at) return;
+    try {
+      await supabase.from("whispers")
+        .update({ read_at: new Date().toISOString() })
+        .eq("id", w.id).is("read_at", null);
+    } catch (e) { console.error("whisper ack", e); }
+  };
+
   useEffect(() => {
     reload();
+    // Load any whispers already addressed to this session, then mark delivered.
+    void (async () => {
+      const { data } = await supabase.from("whispers")
+        .select("id,text,created_at,read_at")
+        .eq("call_id", sessionId).eq("call_kind", "copilot_session")
+        .order("created_at", { ascending: true });
+      const list = (data ?? []) as Whisper[];
+      setWhispers(list);
+      list.filter((w) => !w.read_at).forEach((w) => void ackWhisperDelivered(w));
+    })();
+
     const ch = supabase
       .channel(`copilot-session-${sessionId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "copilot_suggestions", filter: `session_id=eq.${sessionId}` },
@@ -65,6 +88,15 @@ function Page() {
         (p) => setTranscript((t) => [...t, p.new as Transcript]))
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "copilot_sessions", filter: `id=eq.${sessionId}` },
         (p) => setSession(p.new as Session))
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "whispers", filter: `call_id=eq.${sessionId}` },
+        (p) => {
+          const w = p.new as Whisper;
+          setWhispers((arr) => [...arr, w]);
+          toast.info(`💬 Шёпот: ${w.text}`, { duration: 8000 });
+          void ackWhisperDelivered(w);
+        })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "whispers", filter: `call_id=eq.${sessionId}` },
+        (p) => setWhispers((arr) => arr.map((x) => x.id === (p.new as Whisper).id ? (p.new as Whisper) : x)))
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [sessionId]);

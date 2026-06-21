@@ -691,9 +691,7 @@ function Footer() {
     <footer className="border-t border-slate-200 bg-white px-6 py-12">
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 text-xs text-slate-500 md:flex-row">
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-600">
-            <Mic className="h-3 w-3 text-white" />
-          </div>
+          <img src={lunaraLogo.url} alt="Lunara" className="h-7 w-7 rounded-full object-contain" />
           <span className="font-bold text-slate-900" style={HEADING}>Lunara</span>
           <span>© {new Date().getFullYear()} · Sovereign Voice AI</span>
         </div>

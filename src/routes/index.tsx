@@ -5,6 +5,7 @@ import {
   Plug, Megaphone, FileBarChart, PhoneCall, Lock, Zap, Server, Globe2,
   CheckCircle2, Sparkles, Wand2, Building2, LogIn,
 } from "lucide-react";
+import lunaraLogo from "@/assets/lunara-logo.png.asset.json";
 
 export const Route = createFileRoute("/")({
   head: () => ({

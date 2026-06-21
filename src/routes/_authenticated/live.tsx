@@ -326,7 +326,11 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
   const [whisper, setWhisper] = useState("");
   const [sending, setSending] = useState(false);
   const [sentWhispers, setSentWhispers] = useState<SentWhisper[]>([]);
+  const [violations, setViolations] = useState<ComplianceViolation[]>([]);
+  const [missing, setMissing] = useState<MissingRequired[]>([]);
+  const [mustSayRules, setMustSayRules] = useState<{ id: string; text: string }[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
 
   useEffect(() => {
     if (!item) { setLines([]); setSentWhispers([]); return; }

@@ -609,12 +609,19 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       }
     } catch { /* noop */ }
     try { gemini?.close(); } catch { /* noop */ }
-    if (callSid && transcript.length) {
+    if (callSid) {
       try {
-        await supa.from("calls").update({ transcript }).eq("twilio_call_sid", callSid);
-      } catch (e) { console.error("save transcript", e); }
-      // Generate summary asynchronously
-      void generateSummary(callSid, transcript, ctx?.language || "ru-RU");
+        const patch: Record<string, unknown> = {
+          status: "completed",
+          ended_at: new Date().toISOString(),
+        };
+        if (transcript.length) patch.transcript = transcript;
+        await supa.from("calls").update(patch).eq("twilio_call_sid", callSid);
+      } catch (e) { console.error("save transcript / mark ended", e); }
+      if (transcript.length) {
+        // Generate summary asynchronously
+        void generateSummary(callSid, transcript, ctx?.language || "ru-RU");
+      }
     }
   };
   twilio.onerror = (e) => log("twilio ERROR", (e as ErrorEvent).message || String(e));

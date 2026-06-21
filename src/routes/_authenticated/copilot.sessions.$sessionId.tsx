@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft, Check, Lightbulb, Radio, MessageSquare } from "lucide-react";
 import { getCopilotSession, acknowledgeSuggestion } from "@/lib/copilot.functions";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/copilot/sessions/$sessionId")({ component: Page });
 
@@ -36,6 +37,7 @@ function priorityColor(p: string) {
 }
 
 function Page() {
+  const { t } = useI18n();
   const { sessionId } = useParams({ from: "/_authenticated/copilot/sessions/$sessionId" });
   const navigate = useNavigate();
   const get = useServerFn(getCopilotSession);
@@ -54,8 +56,6 @@ function Page() {
     } catch (e) { toast.error((e as Error).message); }
   };
 
-  // Auto-ack a whisper as "delivered" (read_at = now) so the supervisor
-  // knows it landed. Fire-and-forget; RLS scopes by owner_id.
   const ackWhisperDelivered = async (w: Whisper) => {
     if (w.read_at) return;
     try {
@@ -67,7 +67,6 @@ function Page() {
 
   useEffect(() => {
     reload();
-    // Load any whispers already addressed to this session, then mark delivered.
     void (async () => {
       const { data } = await supabase.from("whispers")
         .select("id,text,created_at,read_at")
@@ -85,14 +84,14 @@ function Page() {
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "copilot_suggestions", filter: `session_id=eq.${sessionId}` },
         (p) => setSuggestions((s) => s.map((x) => x.id === (p.new as Suggestion).id ? (p.new as Suggestion) : x)))
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "copilot_transcript", filter: `session_id=eq.${sessionId}` },
-        (p) => setTranscript((t) => [...t, p.new as Transcript]))
+        (p) => setTranscript((tr) => [...tr, p.new as Transcript]))
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "copilot_sessions", filter: `id=eq.${sessionId}` },
         (p) => setSession(p.new as Session))
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "whispers", filter: `call_id=eq.${sessionId}` },
         (p) => {
           const w = p.new as Whisper;
           setWhispers((arr) => [...arr, w]);
-          toast.info(`💬 Шёпот: ${w.text}`, { duration: 8000 });
+          toast.info(`💬 ${t("cop.sess.whisperToast")}: ${w.text}`, { duration: 8000 });
           void ackWhisperDelivered(w);
         })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "whispers", filter: `call_id=eq.${sessionId}` },
@@ -105,18 +104,18 @@ function Page() {
     try { await ack({ data: { id, used } }); } catch (e) { toast.error((e as Error).message); }
   };
 
-  if (!session) return <div className="p-8 text-muted-foreground">Загрузка…</div>;
+  if (!session) return <div className="p-8 text-muted-foreground">{t("cop.sess.loading")}</div>;
 
   const live = session.status === "active";
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <Button variant="ghost" size="sm" className="mb-3" onClick={() => navigate({ to: "/copilot" })}>
-        <ArrowLeft className="h-4 w-4 mr-1" /> Назад
+        <ArrowLeft className="h-4 w-4 mr-1" /> {t("cop.sess.back")}
       </Button>
       <PageHeader
-        title={session.customer_phone || session.call_sid || "Сессия"}
-        description={`${session.manager_name ?? "—"} · начало ${new Date(session.started_at).toLocaleString()}`}
+        title={session.customer_phone || session.call_sid || t("cop.sess.session")}
+        description={`${session.manager_name ?? "—"} · ${t("cop.sess.startedAt")} ${new Date(session.started_at).toLocaleString()}`}
         actions={
           <Badge variant={live ? "default" : "secondary"} className="gap-1.5">
             {live ? <Radio className="h-3 w-3 animate-pulse" /> : null}
@@ -130,7 +129,7 @@ function Page() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
               <MessageSquare className="h-4 w-4 text-amber-400" />
-              <span className="text-sm font-medium">Шёпот супервайзера</span>
+              <span className="text-sm font-medium">{t("cop.sess.whisper")}</span>
               <Badge variant="secondary" className="ml-auto">{whispers.length}</Badge>
             </div>
             <div className="space-y-1.5 max-h-40 overflow-auto">
@@ -152,14 +151,14 @@ function Page() {
         <Card><CardContent className="p-0">
           <div className="px-5 py-3 border-b flex items-center gap-2">
             <Lightbulb className="h-4 w-4 text-primary" />
-            <span className="font-medium text-sm">Подсказки</span>
+            <span className="font-medium text-sm">{t("cop.sess.tips")}</span>
             <Badge variant="secondary" className="ml-auto">{suggestions.length}</Badge>
           </div>
           <ScrollArea className="h-[60vh]">
             <div className="p-4 space-y-3">
               {suggestions.length === 0 ? (
                 <div className="text-sm text-muted-foreground text-center py-8">
-                  {live ? "Ожидаем первую подсказку…" : "Подсказок не было."}
+                  {live ? t("cop.sess.waitFirst") : t("cop.sess.noTips")}
                 </div>
               ) : suggestions.map((s) => (
                 <div key={s.id} className={`rounded-lg border p-3 ${s.acknowledged ? "opacity-60" : ""}`}>
@@ -175,10 +174,10 @@ function Page() {
                   {!s.acknowledged && (
                     <div className="flex gap-2 mt-2">
                       <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onAck(s.id, true)}>
-                        <Check className="h-3 w-3 mr-1" /> Использовал
+                        <Check className="h-3 w-3 mr-1" /> {t("cop.sess.used")}
                       </Button>
                       <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onAck(s.id, false)}>
-                        Закрыть
+                        {t("cop.sess.close")}
                       </Button>
                     </div>
                   )}
@@ -190,13 +189,13 @@ function Page() {
 
         <Card><CardContent className="p-0">
           <div className="px-5 py-3 border-b flex items-center gap-2">
-            <span className="font-medium text-sm">Транскрипт</span>
+            <span className="font-medium text-sm">{t("cop.sess.transcript")}</span>
             <Badge variant="secondary" className="ml-auto">{transcript.length}</Badge>
           </div>
           <ScrollArea className="h-[60vh]">
             <div className="p-4 space-y-2">
               {transcript.length === 0 ? (
-                <div className="text-sm text-muted-foreground text-center py-8">Пусто</div>
+                <div className="text-sm text-muted-foreground text-center py-8">{t("cop.sess.empty")}</div>
               ) : transcript.map((m) => (
                 <div key={m.id} className="text-sm">
                   <span className="font-semibold uppercase text-[10px] text-muted-foreground mr-2">{m.speaker}</span>
@@ -214,6 +213,7 @@ function Page() {
 }
 
 function SummaryCard({ summary, data }: { summary: string; data: Record<string, unknown> | null }) {
+  const { t } = useI18n();
   const d = (data ?? {}) as {
     customer_intent?: string; objections?: string[]; next_steps?: string[];
     sentiment?: string; outcome?: string; manager_score?: number; coaching_tips?: string[];
@@ -222,26 +222,26 @@ function SummaryCard({ summary, data }: { summary: string; data: Record<string, 
     <Card className="mt-4 border-primary/20"><CardContent className="p-5 space-y-4">
       <div>
         <div className="font-semibold text-sm mb-2 flex items-center gap-2">
-          <Lightbulb className="h-4 w-4 text-primary" /> AI-резюме звонка
+          <Lightbulb className="h-4 w-4 text-primary" /> {t("cop.sess.aiSummary")}
         </div>
         <div className="text-sm whitespace-pre-wrap">{summary}</div>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-        {d.customer_intent && <Field label="Намерение клиента" value={d.customer_intent} />}
-        {d.sentiment && <Field label="Эмоция" value={d.sentiment} />}
-        {d.outcome && <Field label="Итог" value={d.outcome} />}
+        {d.customer_intent && <Field label={t("cop.sess.customer_intent")} value={d.customer_intent} />}
+        {d.sentiment && <Field label={t("cop.sess.sentiment")} value={d.sentiment} />}
+        {d.outcome && <Field label={t("cop.sess.outcome")} value={d.outcome} />}
         {typeof d.manager_score === "number" && (
-          <Field label="Оценка менеджера" value={`${d.manager_score} / 10`} />
+          <Field label={t("cop.sess.manager_score")} value={`${d.manager_score} / 10`} />
         )}
       </div>
       {d.objections && d.objections.length > 0 && (
-        <ListBlock title="Возражения" items={d.objections} />
+        <ListBlock title={t("cop.sess.objections")} items={d.objections} />
       )}
       {d.next_steps && d.next_steps.length > 0 && (
-        <ListBlock title="Следующие шаги" items={d.next_steps} />
+        <ListBlock title={t("cop.sess.next_steps")} items={d.next_steps} />
       )}
       {d.coaching_tips && d.coaching_tips.length > 0 && (
-        <ListBlock title="Советы менеджеру" items={d.coaching_tips} />
+        <ListBlock title={t("cop.sess.coaching_tips")} items={d.coaching_tips} />
       )}
     </CardContent></Card>
   );

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Mic, MicOff, PhoneOff, Loader2, Volume2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n";
 
 type Status = "idle" | "connecting" | "live" | "ended" | "error";
 type Line = { role: "user" | "agent"; text: string; ts: number };
@@ -22,6 +23,7 @@ export function TestCallDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const { t } = useI18n();
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
@@ -58,7 +60,7 @@ export function TestCallDialog({
     try {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess.session?.access_token;
-      if (!token) throw new Error("Не авторизован");
+      if (!token) throw new Error(t("testcall.not_authorized"));
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -115,13 +117,12 @@ export function TestCallDialog({
               setTranscript((prev) => {
                 const last = prev[prev.length - 1];
                 if (last && last.role === msg.role && Date.now() - last.ts < 1500) {
-                  // append to last bubble
                   return [...prev.slice(0, -1), { ...last, text: last.text + msg.text }];
                 }
                 return [...prev, { role: msg.role, text: msg.text, ts: Date.now() }];
               });
             } else if (msg.type === "error") {
-              setError(msg.message || "Ошибка");
+              setError(msg.message || t("testcall.error"));
             }
           } catch { /* ignore */ }
           return;
@@ -135,12 +136,12 @@ export function TestCallDialog({
         setAgentLevel(Math.min(1, Math.sqrt(sum / Math.min(pcm.length, 1024)) * 3));
       };
 
-      ws.onerror = () => setError("Ошибка соединения");
+      ws.onerror = () => setError(t("testcall.conn_error"));
       ws.onclose = () => {
         if (status !== "ended") setStatus("ended");
       };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Не удалось запустить";
+      const msg = e instanceof Error ? e.message : t("testcall.start_failed");
       setError(msg);
       setStatus("error");
       toast.error(msg);
@@ -172,7 +173,7 @@ export function TestCallDialog({
     wsRef.current = null;
     try { procRef.current?.disconnect(); } catch { /* noop */ }
     try { sourceRef.current?.disconnect(); } catch { /* noop */ }
-    try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch { /* noop */ }
+    try { streamRef.current?.getTracks().forEach((track) => track.stop()); } catch { /* noop */ }
     try { inCtxRef.current?.close(); } catch { /* noop */ }
     try { outCtxRef.current?.close(); } catch { /* noop */ }
     procRef.current = null;
@@ -193,9 +194,9 @@ export function TestCallDialog({
       <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
         <div className="bg-gradient-to-br from-primary/10 via-background to-background p-6 pb-4 border-b">
           <DialogHeader>
-            <DialogTitle className="font-display text-xl">Тестовый звонок</DialogTitle>
+            <DialogTitle className="font-display text-xl">{t("testcall.title")}</DialogTitle>
             <DialogDescription>
-              Голосовой диалог с агентом «{agentName}» прямо в браузере. Без расхода Twilio.
+              {t("testcall.desc").replace("{name}", agentName)}
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -248,7 +249,7 @@ export function TestCallDialog({
                   isLive ? "bg-emerald-500 animate-pulse" : isConnecting ? "bg-amber-500 animate-pulse" : status === "error" ? "bg-destructive" : "bg-muted-foreground"
                 }`}
               />
-              {isLive ? "В эфире" : isConnecting ? "Подключение…" : status === "ended" ? "Завершено" : status === "error" ? "Ошибка" : "Готов"}
+              {isLive ? t("testcall.live") : isConnecting ? t("testcall.connecting") : status === "ended" ? t("testcall.ended") : status === "error" ? t("testcall.error_status") : t("testcall.ready")}
             </span>
           </div>
 
@@ -256,7 +257,7 @@ export function TestCallDialog({
           <div className="h-44 rounded-lg border bg-muted/30 p-3 overflow-y-auto space-y-2 text-sm">
             {transcript.length === 0 ? (
               <p className="text-muted-foreground text-center mt-14 text-xs">
-                {isLive ? "Говорите — агент вас слышит" : "Транскрипт появится здесь"}
+                {isLive ? t("testcall.speak_hint") : t("testcall.transcript_hint")}
               </p>
             ) : (
               transcript.map((l, i) => (
@@ -284,7 +285,7 @@ export function TestCallDialog({
           <div className="flex items-center justify-center gap-3">
             {!isLive && !isConnecting ? (
               <Button onClick={start} className="bg-gradient-primary shadow-elegant px-6">
-                <Mic className="h-4 w-4 mr-2" /> Начать разговор
+                <Mic className="h-4 w-4 mr-2" /> {t("testcall.start")}
               </Button>
             ) : (
               <>
@@ -294,7 +295,7 @@ export function TestCallDialog({
                   onClick={() => setMuted((m) => !m)}
                   className="rounded-full h-12 w-12"
                   disabled={!isLive}
-                  aria-label={muted ? "Включить микрофон" : "Выключить микрофон"}
+                  aria-label={muted ? t("testcall.unmute") : t("testcall.mute")}
                 >
                   {muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                 </Button>
@@ -303,7 +304,7 @@ export function TestCallDialog({
                   size="icon"
                   onClick={stop}
                   className="rounded-full h-14 w-14 shadow-elegant"
-                  aria-label="Завершить"
+                  aria-label={t("testcall.end")}
                 >
                   <PhoneOff className="h-6 w-6" />
                 </Button>

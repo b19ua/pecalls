@@ -14,6 +14,7 @@ import { Save, Trash2, ArrowLeft, Copy, ExternalLink, Phone, Plug, AlertCircle, 
 import { getCopilotAgent, saveCopilotAgent, deleteCopilotAgent } from "@/lib/copilot.functions";
 import { TestCallDialog } from "@/components/copilot/TestCallDialog";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/copilot/agents/$agentId")({ component: Page });
 
@@ -70,6 +71,7 @@ const EMPTY: Agent = {
 function Page() {
   const { agentId } = useParams({ from: "/_authenticated/copilot/agents/$agentId" });
   const navigate = useNavigate();
+  const { t } = useI18n();
   const isNew = agentId === "new";
   const get = useServerFn(getCopilotAgent);
   const save = useServerFn(saveCopilotAgent);
@@ -98,11 +100,11 @@ function Page() {
   };
 
   const onSave = async () => {
-    if (!agent.name.trim()) { toast.error("Укажите имя"); return; }
+    if (!agent.name.trim()) { toast.error(t("cop.nameRequired")); return; }
     setSaving(true);
     try {
       const { id } = await save({ data: { id: isNew ? null : agentId, data: agent } });
-      toast.success("Сохранено");
+      toast.success(t("cop.saved"));
       if (isNew) navigate({ to: "/copilot/agents/$agentId", params: { agentId: id } });
     } catch (e) {
       toast.error((e as Error).message);
@@ -111,33 +113,33 @@ function Page() {
 
   const onDelete = async () => {
     if (isNew) return;
-    if (!confirm("Удалить copilot-агента?")) return;
+    if (!confirm(t("cop.confirmDelete"))) return;
     try {
       await del({ data: { id: agentId } });
-      toast.success("Удалено");
+      toast.success(t("cop.deleted"));
       navigate({ to: "/copilot/agents" });
     } catch (e) { toast.error((e as Error).message); }
   };
 
-  if (loading) return <div className="p-8 text-muted-foreground">Загрузка…</div>;
+  if (loading) return <div className="p-8 text-muted-foreground">{t("cop.loading")}</div>;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
       <Button variant="ghost" size="sm" className="mb-3" onClick={() => navigate({ to: "/copilot/agents" })}>
-        <ArrowLeft className="h-4 w-4 mr-1" /> Назад
+        <ArrowLeft className="h-4 w-4 mr-1" /> {t("cop.back")}
       </Button>
       <PageHeader
-        title={isNew ? "Новый copilot-агент" : agent.name || "Copilot-агент"}
-        description="Конфигурация ИИ-наблюдателя для звонков менеджеров. Поведение можно менять без перезапуска."
+        title={isNew ? t("cop.newAgentTitle") : agent.name || "Copilot-агент"}
+        description={t("cop.agentFormDesc")}
         actions={
           <div className="flex flex-wrap gap-2">
             {!isNew && agent.enabled && (
               <Button variant="default" className="bg-gradient-to-r from-primary to-primary/70" onClick={() => setTestOpen(true)}>
-                <PhoneCall className="h-4 w-4 mr-1" /> Тестовый звонок
+                <PhoneCall className="h-4 w-4 mr-1" /> {t("cop.testCall")}
               </Button>
             )}
-            {!isNew && <Button variant="outline" onClick={onDelete}><Trash2 className="h-4 w-4 mr-1" />Удалить</Button>}
-            <Button onClick={onSave} disabled={saving}><Save className="h-4 w-4 mr-1" />{saving ? "Сохранение…" : "Сохранить"}</Button>
+            {!isNew && <Button variant="outline" onClick={onDelete}><Trash2 className="h-4 w-4 mr-1" />{t("cop.delete")}</Button>}
+            <Button onClick={onSave} disabled={saving}><Save className="h-4 w-4 mr-1" />{saving ? t("cop.saving") : t("cop.save")}</Button>
           </div>
         }
       />
@@ -154,11 +156,11 @@ function Page() {
         <Card><CardContent className="p-5 space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <Label>Имя</Label>
-              <Input value={agent.name} onChange={(e) => update("name", e.target.value)} placeholder="Например: Sales Copilot RU" />
+              <Label>{t("cop.labelName")}</Label>
+              <Input value={agent.name} onChange={(e) => update("name", e.target.value)} placeholder={t("cop.namePlaceholder")} />
             </div>
             <div>
-              <Label>Язык анализа</Label>
+              <Label>{t("cop.labelLang")}</Label>
               <Select value={agent.language} onValueChange={(v) => update("language", v as Agent["language"])}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -170,13 +172,13 @@ function Page() {
             </div>
           </div>
           <div>
-            <Label>Описание</Label>
-            <Input value={agent.description} onChange={(e) => update("description", e.target.value)} placeholder="Для какой команды / продукта" />
+            <Label>{t("cop.labelDesc")}</Label>
+            <Input value={agent.description} onChange={(e) => update("description", e.target.value)} placeholder={t("cop.descPlaceholder")} />
           </div>
           <div className="flex items-center justify-between border rounded-lg p-3">
             <div>
-              <div className="font-medium text-sm">Включён</div>
-              <div className="text-xs text-muted-foreground">Анализирует новые сессии</div>
+              <div className="font-medium text-sm">{t("cop.enabled")}</div>
+              <div className="text-xs text-muted-foreground">{t("cop.enabledHint")}</div>
             </div>
             <Switch checked={agent.enabled} onCheckedChange={(v) => update("enabled", v)} />
           </div>
@@ -184,12 +186,12 @@ function Page() {
 
         <Card><CardContent className="p-5 space-y-4">
           <div>
-            <Label>Системный промпт</Label>
+            <Label>{t("cop.labelPrompt")}</Label>
             <Textarea rows={10} value={agent.system_prompt} onChange={(e) => update("system_prompt", e.target.value)} />
-            <p className="text-xs text-muted-foreground mt-1">Правила поведения copilot-а. Применяются мгновенно при следующем звонке.</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("cop.promptHint")}</p>
           </div>
           <div>
-            <Label>Категории подсказок</Label>
+            <Label>{t("cop.labelCategories")}</Label>
             <div className="flex flex-wrap gap-2 mt-2">
               {ALL_CATEGORIES.map((c) => {
                 const active = agent.suggestion_categories.includes(c);
@@ -204,21 +206,21 @@ function Page() {
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="flex items-center justify-between border rounded-lg p-3">
               <div>
-                <div className="font-medium text-sm">Анализ эмоций</div>
+                <div className="font-medium text-sm">{t("cop.emotionTracking")}</div>
                 <div className="text-xs text-muted-foreground">Frustration / interest / hesitation</div>
               </div>
               <Switch checked={agent.emotion_tracking_enabled} onCheckedChange={(v) => update("emotion_tracking_enabled", v)} />
             </div>
             <div className="flex items-center justify-between border rounded-lg p-3">
               <div>
-                <div className="font-medium text-sm">Работа с возражениями</div>
-                <div className="text-xs text-muted-foreground">Фреймворк AAA</div>
+                <div className="font-medium text-sm">{t("cop.objectionHandling")}</div>
+                <div className="text-xs text-muted-foreground">{t("cop.objectionHandlingHint")}</div>
               </div>
               <Switch checked={agent.objection_handling_enabled} onCheckedChange={(v) => update("objection_handling_enabled", v)} />
             </div>
           </div>
           <div>
-            <Label>Мин. интервал между подсказками (мс)</Label>
+            <Label>{t("cop.labelInterval")}</Label>
             <Input
               type="number"
               min={1000}
@@ -227,44 +229,42 @@ function Page() {
               value={agent.min_suggestion_interval_ms}
               onChange={(e) => update("min_suggestion_interval_ms", Number(e.target.value) || 4000)}
             />
-            <p className="text-xs text-muted-foreground mt-1">Чтобы не заваливать менеджера. 4000 мс — рекомендуется.</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("cop.intervalHint")}</p>
           </div>
         </CardContent></Card>
 
         <Card><CardContent className="p-5 space-y-4">
-          <div className="font-semibold text-sm">Контекст знаний</div>
+          <div className="font-semibold text-sm">{t("cop.knowledgeContext")}</div>
           <div>
-            <Label>Продукт</Label>
-            <Textarea rows={3} value={agent.product_context} onChange={(e) => update("product_context", e.target.value)} placeholder="Что продаём, ключевые фичи, USP" />
+            <Label>{t("cop.labelProduct")}</Label>
+            <Textarea rows={3} value={agent.product_context} onChange={(e) => update("product_context", e.target.value)} placeholder={t("cop.productPlaceholder")} />
           </div>
           <div>
-            <Label>Конкуренты</Label>
-            <Textarea rows={3} value={agent.competitor_context} onChange={(e) => update("competitor_context", e.target.value)} placeholder="Чем отличаемся, типовые сравнения" />
+            <Label>{t("cop.labelCompetitors")}</Label>
+            <Textarea rows={3} value={agent.competitor_context} onChange={(e) => update("competitor_context", e.target.value)} placeholder={t("cop.competitorsPlaceholder")} />
           </div>
           <div>
-            <Label>Цены / тарифы</Label>
-            <Textarea rows={3} value={agent.pricing_context} onChange={(e) => update("pricing_context", e.target.value)} placeholder="Сколько стоит, скидки, условия" />
+            <Label>{t("cop.labelPricing")}</Label>
+            <Textarea rows={3} value={agent.pricing_context} onChange={(e) => update("pricing_context", e.target.value)} placeholder={t("cop.pricingPlaceholder")} />
           </div>
           <div>
-            <Label>Доп. подсказки знаний</Label>
-            <Textarea rows={3} value={agent.knowledge_hint} onChange={(e) => update("knowledge_hint", e.target.value)} placeholder="Любые факты, на которые ссылаться" />
+            <Label>{t("cop.labelKnowledgeHint")}</Label>
+            <Textarea rows={3} value={agent.knowledge_hint} onChange={(e) => update("knowledge_hint", e.target.value)} placeholder={t("cop.knowledgeHintPlaceholder")} />
           </div>
         </CardContent></Card>
 
         <ConnectPanel agentId={isNew ? null : agentId} />
 
         <Card><CardContent className="p-5 space-y-4">
-          <div className="font-semibold text-sm">Привязка канала (на будущее)</div>
+          <div className="font-semibold text-sm">{t("cop.channelBinding")}</div>
           <div>
-            <Label>Channel binding (необязательно)</Label>
+            <Label>{t("cop.channelBindingLabel")}</Label>
             <Input
               value={agent.channel_binding}
               onChange={(e) => update("channel_binding", e.target.value)}
-              placeholder="Напр. имя очереди, SIP trunk или Twilio sub-account"
+              placeholder={t("cop.channelBindingPlaceholder")}
             />
-            <p className="text-xs text-muted-foreground mt-1">
-              MVP работает на Twilio Media Streams (см. блок «Как подключить» выше). Это поле зарезервировано для Phase&nbsp;2 — подключения Asterisk/3CX/FreePBX через AudioSocket.
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">{t("cop.channelBindingHint")}</p>
           </div>
         </CardContent></Card>
       </div>
@@ -272,20 +272,25 @@ function Page() {
   );
 }
 
-function copy(text: string) {
-  navigator.clipboard.writeText(text).then(
-    () => toast.success("Скопировано"),
-    () => toast.error("Не удалось скопировать"),
-  );
-}
-
 function CopyRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  const { t } = useI18n();
   return (
     <div>
       <Label className="text-xs">{label}</Label>
       <div className="flex gap-2 mt-1">
         <Input value={value} readOnly className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
-        <Button type="button" variant="outline" size="icon" onClick={() => copy(value)} title="Копировать">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          title={t("cop.copy")}
+          onClick={() =>
+            navigator.clipboard.writeText(value).then(
+              () => toast.success(t("cop.copied")),
+              () => toast.error(t("cop.copyFailed")),
+            )
+          }
+        >
           <Copy className="h-4 w-4" />
         </Button>
       </div>
@@ -295,13 +300,15 @@ function CopyRow({ label, value, hint }: { label: string; value: string; hint?: 
 }
 
 function ConnectPanel({ agentId }: { agentId: string | null }) {
+  const { t } = useI18n();
+
   if (!agentId) {
     return (
       <Card className="border-dashed">
         <CardContent className="p-5 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
           <div className="text-sm text-muted-foreground">
-            Сохраните агента — после этого появится блок «Как подключить» с готовыми ссылками для Twilio и инструкцией шаг за шагом.
+            {t("cop.connectSaveFirst")}
           </div>
         </CardContent>
       </Card>
@@ -311,21 +318,20 @@ function ConnectPanel({ agentId }: { agentId: string | null }) {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const isPreview = origin.includes("lovable.app") && origin.includes("preview");
   const baseHttps = origin || "https://<ваш-домен>";
-  // Twilio Voice webhook (TwiML): listens silently + dials manager
   const twimlUrl = `${baseHttps}/api/public/twilio/copilot-stream?agent_id=${agentId}&dial=<E164_номер_менеджера>&manager=<имя>`;
   const wssBase = baseHttps.replace(/^https?:/, "wss:");
-  const directWss = `${wssBase}/api/public/voice-ws/copilot?agent_id=${agentId}`; // reserved for AudioSocket / Asterisk
+  const directWss = `${wssBase}/api/public/voice-ws/copilot?agent_id=${agentId}`;
 
   return (
     <Card className="border-primary/40">
       <CardContent className="p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Plug className="h-5 w-5 text-primary" />
-          <div className="font-semibold">Как подключить copilot к звонкам</div>
+          <div className="font-semibold">{t("cop.connectTitle")}</div>
         </div>
 
         <div className="rounded-lg bg-muted/40 p-3 text-sm space-y-1">
-          <div className="font-medium">Вариант A — Twilio (рекомендуется для MVP)</div>
+          <div className="font-medium">{t("cop.connectOptionA")}</div>
           <ol className="list-decimal list-inside space-y-1 text-muted-foreground text-xs">
             <li>В Twilio Console → <b>Phone Numbers</b> выберите номер, на который будут приходить клиенты.</li>
             <li>В разделе <b>A call comes in</b> выберите <b>Webhook</b>, метод <b>HTTP POST</b>.</li>
@@ -337,27 +343,27 @@ function ConnectPanel({ agentId }: { agentId: string | null }) {
         <CopyRow
           label="Twilio Voice webhook URL"
           value={twimlUrl}
-          hint="Параметры: agent_id (этот copilot), dial (E.164 номер менеджера), manager (имя для дашборда)."
+          hint={t("cop.webhookUrlHint")}
         />
 
         <div className="rounded-lg bg-muted/40 p-3 text-sm space-y-1">
-          <div className="font-medium flex items-center gap-1.5"><Phone className="h-4 w-4" /> Вариант B — исходящий звонок менеджера через Twilio</div>
+          <div className="font-medium flex items-center gap-1.5"><Phone className="h-4 w-4" /> {t("cop.connectOptionB")}</div>
           <p className="text-xs text-muted-foreground">
             Если менеджер сам инициирует звонок через ваш softphone/CRM, направьте исходящий маршрут на Twilio SIP-домен и используйте этот же webhook как <b>A call comes in</b> на Twilio TwiML App. <code>dial</code> подставится из поля To автоматически.
           </p>
         </div>
 
         <div className="rounded-lg bg-muted/40 p-3 text-sm space-y-1">
-          <div className="font-medium">Вариант C — Asterisk / 3CX / FreePBX (Phase 2)</div>
+          <div className="font-medium">{t("cop.connectOptionC")}</div>
           <p className="text-xs text-muted-foreground">
             Пока что для не-Twilio PBX рекомендуем направить trunk на Twilio (вариант A). В следующей фазе мы добавим прямой приёмник AudioSocket по адресу ниже — поле зарезервировано:
           </p>
         </div>
 
         <CopyRow
-          label="WebSocket для AudioSocket (зарезервировано)"
+          label={t("cop.wssLabel")}
           value={directWss}
-          hint="Phase 2. Пока не работает — используйте Twilio TwiML выше."
+          hint={t("cop.wssHint")}
         />
 
         {isPreview && (

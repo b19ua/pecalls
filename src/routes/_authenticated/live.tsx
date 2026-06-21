@@ -1,69 +1,193 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PhoneIncoming, PhoneOutgoing, Radio, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Radio, AlertTriangle, Sparkles, Headphones, Send, PhoneOff, ArrowRightLeft,
+  Activity, ShieldAlert, MessageSquare,
+} from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/live")({ component: LivePage });
 
-type LiveCall = {
+type Risk = "green" | "amber" | "red";
+type Kind = "call" | "copilot_session";
+
+type LiveItem = {
   id: string;
-  direction: "inbound" | "outbound";
-  from_number: string | null;
-  to_number: string | null;
-  status: string;
+  kind: Kind;
+  source: "ai" | "human";
+  agent_name: string | null;
+  customer: string | null;
   started_at: string | null;
-  created_at: string;
-  transcript: { role: string; text: string }[] | null;
+  risk_level: Risk;
+  risk_score: number;
+  risk_reason: string | null;
+  primary_signal: string | null;
+  suggested_action: string | null;
+  sentiment: string | null;
 };
 
-function LivePage() {
-  const { t, lang } = useI18n();
-  const [active, setActive] = useState<LiveCall[]>([]);
-  const localeMap = { ru: "ru-RU", ro: "ro-RO", en: "en-US" } as const;
+type RawCall = {
+  id: string;
+  source: "ai" | "human" | null;
+  from_number: string | null;
+  to_number: string | null;
+  direction: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  risk_level: Risk | null;
+  risk_score: number | null;
+  risk_reason: string | null;
+  primary_signal: string | null;
+  suggested_action: string | null;
+  sentiment: string | null;
+  agents?: { name: string | null } | null;
+};
 
-  const refresh = async () => {
-    const { data } = await supabase
-      .from("calls")
-      .select("id,direction,from_number,to_number,status,started_at,created_at,transcript")
-      .in("status", ["queued", "ringing", "in_progress"])
-      .order("created_at", { ascending: false })
-      .limit(20);
-    setActive((data ?? []) as LiveCall[]);
+type RawCopilot = {
+  id: string;
+  source: "ai" | "human" | null;
+  manager_name: string | null;
+  customer_phone: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  risk_level: Risk | null;
+  risk_score: number | null;
+  risk_reason: string | null;
+  primary_signal: string | null;
+  suggested_action: string | null;
+  sentiment: string | null;
+  copilot_agents?: { name: string | null } | null;
+};
+
+const RISK_RANK: Record<Risk, number> = { red: 0, amber: 1, green: 2 };
+
+function fmtDur(startedAt: string | null, now: number) {
+  if (!startedAt) return "00:00";
+  const s = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000));
+  const m = Math.floor(s / 60).toString().padStart(2, "0");
+  const ss = (s % 60).toString().padStart(2, "0");
+  return `${m}:${ss}`;
+}
+
+function LivePage() {
+  const { t } = useI18n();
+  const [items, setItems] = useState<LiveItem[]>([]);
+  const [now, setNow] = useState(Date.now());
+  const [open, setOpen] = useState<LiveItem | null>(null);
+
+  useEffect(() => {
+    const tk = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tk);
+  }, []);
+
+  const load = async () => {
+    const [{ data: c }, { data: cs }] = await Promise.all([
+      supabase.from("calls")
+        .select("id,source,from_number,to_number,direction,started_at,ended_at,risk_level,risk_score,risk_reason,primary_signal,suggested_action,sentiment,agents(name)")
+        .is("ended_at", null)
+        .in("status", ["queued", "ringing", "in_progress"])
+        .order("started_at", { ascending: false }).limit(50),
+      supabase.from("copilot_sessions")
+        .select("id,source,manager_name,customer_phone,started_at,ended_at,risk_level,risk_score,risk_reason,primary_signal,suggested_action,sentiment,copilot_agents(name)")
+        .is("ended_at", null).eq("status", "active")
+        .order("started_at", { ascending: false }).limit(50),
+    ]);
+    const calls: LiveItem[] = ((c ?? []) as unknown as RawCall[]).map((r) => ({
+      id: r.id, kind: "call",
+      source: (r.source ?? "ai") as "ai" | "human",
+      agent_name: r.agents?.name ?? "AI Agent",
+      customer: r.direction === "inbound" ? r.from_number : r.to_number,
+      started_at: r.started_at,
+      risk_level: (r.risk_level ?? "green") as Risk,
+      risk_score: r.risk_score ?? 0,
+      risk_reason: r.risk_reason, primary_signal: r.primary_signal,
+      suggested_action: r.suggested_action, sentiment: r.sentiment,
+    }));
+    const sessions: LiveItem[] = ((cs ?? []) as unknown as RawCopilot[]).map((r) => ({
+      id: r.id, kind: "copilot_session",
+      source: (r.source ?? "human") as "ai" | "human",
+      agent_name: r.manager_name || r.copilot_agents?.name || "Manager",
+      customer: r.customer_phone,
+      started_at: r.started_at,
+      risk_level: (r.risk_level ?? "green") as Risk,
+      risk_score: r.risk_score ?? 0,
+      risk_reason: r.risk_reason, primary_signal: r.primary_signal,
+      suggested_action: r.suggested_action, sentiment: r.sentiment,
+    }));
+    setItems([...calls, ...sessions]);
   };
 
   useEffect(() => {
-    refresh();
-    const channel = supabase
-      .channel("calls-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "calls" }, () => refresh())
+    void load();
+    const ch = supabase.channel("live-supervisor")
+      .on("postgres_changes", { event: "*", schema: "public", table: "calls" }, () => void load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "copilot_sessions" }, () => void load())
       .subscribe();
-    const tick = setInterval(refresh, 3000);
-    return () => { supabase.removeChannel(channel); clearInterval(tick); };
+    const poll = setInterval(load, 8000);
+    return () => { supabase.removeChannel(ch); clearInterval(poll); };
   }, []);
 
-  const elapsed = (iso: string | null) => {
-    if (!iso) return 0;
-    return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  };
+  const sorted = useMemo(() => {
+    return [...items].sort((a, b) => {
+      const r = RISK_RANK[a.risk_level] - RISK_RANK[b.risk_level];
+      if (r !== 0) return r;
+      return b.risk_score - a.risk_score;
+    });
+  }, [items]);
+
+  const redCount = items.filter((i) => i.risk_level === "red").length;
+  const amberCount = items.filter((i) => i.risk_level === "amber").length;
+  const topAlert = sorted.find((i) => i.risk_level === "red") || sorted.find((i) => i.risk_level === "amber");
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader title={t("live.title")} description={t("live.subtitle")} />
 
-      <div className="mb-6 flex items-center gap-2 text-sm">
-        <span className="relative flex h-2.5 w-2.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success" />
-        </span>
-        <span className="text-muted-foreground">{t("live.realtime")}</span>
-        <Badge variant="secondary" className="ml-2">{active.length}</Badge>
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success" />
+          </span>
+          <span className="text-muted-foreground">{t("live.realtime")}</span>
+        </div>
+        <Badge variant="secondary" className="gap-1"><Activity className="h-3 w-3" /> {items.length} live</Badge>
+        {redCount > 0 && <Badge className="gap-1 bg-red-500/15 text-red-400 border border-red-500/30"><ShieldAlert className="h-3 w-3" /> {redCount} red</Badge>}
+        {amberCount > 0 && <Badge className="gap-1 bg-amber-500/15 text-amber-400 border border-amber-500/30"><AlertTriangle className="h-3 w-3" /> {amberCount} amber</Badge>}
       </div>
 
-      {active.length === 0 ? (
+      {topAlert?.risk_reason && (
+        <Card className={cn(
+          "mb-5 border",
+          topAlert.risk_level === "red"
+            ? "bg-red-500/10 border-red-500/40 shadow-[0_0_24px_-8px_hsl(0_85%_55%/0.4)]"
+            : "bg-amber-500/10 border-amber-500/40"
+        )}>
+          <CardContent className="py-3 px-4 flex items-start gap-3">
+            <AlertTriangle className={cn("h-5 w-5 mt-0.5 shrink-0", topAlert.risk_level === "red" ? "text-red-400" : "text-amber-400")} />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">Supervisor alert · {topAlert.agent_name}</div>
+              <div className={cn("font-medium", topAlert.risk_level === "red" && "font-semibold")}>{topAlert.risk_reason}</div>
+              {topAlert.suggested_action && (
+                <div className="text-xs text-muted-foreground mt-0.5">→ {topAlert.suggested_action}</div>
+              )}
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setOpen(topAlert)}>Open</Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {sorted.length === 0 ? (
         <Card className="bg-gradient-card border-dashed border-2">
           <CardContent className="py-16 text-center">
             <Radio className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
@@ -72,49 +196,197 @@ function LivePage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid sm:grid-cols-2 gap-4">
-          {active.map((c) => {
-            const last = (c.transcript ?? []).slice(-3);
-            return (
-              <Link key={c.id} to="/calls/$callId" params={{ callId: c.id }}>
-                <Card className="bg-gradient-card shadow-soft hover:shadow-elegant transition-shadow cursor-pointer">
-                  <CardContent className="p-5">
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                        {c.direction === "inbound"
-                          ? <PhoneIncoming className="h-5 w-5 text-success" />
-                          : <PhoneOutgoing className="h-5 w-5 text-primary-glow" />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">
-                          {c.direction === "inbound" ? c.from_number : c.to_number}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(c.created_at).toLocaleTimeString(localeMap[lang])} · {elapsed(c.started_at)}s
-                        </div>
-                      </div>
-                      <Badge variant={c.status === "in_progress" ? "default" : "secondary"} className="gap-1">
-                        {c.status === "in_progress" ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                        {c.status}
-                      </Badge>
-                    </div>
-                    {last.length > 0 && (
-                      <div className="space-y-1.5 border-t border-border pt-3 text-xs">
-                        {last.map((m, i) => (
-                          <div key={i} className="flex gap-1.5">
-                            <span className="font-semibold uppercase opacity-60 shrink-0 w-12">{m.role}</span>
-                            <span className="text-muted-foreground line-clamp-2">{m.text}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {sorted.map((c) => <CallCard key={`${c.kind}:${c.id}`} item={c} now={now} onOpen={() => setOpen(c)} />)}
         </div>
       )}
+
+      <CallDrawer item={open} onClose={() => setOpen(null)} />
     </div>
+  );
+}
+
+function CallCard({ item, now, onOpen }: { item: LiveItem; now: number; onOpen: () => void }) {
+  const r = item.risk_level;
+  const accent =
+    r === "red" ? "border-red-500/50 shadow-[0_0_18px_-6px_hsl(0_85%_55%/0.45)]"
+    : r === "amber" ? "border-amber-500/40"
+    : "border-border";
+  const bar = r === "red" ? "bg-red-500" : r === "amber" ? "bg-amber-500" : "bg-muted-foreground/20";
+
+  return (
+    <Card className={cn("relative overflow-hidden bg-gradient-card border transition-all", accent)}>
+      <div className={cn("absolute left-0 top-0 bottom-0 w-1", bar)} />
+      <CardContent className="p-4 pl-5">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className="font-medium truncate">{item.agent_name}</span>
+              {item.source === "ai"
+                ? <Badge className="h-5 px-1.5 text-[10px] bg-primary/20 text-primary-glow border-primary/30"><Sparkles className="h-2.5 w-2.5 mr-0.5" /> AI</Badge>
+                : <Badge variant="outline" className="h-5 px-1.5 text-[10px]"><Headphones className="h-2.5 w-2.5 mr-0.5" /> Copilot</Badge>}
+            </div>
+            <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+              <span className="truncate">{item.customer || "—"}</span>
+              <span className="tabular-nums">· {fmtDur(item.started_at, now)}</span>
+              {item.sentiment && (
+                <span className={cn(
+                  "px-1.5 py-0.5 rounded-full text-[10px]",
+                  item.sentiment === "negative" ? "bg-red-500/15 text-red-400"
+                  : item.sentiment === "positive" ? "bg-emerald-500/15 text-emerald-400"
+                  : "bg-muted text-muted-foreground"
+                )}>{item.sentiment}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {(r === "red" || r === "amber") && item.risk_reason && (
+          <div className={cn(
+            "mt-2 flex items-start gap-1.5 text-xs rounded-md px-2 py-1.5 border",
+            r === "red"
+              ? "bg-red-500/10 border-red-500/30 text-red-300 font-semibold"
+              : "bg-amber-500/10 border-amber-500/30 text-amber-300"
+          )}>
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>{item.risk_reason}</span>
+          </div>
+        )}
+
+        <div className="mt-3 flex items-center gap-2">
+          <Button size="sm" variant="secondary" className="h-7" onClick={onOpen}>Open</Button>
+          {item.source === "human" && (
+            <Button size="sm" variant="outline" className="h-7" onClick={onOpen}>
+              <MessageSquare className="h-3.5 w-3.5 mr-1" /> Whisper
+            </Button>
+          )}
+          {item.source === "ai" && item.primary_signal === "handoff_needed" && (
+            <Button size="sm" className="h-7 bg-red-500 hover:bg-red-600 text-white" onClick={onOpen}>
+              <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Take over
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type TranscriptLine = { who: string; text: string; ts: string };
+
+function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => void }) {
+  const [lines, setLines] = useState<TranscriptLine[]>([]);
+  const [whisper, setWhisper] = useState("");
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!item) { setLines([]); return; }
+    let cancelled = false;
+    const fetchTx = async () => {
+      if (item.kind === "call") {
+        const { data } = await supabase.from("calls").select("transcript").eq("id", item.id).maybeSingle();
+        const arr = ((data?.transcript as Array<{ role: string; text: string; ts?: string }> | null) ?? [])
+          .map((m) => ({ who: m.role, text: m.text, ts: m.ts ?? "" }));
+        if (!cancelled) setLines(arr);
+      } else {
+        const { data } = await supabase.from("copilot_transcript")
+          .select("speaker,text,ts").eq("session_id", item.id).order("ts", { ascending: true });
+        const arr = (data ?? []).map((r) => ({ who: r.speaker, text: r.text, ts: r.ts }));
+        if (!cancelled) setLines(arr);
+      }
+    };
+    void fetchTx();
+    const channels = [
+      supabase.channel(`drawer-${item.kind}-${item.id}`)
+        .on("postgres_changes",
+          item.kind === "call"
+            ? { event: "UPDATE", schema: "public", table: "calls", filter: `id=eq.${item.id}` }
+            : { event: "INSERT", schema: "public", table: "copilot_transcript", filter: `session_id=eq.${item.id}` },
+          () => void fetchTx())
+        .subscribe(),
+    ];
+    return () => { cancelled = true; channels.forEach((c) => supabase.removeChannel(c)); };
+  }, [item]);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [lines]);
+
+  const sendWhisper = async () => {
+    if (!item || !whisper.trim()) return;
+    setSending(true);
+    const { data: u } = await supabase.auth.getUser();
+    const { error } = await supabase.from("whispers").insert({
+      owner_id: u.user!.id, sender_id: u.user!.id,
+      call_id: item.id, call_kind: item.kind, text: whisper.trim(),
+    });
+    setSending(false);
+    if (error) { toast.error("Whisper failed"); return; }
+    setWhisper(""); toast.success("Whisper sent to manager");
+  };
+
+  return (
+    <Sheet open={!!item} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col p-0">
+        <SheetHeader className="px-5 py-4 border-b border-border">
+          <SheetTitle className="flex items-center gap-2">
+            {item?.source === "ai"
+              ? <Badge className="bg-primary/20 text-primary-glow border-primary/30"><Sparkles className="h-3 w-3 mr-1" /> AI</Badge>
+              : <Badge variant="outline"><Headphones className="h-3 w-3 mr-1" /> Copilot</Badge>}
+            <span className="truncate">{item?.agent_name}</span>
+          </SheetTitle>
+          <div className="text-xs text-muted-foreground">{item?.customer}</div>
+        </SheetHeader>
+
+        {item && (item.risk_level !== "green") && (
+          <div className={cn(
+            "mx-5 mt-3 rounded-lg border px-3 py-2 text-sm",
+            item.risk_level === "red" ? "bg-red-500/10 border-red-500/30 text-red-200" : "bg-amber-500/10 border-amber-500/30 text-amber-200"
+          )}>
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <div className="font-medium">{item.risk_reason}</div>
+                {item.suggested_action && <div className="text-xs opacity-80 mt-0.5">→ {item.suggested_action}</div>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <ScrollArea className="flex-1 px-5 py-3" ref={scrollRef as never}>
+          <div className="space-y-2">
+            {lines.length === 0 && <div className="text-xs text-muted-foreground">Waiting for transcript…</div>}
+            {lines.map((l, i) => (
+              <div key={i} className="text-sm">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground mr-2">{l.who}</span>
+                <span>{l.text}</span>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+
+        {item?.source === "human" ? (
+          <div className="border-t border-border p-3 flex gap-2">
+            <Input
+              placeholder="Whisper to manager…"
+              value={whisper}
+              onChange={(e) => setWhisper(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendWhisper()}
+              disabled={sending}
+            />
+            <Button onClick={sendWhisper} disabled={sending || !whisper.trim()} size="icon">
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : item?.primary_signal === "handoff_needed" ? (
+          <div className="border-t border-border p-3 flex gap-2">
+            <Button className="w-full bg-red-500 hover:bg-red-600 text-white">
+              <ArrowRightLeft className="h-4 w-4 mr-2" /> Take over from AI
+            </Button>
+            <Button variant="outline" size="icon"><PhoneOff className="h-4 w-4" /></Button>
+          </div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
   );
 }

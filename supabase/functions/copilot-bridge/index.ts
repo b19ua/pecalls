@@ -232,6 +232,12 @@ async function handle(twilio: WebSocket, p: Params) {
                 speaker: a.speaker || speakerHint,
                 text: a.text,
               });
+              // Fire-and-forget supervisor risk analysis
+              fetch(`${SUPABASE_URL}/functions/v1/analyze-live-call`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE}` },
+                body: JSON.stringify({ call_id: sessionId, kind: "copilot_session" }),
+              }).catch((e) => console.error("analyze trigger", e));
             }
           } else if (fc.name === "emit_suggestion") {
             const now = Date.now();

@@ -145,8 +145,23 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   const persistTranscript = async () => {
     if (!callSid || transcript.length === lastSavedLen) return;
     lastSavedLen = transcript.length;
-    try { await supa.from("calls").update({ transcript, status: "in_progress" }).eq("twilio_call_sid", callSid); }
+    try {
+      const { data: row } = await supa.from("calls")
+        .update({ transcript, status: "in_progress", source: "ai" })
+        .eq("twilio_call_sid", callSid).select("id").maybeSingle();
+      if (row?.id) void triggerAnalyze(row.id, "call");
+    }
     catch (e) { console.error("live transcript save", e); }
+  };
+
+  const triggerAnalyze = async (id: string, kind: "call" | "copilot_session") => {
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/analyze-live-call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE}` },
+        body: JSON.stringify({ call_id: id, kind }),
+      });
+    } catch (e) { console.error("analyze trigger", e); }
   };
 
   const connectGemini = () => {

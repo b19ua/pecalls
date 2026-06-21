@@ -97,6 +97,8 @@ function LivePage() {
   const [items, setItems] = useState<LiveItem[]>([]);
   const [now, setNow] = useState(Date.now());
   const [open, setOpen] = useState<LiveItem | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
+
 
   useEffect(() => {
     const tk = setInterval(() => setNow(Date.now()), 1000);

@@ -182,7 +182,7 @@ function LivePage() {
           </span>
           <span className="text-muted-foreground">{t("live.realtime")}</span>
         </div>
-        <Badge variant="secondary" className="gap-1"><Activity className="h-3 w-3" /> {items.length} live</Badge>
+        <Badge variant="secondary" className="gap-1"><Activity className="h-3 w-3" /> {sorted.length} live</Badge>
         {redCount > 0 && <Badge className="gap-1 bg-red-500/15 text-red-400 border border-red-500/30"><ShieldAlert className="h-3 w-3" /> {redCount} red</Badge>}
         {amberCount > 0 && <Badge className="gap-1 bg-amber-500/15 text-amber-400 border border-amber-500/30"><AlertTriangle className="h-3 w-3" /> {amberCount} amber</Badge>}
       </div>

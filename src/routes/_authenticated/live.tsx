@@ -10,11 +10,16 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Radio, AlertTriangle, Sparkles, Headphones, Send, PhoneOff, ArrowRightLeft,
-  Activity, ShieldAlert, MessageSquare,
+  Activity, ShieldAlert, MessageSquare, ShieldCheck, Check,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { ComplianceRulesSheet } from "@/components/live/ComplianceRulesSheet";
+
+type ComplianceViolation = { rule_id: string; rule_text: string; correction: string | null };
+type MissingRequired = { rule_id: string; rule_text: string };
+
 
 export const Route = createFileRoute("/_authenticated/live")({ component: LivePage });
 

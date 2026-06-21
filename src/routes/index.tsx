@@ -61,8 +61,8 @@ function LandingPage() {
 function Nav() {
   return (
     <nav className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
-      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6">
-        <div className="flex items-center gap-10">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:h-20 sm:px-6">
+        <div className="flex items-center gap-10 min-w-0">
           <Link to="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 shadow-[0_4px_20px_rgba(16,185,129,0.25)]">
               <Mic className="h-4 w-4 text-white" />
@@ -79,20 +79,28 @@ function Nav() {
             <a href="#enterprise" className="transition-colors hover:text-emerald-700">On-Premise</a>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <LangSwitcher />
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="hidden sm:block">
+            <LangSwitcher />
+          </div>
           <Link
             to="/auth"
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:border-slate-400 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:border-slate-400 hover:bg-slate-50 sm:px-4"
           >
             <LogIn className="h-4 w-4" />
-            Login
+            <span>Login</span>
+          </Link>
+          <Link
+            to="/auth"
+            className="hidden rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition-all hover:bg-emerald-100 sm:inline-flex"
+          >
+            Sign up
           </Link>
           <a
             href={WHATSAPP_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] transition-all hover:bg-slate-800"
+            className="hidden rounded-full bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(15,23,42,0.18)] transition-all hover:bg-slate-800 md:inline-flex"
           >
             Book a demo
           </a>

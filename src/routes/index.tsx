@@ -36,7 +36,7 @@ const HEADING = { fontFamily: "'Space Grotesk', sans-serif" } as const;
 const BODY = { fontFamily: "'DM Sans', sans-serif" } as const;
 
 const WHATSAPP_URL =
-  "https://wa.me/37369085446?text=" +
+  "https://wa.me/37369085447?text=" +
   encodeURIComponent("Hi Lunara team, I'd like to book a demo of the platform.");
 
 function LandingPage() {

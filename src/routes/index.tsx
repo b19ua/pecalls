@@ -84,14 +84,14 @@ function Nav() {
             <LangSwitcher />
           </div>
           <Link
-            to="/auth"
+            to="/login"
             className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:border-slate-400 hover:bg-slate-50 sm:px-4"
           >
             <LogIn className="h-4 w-4" />
             <span>Login</span>
           </Link>
           <Link
-            to="/auth"
+            to="/login"
             className="hidden rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition-all hover:bg-emerald-100 sm:inline-flex"
           >
             Sign up
@@ -680,7 +680,7 @@ function FinalCta() {
               >
                 Book a live demo
               </a>
-              <Link to="/auth" className="rounded-xl border border-slate-300 bg-white px-8 py-4 font-bold text-slate-800 shadow-sm transition-all hover:bg-slate-50">
+              <Link to="/login" className="rounded-xl border border-slate-300 bg-white px-8 py-4 font-bold text-slate-800 shadow-sm transition-all hover:bg-slate-50">
                 Client login
               </Link>
             </div>

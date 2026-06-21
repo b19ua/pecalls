@@ -356,8 +356,23 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
         .order("created_at", { ascending: false }).limit(8);
       if (!cancelled) setSentWhispers((data ?? []) as SentWhisper[]);
     };
+    const fetchCompliance = async () => {
+      const { data: ev } = await supabase.from("call_analysis_events")
+        .select("signals")
+        .eq("call_id", item.id).eq("call_kind", item.kind)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const sig = (ev?.signals ?? {}) as { compliance_violations?: ComplianceViolation[]; missing_required?: MissingRequired[] };
+      if (!cancelled) {
+        setViolations(Array.isArray(sig.compliance_violations) ? sig.compliance_violations : []);
+        setMissing(Array.isArray(sig.missing_required) ? sig.missing_required : []);
+      }
+      const { data: rules } = await supabase.from("compliance_rules" as never)
+        .select("id,text").eq("kind", "must_say").eq("active", true);
+      if (!cancelled) setMustSayRules(((rules ?? []) as unknown) as { id: string; text: string }[]);
+    };
     void fetchTx();
     void fetchWhispers();
+    void fetchCompliance();
     const channels = [
       supabase.channel(`drawer-${item.kind}-${item.id}`)
         .on("postgres_changes",
@@ -368,8 +383,12 @@ function CallDrawer({ item, onClose }: { item: LiveItem | null; onClose: () => v
         .on("postgres_changes",
           { event: "*", schema: "public", table: "whispers", filter: `call_id=eq.${item.id}` },
           () => void fetchWhispers())
+        .on("postgres_changes",
+          { event: "INSERT", schema: "public", table: "call_analysis_events", filter: `call_id=eq.${item.id}` },
+          () => void fetchCompliance())
         .subscribe(),
     ];
+
     return () => { cancelled = true; channels.forEach((c) => supabase.removeChannel(c)); };
   }, [item]);
 

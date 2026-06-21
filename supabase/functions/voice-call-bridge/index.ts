@@ -8,6 +8,7 @@ import {
   getModelCandidates,
   sanitizeSystemPrompt,
 } from "../_shared/live-config.ts";
+import { scanCustomerText, applyFastRed } from "../_shared/risk-keywords.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

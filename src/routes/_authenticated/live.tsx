@@ -28,6 +28,7 @@ type LiveItem = {
   agent_name: string | null;
   customer: string | null;
   started_at: string | null;
+  risk_updated_at: string | null;
   risk_level: Risk;
   risk_score: number;
   risk_reason: string | null;
@@ -44,6 +45,7 @@ type RawCall = {
   direction: string | null;
   started_at: string | null;
   ended_at: string | null;
+  risk_updated_at: string | null;
   risk_level: Risk | null;
   risk_score: number | null;
   risk_reason: string | null;
@@ -60,6 +62,7 @@ type RawCopilot = {
   customer_phone: string | null;
   started_at: string | null;
   ended_at: string | null;
+  risk_updated_at: string | null;
   risk_level: Risk | null;
   risk_score: number | null;
   risk_reason: string | null;
@@ -68,6 +71,11 @@ type RawCopilot = {
   sentiment: string | null;
   copilot_agents?: { name: string | null } | null;
 };
+
+// Hide cards whose row has gone stale (no transcript / no analyzer update
+// for STALE_MS). Protects against bridges that crashed without writing
+// ended_at — the card would otherwise hang in the grid forever.
+const STALE_MS = 10 * 60 * 1000;
 
 const RISK_RANK: Record<Risk, number> = { red: 0, amber: 1, green: 2 };
 

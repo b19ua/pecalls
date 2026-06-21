@@ -125,6 +125,29 @@ function Page() {
         }
       />
 
+      {whispers.length > 0 && (
+        <Card className="mb-4 border-amber-500/40 bg-amber-500/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <MessageSquare className="h-4 w-4 text-amber-400" />
+              <span className="text-sm font-medium">Шёпот супервайзера</span>
+              <Badge variant="secondary" className="ml-auto">{whispers.length}</Badge>
+            </div>
+            <div className="space-y-1.5 max-h-40 overflow-auto">
+              {whispers.slice().reverse().map((w) => (
+                <div key={w.id} className="text-sm rounded-md bg-background/60 border px-3 py-2 flex items-start gap-2">
+                  <span className="flex-1">{w.text}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">
+                    {new Date(w.created_at).toLocaleTimeString()}
+                    {w.read_at && <span className="ml-1 text-emerald-400">✓</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid lg:grid-cols-2 gap-4">
         <Card><CardContent className="p-0">
           <div className="px-5 py-3 border-b flex items-center gap-2">

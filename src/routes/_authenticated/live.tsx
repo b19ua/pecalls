@@ -101,12 +101,12 @@ function LivePage() {
   const load = async () => {
     const [{ data: c }, { data: cs }] = await Promise.all([
       supabase.from("calls")
-        .select("id,source,from_number,to_number,direction,started_at,ended_at,risk_level,risk_score,risk_reason,primary_signal,suggested_action,sentiment,agents(name)")
+        .select("id,source,from_number,to_number,direction,started_at,ended_at,risk_updated_at,risk_level,risk_score,risk_reason,primary_signal,suggested_action,sentiment,agents(name)")
         .is("ended_at", null)
         .in("status", ["queued", "ringing", "in_progress"])
         .order("started_at", { ascending: false }).limit(50),
       supabase.from("copilot_sessions")
-        .select("id,source,manager_name,customer_phone,started_at,ended_at,risk_level,risk_score,risk_reason,primary_signal,suggested_action,sentiment,copilot_agents(name)")
+        .select("id,source,manager_name,customer_phone,started_at,ended_at,risk_updated_at,risk_level,risk_score,risk_reason,primary_signal,suggested_action,sentiment,copilot_agents(name)")
         .is("ended_at", null).eq("status", "active")
         .order("started_at", { ascending: false }).limit(50),
     ]);
@@ -116,6 +116,7 @@ function LivePage() {
       agent_name: r.agents?.name ?? "AI Agent",
       customer: r.direction === "inbound" ? r.from_number : r.to_number,
       started_at: r.started_at,
+      risk_updated_at: r.risk_updated_at,
       risk_level: (r.risk_level ?? "green") as Risk,
       risk_score: r.risk_score ?? 0,
       risk_reason: r.risk_reason, primary_signal: r.primary_signal,
@@ -127,6 +128,7 @@ function LivePage() {
       agent_name: r.manager_name || r.copilot_agents?.name || "Manager",
       customer: r.customer_phone,
       started_at: r.started_at,
+      risk_updated_at: r.risk_updated_at,
       risk_level: (r.risk_level ?? "green") as Risk,
       risk_score: r.risk_score ?? 0,
       risk_reason: r.risk_reason, primary_signal: r.primary_signal,
@@ -145,13 +147,24 @@ function LivePage() {
     return () => { supabase.removeChannel(ch); clearInterval(poll); };
   }, []);
 
+  // Sort by risk, then by score. Filter zombie cards whose row hasn't been
+  // touched (no transcript / no analyzer update) for STALE_MS.
   const sorted = useMemo(() => {
-    return [...items].sort((a, b) => {
-      const r = RISK_RANK[a.risk_level] - RISK_RANK[b.risk_level];
-      if (r !== 0) return r;
-      return b.risk_score - a.risk_score;
-    });
-  }, [items]);
+    const cutoff = now - STALE_MS;
+    return [...items]
+      .filter((i) => {
+        const lastSeen = Math.max(
+          i.risk_updated_at ? new Date(i.risk_updated_at).getTime() : 0,
+          i.started_at ? new Date(i.started_at).getTime() : 0,
+        );
+        return lastSeen >= cutoff;
+      })
+      .sort((a, b) => {
+        const r = RISK_RANK[a.risk_level] - RISK_RANK[b.risk_level];
+        if (r !== 0) return r;
+        return b.risk_score - a.risk_score;
+      });
+  }, [items, now]);
 
   const redCount = items.filter((i) => i.risk_level === "red").length;
   const amberCount = items.filter((i) => i.risk_level === "amber").length;

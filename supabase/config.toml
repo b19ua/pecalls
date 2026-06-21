@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.copilot-bridge]
 verify_jwt = false
+
+[functions.analyze-live-call]
+verify_jwt = false

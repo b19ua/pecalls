@@ -265,6 +265,48 @@ export type Database = {
         }
         Relationships: []
       }
+      call_analysis_events: {
+        Row: {
+          call_id: string
+          call_kind: string
+          created_at: string
+          id: string
+          owner_id: string
+          primary_signal: string | null
+          risk_level: string
+          risk_reason: string | null
+          risk_score: number
+          signals: Json
+          suggested_action: string | null
+        }
+        Insert: {
+          call_id: string
+          call_kind: string
+          created_at?: string
+          id?: string
+          owner_id: string
+          primary_signal?: string | null
+          risk_level: string
+          risk_reason?: string | null
+          risk_score?: number
+          signals?: Json
+          suggested_action?: string | null
+        }
+        Update: {
+          call_id?: string
+          call_kind?: string
+          created_at?: string
+          id?: string
+          owner_id?: string
+          primary_signal?: string | null
+          risk_level?: string
+          risk_reason?: string | null
+          risk_score?: number
+          signals?: Json
+          suggested_action?: string | null
+        }
+        Relationships: []
+      }
       calls: {
         Row: {
           agent_id: string | null
@@ -287,14 +329,21 @@ export type Database = {
           metadata: Json
           output_tokens: number
           owner_id: string
+          primary_signal: string | null
           recording_error: string | null
           recording_path: string | null
           recording_status: string | null
           recording_url: string | null
+          risk_level: string
+          risk_reason: string | null
+          risk_score: number
+          risk_updated_at: string | null
           sentiment: string | null
           sentiment_score: number | null
+          source: string
           started_at: string | null
           status: Database["public"]["Enums"]["call_status"]
+          suggested_action: string | null
           summary: string | null
           to_number: string | null
           topics: string[]
@@ -323,14 +372,21 @@ export type Database = {
           metadata?: Json
           output_tokens?: number
           owner_id: string
+          primary_signal?: string | null
           recording_error?: string | null
           recording_path?: string | null
           recording_status?: string | null
           recording_url?: string | null
+          risk_level?: string
+          risk_reason?: string | null
+          risk_score?: number
+          risk_updated_at?: string | null
           sentiment?: string | null
           sentiment_score?: number | null
+          source?: string
           started_at?: string | null
           status?: Database["public"]["Enums"]["call_status"]
+          suggested_action?: string | null
           summary?: string | null
           to_number?: string | null
           topics?: string[]
@@ -359,14 +415,21 @@ export type Database = {
           metadata?: Json
           output_tokens?: number
           owner_id?: string
+          primary_signal?: string | null
           recording_error?: string | null
           recording_path?: string | null
           recording_status?: string | null
           recording_url?: string | null
+          risk_level?: string
+          risk_reason?: string | null
+          risk_score?: number
+          risk_updated_at?: string | null
           sentiment?: string | null
           sentiment_score?: number | null
+          source?: string
           started_at?: string | null
           status?: Database["public"]["Enums"]["call_status"]
+          suggested_action?: string | null
           summary?: string | null
           to_number?: string | null
           topics?: string[]
@@ -585,9 +648,17 @@ export type Database = {
           manager_name: string | null
           metrics: Json
           owner_id: string
+          primary_signal: string | null
           recording_url: string | null
+          risk_level: string
+          risk_reason: string | null
+          risk_score: number
+          risk_updated_at: string | null
+          sentiment: string | null
+          source: string
           started_at: string
           status: string
+          suggested_action: string | null
           summary: string | null
           summary_data: Json | null
           transcript_url: string | null
@@ -606,9 +677,17 @@ export type Database = {
           manager_name?: string | null
           metrics?: Json
           owner_id: string
+          primary_signal?: string | null
           recording_url?: string | null
+          risk_level?: string
+          risk_reason?: string | null
+          risk_score?: number
+          risk_updated_at?: string | null
+          sentiment?: string | null
+          source?: string
           started_at?: string
           status?: string
+          suggested_action?: string | null
           summary?: string | null
           summary_data?: Json | null
           transcript_url?: string | null
@@ -627,9 +706,17 @@ export type Database = {
           manager_name?: string | null
           metrics?: Json
           owner_id?: string
+          primary_signal?: string | null
           recording_url?: string | null
+          risk_level?: string
+          risk_reason?: string | null
+          risk_score?: number
+          risk_updated_at?: string | null
+          sentiment?: string | null
+          source?: string
           started_at?: string
           status?: string
+          suggested_action?: string | null
           summary?: string | null
           summary_data?: Json | null
           transcript_url?: string | null
@@ -1087,6 +1174,39 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      whispers: {
+        Row: {
+          call_id: string
+          call_kind: string
+          created_at: string
+          id: string
+          owner_id: string
+          read_at: string | null
+          sender_id: string | null
+          text: string
+        }
+        Insert: {
+          call_id: string
+          call_kind?: string
+          created_at?: string
+          id?: string
+          owner_id: string
+          read_at?: string | null
+          sender_id?: string | null
+          text: string
+        }
+        Update: {
+          call_id?: string
+          call_kind?: string
+          created_at?: string
+          id?: string
+          owner_id?: string
+          read_at?: string | null
+          sender_id?: string | null
+          text?: string
         }
         Relationships: []
       }

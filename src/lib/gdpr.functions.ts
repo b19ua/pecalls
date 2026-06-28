@@ -153,7 +153,7 @@ export const eraseMyDataFn = createServerFn({ method: "POST" })
       kind: "erase",
       status: onpremError ? "failed" : "done",
       scope: { scope: data.scope, include_onprem: data.include_onprem },
-      result: { cloud: deleted, onprem: onpremDeleted, ms: Date.now() - t0 },
+      result: { cloud: deleted, onprem: JSON.parse(JSON.stringify(onpremDeleted ?? null)), ms: Date.now() - t0 },
       error: onpremError,
       completed_at: new Date().toISOString(),
     });

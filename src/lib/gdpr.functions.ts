@@ -10,7 +10,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 export const exportMyDataFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  .handler(async ({ context }): Promise<any> => {
     const { supabase, userId } = context;
     const t0 = Date.now();
 

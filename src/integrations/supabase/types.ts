@@ -873,8 +873,10 @@ export type Database = {
           created_at: string
           enabled: boolean
           gateway_url: string | null
+          gdpr_contact_email: string | null
           hmac_secret: string | null
           id: string
+          last_full_sync_at: string | null
           last_ping_at: string | null
           last_ping_error: string | null
           last_ping_ok: boolean | null
@@ -882,14 +884,20 @@ export type Database = {
           owner_id: string
           proxy_audio: boolean
           purge_twilio_after_ingest: boolean
+          retention_days: number
+          sync_agents: boolean
+          sync_knowledge: boolean
+          sync_transcripts: boolean
           updated_at: string
         }
         Insert: {
           created_at?: string
           enabled?: boolean
           gateway_url?: string | null
+          gdpr_contact_email?: string | null
           hmac_secret?: string | null
           id?: string
+          last_full_sync_at?: string | null
           last_ping_at?: string | null
           last_ping_error?: string | null
           last_ping_ok?: boolean | null
@@ -897,14 +905,20 @@ export type Database = {
           owner_id: string
           proxy_audio?: boolean
           purge_twilio_after_ingest?: boolean
+          retention_days?: number
+          sync_agents?: boolean
+          sync_knowledge?: boolean
+          sync_transcripts?: boolean
           updated_at?: string
         }
         Update: {
           created_at?: string
           enabled?: boolean
           gateway_url?: string | null
+          gdpr_contact_email?: string | null
           hmac_secret?: string | null
           id?: string
+          last_full_sync_at?: string | null
           last_ping_at?: string | null
           last_ping_error?: string | null
           last_ping_ok?: boolean | null
@@ -912,6 +926,10 @@ export type Database = {
           owner_id?: string
           proxy_audio?: boolean
           purge_twilio_after_ingest?: boolean
+          retention_days?: number
+          sync_agents?: boolean
+          sync_knowledge?: boolean
+          sync_transcripts?: boolean
           updated_at?: string
         }
         Relationships: []
@@ -952,6 +970,42 @@ export type Database = {
           owner_id?: string | null
           severity?: string
           source?: string
+        }
+        Relationships: []
+      }
+      gdpr_dsr_requests: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          id: string
+          kind: string
+          owner_id: string
+          result: Json | null
+          scope: Json
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind: string
+          owner_id: string
+          result?: Json | null
+          scope?: Json
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind?: string
+          owner_id?: string
+          result?: Json | null
+          scope?: Json
+          status?: string
         }
         Relationships: []
       }

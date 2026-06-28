@@ -10,13 +10,14 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, ShieldCheck, Server, Cloud, Activity, Check, RefreshCw, KeyRound, Heart, AlertTriangle } from "lucide-react";
+import { Loader2, ShieldCheck, Server, Cloud, Activity, Check, RefreshCw, KeyRound, Heart, AlertTriangle, Download, Trash2, UploadCloud } from "lucide-react";
 import {
   getResidencyConfigFn,
   saveResidencyConfigFn,
   pingResidencyGatewayFn,
   gatewayHealthFn,
 } from "@/lib/data-residency.functions";
+import { exportMyDataFn, eraseMyDataFn, syncToGatewayFn, listMyDsrRequestsFn } from "@/lib/gdpr.functions";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/data-residency")({

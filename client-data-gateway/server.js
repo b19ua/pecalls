@@ -279,6 +279,197 @@ app.get("/stats", verify, async (req, res) => {
   res.json(rows[0]);
 });
 
+// ============================================================
+// Agents (prompt + voice + behavior snapshots)
+// ============================================================
+app.post("/agents/upsert", verify, async (req, res) => {
+  const { id, name, kind, snapshot } = req.body ?? {};
+  if (!id || !snapshot) return res.status(400).json({ error: "id and snapshot required" });
+  await pool.query(
+    `INSERT INTO agents (id, owner_id, name, kind, snapshot, version, updated_at)
+     VALUES ($1,$2,$3,$4,$5::jsonb,1,now())
+     ON CONFLICT (id) DO UPDATE SET
+       name=EXCLUDED.name, kind=EXCLUDED.kind, snapshot=EXCLUDED.snapshot,
+       version=agents.version+1, updated_at=now()
+     WHERE agents.owner_id = EXCLUDED.owner_id`,
+    [id, req.ownerId, name ?? null, kind ?? null, JSON.stringify(snapshot)],
+  );
+  await audit(req.ownerId, "agent.upsert", id, { kind, name });
+  res.json({ ok: true });
+});
+
+app.get("/agents/:id", verify, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT id, name, kind, snapshot, version, updated_at FROM agents WHERE id=$1 AND owner_id=$2`,
+    [req.params.id, req.ownerId],
+  );
+  if (!rows[0]) return res.status(404).json({ error: "not found" });
+  res.json(rows[0]);
+});
+
+app.delete("/agents/:id", verify, async (req, res) => {
+  await pool.query(`DELETE FROM agents WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
+  await audit(req.ownerId, "agent.delete", req.params.id, {});
+  res.json({ ok: true });
+});
+
+// ============================================================
+// Knowledge base (documents + chunks + embeddings)
+// ============================================================
+app.post("/knowledge/documents/upsert", verify, async (req, res) => {
+  const { id, agent_id, name, mime, bytes, meta, chunks } = req.body ?? {};
+  if (!id || !Array.isArray(chunks)) return res.status(400).json({ error: "id and chunks[] required" });
+  if (chunks.length > 5000) return res.status(413).json({ error: "too many chunks" });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `INSERT INTO knowledge_documents (id, owner_id, agent_id, name, mime, bytes, meta, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,now())
+       ON CONFLICT (id) DO UPDATE SET
+         agent_id=EXCLUDED.agent_id, name=EXCLUDED.name, mime=EXCLUDED.mime,
+         bytes=EXCLUDED.bytes, meta=EXCLUDED.meta, updated_at=now()
+       WHERE knowledge_documents.owner_id = EXCLUDED.owner_id`,
+      [id, req.ownerId, agent_id ?? null, name ?? null, mime ?? null, bytes ?? 0, JSON.stringify(meta ?? {})],
+    );
+    await client.query(`DELETE FROM knowledge_chunks WHERE document_id=$1 AND owner_id=$2`, [id, req.ownerId]);
+    for (const ch of chunks) {
+      await client.query(
+        `INSERT INTO knowledge_chunks (id, document_id, owner_id, agent_id, chunk_index, content, embedding)
+         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)`,
+        [
+          ch.id ?? `${id}:${ch.chunk_index ?? 0}`,
+          id,
+          req.ownerId,
+          agent_id ?? null,
+          Number(ch.chunk_index ?? 0),
+          String(ch.content ?? ""),
+          ch.embedding ? JSON.stringify(ch.embedding) : null,
+        ],
+      );
+    }
+    await client.query("COMMIT");
+    await audit(req.ownerId, "knowledge.upsert", id, { chunks: chunks.length });
+    res.json({ ok: true, chunks: chunks.length });
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    log("error", "knowledge upsert failed", { err: String(e) });
+    res.status(500).json({ error: String(e).slice(0, 300) });
+  } finally {
+    client.release();
+  }
+});
+
+app.delete("/knowledge/documents/:id", verify, async (req, res) => {
+  await pool.query(`DELETE FROM knowledge_documents WHERE id=$1 AND owner_id=$2`, [req.params.id, req.ownerId]);
+  await audit(req.ownerId, "knowledge.delete", req.params.id, {});
+  res.json({ ok: true });
+});
+
+// Cosine search on stored embeddings (portable, no pgvector required).
+app.post("/knowledge/search", verify, async (req, res) => {
+  const { agent_id, query_embedding, k } = req.body ?? {};
+  if (!Array.isArray(query_embedding)) return res.status(400).json({ error: "query_embedding[] required" });
+  const limit = Math.min(Number(k ?? 5), 25);
+  const { rows } = await pool.query(
+    `SELECT id, document_id, chunk_index, content, embedding
+       FROM knowledge_chunks
+      WHERE owner_id=$1 ${agent_id ? "AND agent_id=$2" : ""}
+        AND embedding IS NOT NULL
+      LIMIT 2000`,
+    agent_id ? [req.ownerId, agent_id] : [req.ownerId],
+  );
+  const q = query_embedding;
+  let qn = 0; for (const v of q) qn += v * v; qn = Math.sqrt(qn) || 1;
+  const scored = rows.map((r) => {
+    const e = r.embedding;
+    let dot = 0, en = 0;
+    const n = Math.min(q.length, e.length);
+    for (let i = 0; i < n; i++) { dot += q[i] * e[i]; en += e[i] * e[i]; }
+    const sim = dot / ((Math.sqrt(en) || 1) * qn);
+    return { id: r.id, document_id: r.document_id, chunk_index: r.chunk_index, content: r.content, similarity: sim };
+  }).sort((a, b) => b.similarity - a.similarity).slice(0, limit);
+  res.json({ results: scored });
+});
+
+// ============================================================
+// Transcript append (called continuously by the bridge)
+// ============================================================
+app.post("/calls/:id/transcript", verify, async (req, res) => {
+  const { turns } = req.body ?? {};
+  if (!Array.isArray(turns)) return res.status(400).json({ error: "turns[] required" });
+  await pool.query(
+    `INSERT INTO calls (id, owner_id, transcript, status)
+     VALUES ($1,$2,$3::jsonb,'processing')
+     ON CONFLICT (id) DO UPDATE
+       SET transcript = (COALESCE(calls.transcript, '[]'::jsonb) || EXCLUDED.transcript),
+           updated_at = now()
+     WHERE calls.owner_id = EXCLUDED.owner_id`,
+    [req.params.id, req.ownerId, JSON.stringify(turns)],
+  );
+  res.json({ ok: true, appended: turns.length });
+});
+
+// ============================================================
+// GDPR — Data Subject Requests (per workspace owner)
+// Right to access (export) + Right to erasure ("right to be forgotten")
+// ============================================================
+app.post("/gdpr/export", verify, async (req, res) => {
+  const id = crypto.randomUUID();
+  await pool.query(`INSERT INTO dsr_requests (id, owner_id, kind, status) VALUES ($1,$2,'export','running')`, [id, req.ownerId]);
+  try {
+    const [calls, agents, docs, chunks, auditRows] = await Promise.all([
+      pool.query(`SELECT id, twilio_call_sid, recording_sid, duration_sec, language, transcript, summary, sentiment, topics, status, created_at FROM calls WHERE owner_id=$1`, [req.ownerId]),
+      pool.query(`SELECT id, name, kind, snapshot, version, updated_at FROM agents WHERE owner_id=$1`, [req.ownerId]),
+      pool.query(`SELECT id, agent_id, name, mime, bytes, meta, created_at FROM knowledge_documents WHERE owner_id=$1`, [req.ownerId]),
+      pool.query(`SELECT id, document_id, agent_id, chunk_index, content FROM knowledge_chunks WHERE owner_id=$1`, [req.ownerId]),
+      pool.query(`SELECT id, ts, action, target_id, meta, hash FROM audit_log WHERE owner_id=$1 ORDER BY id ASC`, [req.ownerId]),
+    ]);
+    const result = {
+      generated_at: new Date().toISOString(),
+      owner_id: req.ownerId,
+      counts: { calls: calls.rowCount, agents: agents.rowCount, knowledge_documents: docs.rowCount, knowledge_chunks: chunks.rowCount, audit: auditRows.rowCount },
+      calls: calls.rows, agents: agents.rows, knowledge_documents: docs.rows, knowledge_chunks: chunks.rows, audit: auditRows.rows,
+    };
+    await pool.query(`UPDATE dsr_requests SET status='done', result=$2::jsonb, completed_at=now() WHERE id=$1`, [id, JSON.stringify({ counts: result.counts })]);
+    await audit(req.ownerId, "gdpr.export", id, result.counts);
+    res.json({ ok: true, request_id: id, data: result });
+  } catch (e) {
+    await pool.query(`UPDATE dsr_requests SET status='failed', error=$2, completed_at=now() WHERE id=$1`, [id, String(e).slice(0, 500)]);
+    res.status(500).json({ ok: false, error: String(e).slice(0, 300) });
+  }
+});
+
+app.post("/gdpr/erase", verify, async (req, res) => {
+  const id = crypto.randomUUID();
+  const confirm = req.body?.confirm;
+  if (confirm !== "ERASE") return res.status(400).json({ error: "missing confirm=ERASE" });
+  await pool.query(`INSERT INTO dsr_requests (id, owner_id, kind, status) VALUES ($1,$2,'erase','running')`, [id, req.ownerId]);
+  try {
+    const { rows: callRows } = await pool.query(`SELECT storage_key FROM calls WHERE owner_id=$1 AND storage_key IS NOT NULL`, [req.ownerId]);
+    for (const row of callRows) {
+      await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: row.storage_key })).catch(() => {});
+    }
+    const out = {};
+    out.calls = (await pool.query(`DELETE FROM calls WHERE owner_id=$1`, [req.ownerId])).rowCount;
+    out.knowledge_chunks = (await pool.query(`DELETE FROM knowledge_chunks WHERE owner_id=$1`, [req.ownerId])).rowCount;
+    out.knowledge_documents = (await pool.query(`DELETE FROM knowledge_documents WHERE owner_id=$1`, [req.ownerId])).rowCount;
+    out.agents = (await pool.query(`DELETE FROM agents WHERE owner_id=$1`, [req.ownerId])).rowCount;
+    await pool.query(`UPDATE dsr_requests SET status='done', result=$2::jsonb, completed_at=now() WHERE id=$1`, [id, JSON.stringify(out)]);
+    // Note: audit_log is intentionally preserved (immutable hash-chain) to prove the erasure happened.
+    await audit(req.ownerId, "gdpr.erase", id, out);
+    res.json({ ok: true, request_id: id, deleted: out });
+  } catch (e) {
+    await pool.query(`UPDATE dsr_requests SET status='failed', error=$2, completed_at=now() WHERE id=$1`, [id, String(e).slice(0, 500)]);
+    res.status(500).json({ ok: false, error: String(e).slice(0, 300) });
+  }
+});
+
+app.get("/gdpr/requests", verify, async (req, res) => {
+  const { rows } = await pool.query(`SELECT id, kind, status, result, error, created_at, completed_at FROM dsr_requests WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 100`, [req.ownerId]);
+  res.json({ requests: rows });
+});
+
 // --------- Retention sweeper ---------
 async function retentionSweep() {
   if (!RETENTION_DAYS || RETENTION_DAYS <= 0) return;

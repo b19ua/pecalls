@@ -452,8 +452,8 @@ function GdprCard({ selfHosted }: { selfHosted: boolean }) {
     setBusy("sync");
     try {
       const r = await syncFn({ data: { include_knowledge: true, include_agents: true } });
-      if (r.ok) toast.success(`Synced ${r.documents} docs / ${r.chunks} chunks / ${r.agents + r.copilot_agents} agents`);
-      else toast.error(`Sync errors: ${r.errors?.[0] ?? "see history"}`);
+      if (r.ok && "documents" in r) toast.success(`Synced ${r.documents} docs / ${r.chunks} chunks / ${r.agents + r.copilot_agents} agents`);
+      else toast.error(("errors" in r && r.errors[0]) || ("error" in r && r.error) || "see history");
       refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Sync failed"); }
     finally { setBusy(null); }

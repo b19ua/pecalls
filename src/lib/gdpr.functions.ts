@@ -218,7 +218,7 @@ export const syncToGatewayFn = createServerFn({ method: "POST" })
         const body = {
           id: doc.id,
           agent_id: doc.agent_id,
-          name: doc.file_name ?? doc.title ?? null,
+          name: doc.file_name ?? null,
           mime: doc.mime_type ?? null,
           bytes: doc.size_bytes ?? 0,
           meta: { status: doc.status },

@@ -95,13 +95,16 @@ export const eraseMyDataFn = createServerFn({ method: "POST" })
     scope: z.array(z.enum(["calls","copilot","knowledge","agents","whispers"])).default(["calls","copilot","knowledge","agents","whispers"]),
     include_onprem: z.boolean().default(true),
   }).parse(d))
-  .handler(async ({ data, context }) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  .handler(async ({ data, context }): Promise<any> => {
     const { supabase, userId } = context;
     const t0 = Date.now();
     const deleted: Record<string, number | null> = {};
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sb = supabase as any;
     const del = async (table: string) => {
-      const { error, count } = await supabase.from(table).delete({ count: "exact" }).eq("owner_id", userId);
+      const { error, count } = await sb.from(table).delete({ count: "exact" }).eq("owner_id", userId);
       if (error) throw new Error(`${table}: ${error.message}`);
       return count ?? 0;
     };

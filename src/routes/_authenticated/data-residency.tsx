@@ -337,6 +337,10 @@ function DataResidencyPage() {
         </CardContent>
       </Card>
 
+      <GdprCard selfHosted={mode === "self_hosted" && enabled} />
+
+
+
       <Card className="bg-gradient-card shadow-soft">
         <CardContent className="p-5 space-y-2 text-sm">
           <h3 className="font-display text-lg font-semibold">{t("dr.ref_title")}</h3>

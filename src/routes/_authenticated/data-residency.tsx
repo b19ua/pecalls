@@ -402,3 +402,107 @@ function HealthBlock({ hc }: { hc: { ok: boolean; latencyMs?: number; info?: Rec
     </div>
   );
 }
+
+type DsrRow = { id: string; kind: string; status: string; created_at: string; error: string | null };
+
+function GdprCard({ selfHosted }: { selfHosted: boolean }) {
+  const exportFn = useServerFn(exportMyDataFn);
+  const eraseFn = useServerFn(eraseMyDataFn);
+  const syncFn = useServerFn(syncToGatewayFn);
+  const listDsr = useServerFn(listMyDsrRequestsFn);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [history, setHistory] = useState<DsrRow[]>([]);
+
+  const refresh = async () => {
+    const r = await listDsr();
+    setHistory(r as DsrRow[]);
+  };
+  useEffect(() => { refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onExport = async () => {
+    setBusy("export");
+    try {
+      const r = await exportFn({ data: {} });
+      const blob = new Blob([JSON.stringify(r, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `lunara-gdpr-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Export ready");
+      refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Export failed"); }
+    finally { setBusy(null); }
+  };
+
+  const onErase = async () => {
+    const confirmed = window.prompt('Type ERASE to permanently delete all your data (cloud + on-prem if connected).');
+    if (confirmed !== "ERASE") return;
+    setBusy("erase");
+    try {
+      const r = await eraseFn({ data: { confirm: "ERASE", scope: ["calls","copilot","knowledge","agents","whispers"], include_onprem: true } });
+      toast.success(`Erased. Cloud: ${JSON.stringify(r.cloud)}`);
+      refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Erase failed"); }
+    finally { setBusy(null); }
+  };
+
+  const onSync = async () => {
+    setBusy("sync");
+    try {
+      const r = await syncFn({ data: { include_knowledge: true, include_agents: true } });
+      if (r.ok) toast.success(`Synced ${r.documents} docs / ${r.chunks} chunks / ${r.agents + r.copilot_agents} agents`);
+      else toast.error(`Sync errors: ${r.errors?.[0] ?? "see history"}`);
+      refresh();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Sync failed"); }
+    finally { setBusy(null); }
+  };
+
+  return (
+    <Card className="bg-gradient-card shadow-soft mt-5 border-primary/20">
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-primary" />
+          <h3 className="font-display text-lg font-semibold">GDPR &amp; Data Subject Rights</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Export everything we store about you (Art. 15), permanently erase it (Art. 17),
+          {selfHosted ? " including the data mirrored on your on-prem gateway." : " plus your on-prem gateway data once connected."}
+          {" "}Audit log keeps the proof of deletion.
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={onExport} disabled={!!busy}>
+            {busy === "export" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+            Export my data (JSON)
+          </Button>
+          <Button variant="destructive" onClick={onErase} disabled={!!busy}>
+            {busy === "erase" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+            Erase everything
+          </Button>
+          {selfHosted && (
+            <Button onClick={onSync} disabled={!!busy}>
+              {busy === "sync" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UploadCloud className="h-4 w-4 mr-2" />}
+              Sync knowledge + agents to gateway
+            </Button>
+          )}
+        </div>
+
+        {history.length > 0 && (
+          <div className="rounded-lg border divide-y text-xs">
+            {history.slice(0, 8).map((h) => (
+              <div key={h.id} className="flex items-center justify-between px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant={h.status === "done" ? "default" : h.status === "failed" ? "destructive" : "secondary"}>{h.kind}</Badge>
+                  <span className="text-muted-foreground">{new Date(h.created_at).toLocaleString()}</span>
+                </div>
+                <span className={h.status === "failed" ? "text-destructive" : "text-muted-foreground"}>{h.error ?? h.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

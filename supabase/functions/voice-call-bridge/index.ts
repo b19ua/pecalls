@@ -306,6 +306,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
             let result: unknown;
             if (fc.name === "log_objection") {
               result = await logObjectionEvent(ctx, callSid, (fc.args || {}) as Record<string, unknown>);
+            } else if (fc.name === "get_local_system_data") {
+              result = await callLocalCrm(ctx, (fc.args || {}) as Record<string, unknown>, callSid);
             } else {
               const tool = ctx?.tools.find((t) => t.name === fc.name);
               result = tool

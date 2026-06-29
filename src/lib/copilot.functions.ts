@@ -65,6 +65,10 @@ export const saveCopilotAgent = createServerFn({ method: "POST" })
         .select("id")
         .single();
       if (error) throw new Error(error.message);
+      try {
+        const { syncAgentToGatewayAsync } = await import("@/lib/sync-gateway.server");
+        syncAgentToGatewayAsync(userId, row.id, "copilot");
+      } catch { /* best-effort */ }
       return { id: row.id };
     }
     const { error } = await supabase
@@ -73,6 +77,10 @@ export const saveCopilotAgent = createServerFn({ method: "POST" })
       .eq("id", data.id)
       .eq("owner_id", userId);
     if (error) throw new Error(error.message);
+    try {
+      const { syncAgentToGatewayAsync } = await import("@/lib/sync-gateway.server");
+      syncAgentToGatewayAsync(userId, data.id, "copilot");
+    } catch { /* best-effort */ }
     return { id: data.id };
   });
 

@@ -1011,6 +1011,76 @@ async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promis
   }
 }
 
+/**
+ * Live Tool Calling — fetch caller data from the client's local CRM connector over VPN.
+ * Isolated: any failure (toggle off, timeout, network error, bad JSON) returns a structured
+ * "data unavailable" payload so Gemini keeps the conversation flowing. NEVER throws.
+ */
+async function callLocalCrm(
+  ctx: Ctx | null,
+  args: Record<string, unknown>,
+  callSid: string,
+): Promise<unknown> {
+  const c = ctx?.crm;
+  log("crm", "toolCall received", "enabled=", !!c?.enabled, "callSid=", callSid, "args=", JSON.stringify(args).slice(0, 200));
+  if (!c || !c.enabled) {
+    log("crm", "integration disabled at call time → returning unavailable");
+    return { ok: false, error: "Данные временно недоступны", reason: "integration_disabled" };
+  }
+  const phone = String(args.phone_number ?? "").trim();
+  if (!phone) {
+    log("crm", "missing phone_number arg");
+    return { ok: false, error: "Данные временно недоступны", reason: "missing_phone_number" };
+  }
+  if (!c.url) {
+    log("crm", "no CRM url configured");
+    return { ok: false, error: "Данные временно недоступны", reason: "no_url" };
+  }
+  const t0 = Date.now();
+  try {
+    const ctl = new AbortController();
+    const tid = setTimeout(() => ctl.abort(), Math.min(Math.max(c.timeoutMs, 500), 10000));
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (c.authHeader && c.authValue) headers[c.authHeader] = c.authValue;
+    log("crm", "→ VPN POST", c.url, "phone=", phone, "timeoutMs=", c.timeoutMs);
+    const r = await fetch(c.url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ phone_number: phone }),
+      signal: ctl.signal,
+    });
+    clearTimeout(tid);
+    let txt = await r.text();
+    if (txt.length > 30000) txt = txt.slice(0, 30000) + "\n…[truncated]";
+    let parsed: Record<string, unknown> = {};
+    try { parsed = JSON.parse(txt) as Record<string, unknown>; } catch { /* keep as text */ }
+    const ms = Date.now() - t0;
+    if (!r.ok) {
+      log("crm", "← VPN error", r.status, "in", ms, "ms");
+      return { ok: false, error: "Данные временно недоступны", reason: `http_${r.status}` };
+    }
+    // Map provider fields to caller-configured labels so the model gets stable keys.
+    const out: Record<string, unknown> = {
+      ok: true,
+      latency_ms: ms,
+      [c.object1]: parsed.object_1 ?? parsed[c.object1] ?? null,
+      [c.object2]: parsed.object_2 ?? parsed[c.object2] ?? null,
+      [c.object3]: parsed.object_3 ?? parsed[c.object3] ?? null,
+      raw: parsed,
+      instructions: "Use ALL three returned fields naturally in the conversation; do not read the field names out loud.",
+    };
+    log("crm", "← VPN ok in", ms, "ms keys=", Object.keys(parsed).join(","));
+    return out;
+  } catch (e) {
+    const ms = Date.now() - t0;
+    const msg = e instanceof Error ? e.message : String(e);
+    const aborted = msg.includes("abort") || msg.includes("AbortError");
+    log("crm", "← VPN fail in", ms, "ms aborted=", aborted, "err=", msg.slice(0, 200));
+    return { ok: false, error: "Данные временно недоступны", reason: aborted ? "timeout" : "network_error" };
+  }
+}
+
+
 
 async function gatewayKnowledgeSearch(
   ownerId: string,

@@ -9,6 +9,15 @@ const ConfigInput = z.object({
   enabled: z.boolean(),
   purge_twilio_after_ingest: z.boolean().optional(),
   proxy_audio: z.boolean().optional(),
+  crm_enabled: z.boolean().optional(),
+  crm_url: z.string().url().max(500).nullable().optional(),
+  crm_auth_header: z.string().max(100).optional(),
+  crm_auth_value: z.string().max(2000).optional(),
+  crm_timeout_ms: z.number().int().min(500).max(10000).optional(),
+  crm_tool_description: z.string().max(1000).optional(),
+  crm_object1_label: z.string().max(80).optional(),
+  crm_object2_label: z.string().max(80).optional(),
+  crm_object3_label: z.string().max(80).optional(),
 });
 
 export const getResidencyConfigFn = createServerFn({ method: "GET" })

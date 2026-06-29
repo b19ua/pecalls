@@ -143,6 +143,12 @@ export const processDocument = createServerFn({ method: "POST" })
         .update({ status: "ready", chunk_count: inserted, error_message: null })
         .eq("id", doc.id);
 
+      // Auto-sync to client's on-prem gateway when enabled (fire-and-forget).
+      try {
+        const { syncDocumentToGatewayAsync } = await import("@/lib/sync-gateway.server");
+        syncDocumentToGatewayAsync(userId, doc.id);
+      } catch { /* never block ingest on sync */ }
+
       return { ok: true, chunks: inserted };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

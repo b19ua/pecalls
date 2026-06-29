@@ -1327,6 +1327,15 @@ export type Database = {
           similarity: number
         }[]
       }
+      purge_expired_cloud_data: {
+        Args: never
+        Returns: {
+          calls_deleted: number
+          copilot_sessions_deleted: number
+          owner_id: string
+          transcript_deleted: number
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "user"

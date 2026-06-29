@@ -26,13 +26,17 @@ export const getResidencyConfigFn = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const { data } = await supabase
       .from("data_residency_configs")
-      .select("mode, gateway_url, hmac_secret, enabled, purge_twilio_after_ingest, proxy_audio, last_ping_at, last_ping_ok, last_ping_error")
+      .select("mode, gateway_url, hmac_secret, enabled, purge_twilio_after_ingest, proxy_audio, last_ping_at, last_ping_ok, last_ping_error, crm_enabled, crm_url, crm_auth_header, crm_auth_value, crm_timeout_ms, crm_tool_description, crm_object1_label, crm_object2_label, crm_object3_label")
       .eq("owner_id", userId)
       .maybeSingle();
     return data ?? {
       mode: "cloud", gateway_url: null, hmac_secret: null, enabled: false,
       purge_twilio_after_ingest: true, proxy_audio: false,
       last_ping_at: null, last_ping_ok: null, last_ping_error: null,
+      crm_enabled: false, crm_url: null, crm_auth_header: "", crm_auth_value: "",
+      crm_timeout_ms: 2000,
+      crm_tool_description: "Get caller info from local CRM by phone number. Returns three fields about the customer.",
+      crm_object1_label: "object_1", crm_object2_label: "object_2", crm_object3_label: "object_3",
     };
   });
 

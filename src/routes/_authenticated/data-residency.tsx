@@ -339,6 +339,10 @@ function DataResidencyPage() {
 
       <GdprCard selfHosted={mode === "self_hosted" && enabled} />
 
+      <LocalCrmCard />
+
+
+
 
 
       <Card className="bg-gradient-card shadow-soft">

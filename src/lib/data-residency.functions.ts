@@ -53,6 +53,15 @@ export const saveResidencyConfigFn = createServerFn({ method: "POST" })
       enabled: data.enabled,
       ...(typeof data.purge_twilio_after_ingest === "boolean" ? { purge_twilio_after_ingest: data.purge_twilio_after_ingest } : {}),
       ...(typeof data.proxy_audio === "boolean" ? { proxy_audio: data.proxy_audio } : {}),
+      ...(typeof data.crm_enabled === "boolean" ? { crm_enabled: data.crm_enabled } : {}),
+      ...(data.crm_url !== undefined ? { crm_url: data.crm_url ?? null } : {}),
+      ...(typeof data.crm_auth_header === "string" ? { crm_auth_header: data.crm_auth_header } : {}),
+      ...(typeof data.crm_auth_value === "string" ? { crm_auth_value: data.crm_auth_value } : {}),
+      ...(typeof data.crm_timeout_ms === "number" ? { crm_timeout_ms: data.crm_timeout_ms } : {}),
+      ...(typeof data.crm_tool_description === "string" ? { crm_tool_description: data.crm_tool_description } : {}),
+      ...(typeof data.crm_object1_label === "string" ? { crm_object1_label: data.crm_object1_label } : {}),
+      ...(typeof data.crm_object2_label === "string" ? { crm_object2_label: data.crm_object2_label } : {}),
+      ...(typeof data.crm_object3_label === "string" ? { crm_object3_label: data.crm_object3_label } : {}),
     };
     const { error } = await supabase
       .from("data_residency_configs")

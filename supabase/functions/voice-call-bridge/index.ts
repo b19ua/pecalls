@@ -717,7 +717,34 @@ async function loadContext(agentId: string): Promise<Ctx> {
       ? agent.objection_custom_responses as Record<string, string>
       : {},
     emotionTrackingEnabled: agent.emotion_tracking_enabled !== false,
+    crm,
   };
+}
+
+async function loadCrmConfig(ownerId: string): Promise<Ctx["crm"]> {
+  try {
+    const { data } = await supa
+      .from("data_residency_configs")
+      .select("crm_enabled, crm_url, crm_auth_header, crm_auth_value, crm_timeout_ms, crm_tool_description, crm_object1_label, crm_object2_label, crm_object3_label")
+      .eq("owner_id", ownerId)
+      .maybeSingle();
+    if (!data || !data.crm_enabled || !data.crm_url) {
+      log("crm", "config", data?.crm_enabled ? "url missing" : "disabled", "→ tool will NOT be exposed");
+      return null;
+    }
+    log("crm", "config loaded url=", data.crm_url, "timeoutMs=", data.crm_timeout_ms);
+    return {
+      enabled: true,
+      url: String(data.crm_url),
+      authHeader: data.crm_auth_header || "",
+      authValue: data.crm_auth_value || "",
+      timeoutMs: Number(data.crm_timeout_ms ?? 2000),
+      description: data.crm_tool_description || "Get caller info from local CRM by phone number.",
+      object1: data.crm_object1_label || "object_1",
+      object2: data.crm_object2_label || "object_2",
+      object3: data.crm_object3_label || "object_3",
+    };
+  } catch (e) { console.error("loadCrmConfig", e); return null; }
 }
 
 async function logObjectionEvent(

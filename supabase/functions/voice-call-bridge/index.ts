@@ -90,6 +90,17 @@ type Ctx = {
   objectionCategories: string[];
   objectionCustomResponses: Record<string, string>;
   emotionTrackingEnabled: boolean;
+  crm: {
+    enabled: boolean;
+    url: string;
+    authHeader: string;
+    authValue: string;
+    timeoutMs: number;
+    description: string;
+    object1: string;
+    object2: string;
+    object3: string;
+  } | null;
 };
 
 const OBJECTION_CATEGORY_LABELS: Record<string, string> = {

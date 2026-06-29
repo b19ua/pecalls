@@ -943,6 +943,8 @@ function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
   }
   return decls;
 }
+
+function fillTemplate(tmpl: string, args: Record<string, unknown>): string {
   return tmpl.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) =>
     args[k] !== undefined ? String(args[k]) : "");
 }

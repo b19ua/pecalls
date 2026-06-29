@@ -927,10 +927,22 @@ function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
       },
     });
   }
+  if (ctx?.crm?.enabled) {
+    const c = ctx.crm;
+    decls.push({
+      name: "get_local_system_data",
+      description: `${c.description}\nSILENTLY call this the moment the caller's phone number is known (or as soon as they identify themselves) to enrich the conversation with CRM data. Returns fields: ${c.object1}, ${c.object2}, ${c.object3}. If the data is temporarily unavailable, continue the dialog naturally without mentioning the tool.`,
+      parameters: {
+        type: "object",
+        properties: {
+          phone_number: { type: "string", description: "Caller phone number in E.164 if known, otherwise as spoken." },
+        },
+        required: ["phone_number"],
+      },
+    });
+  }
   return decls;
 }
-
-function fillTemplate(tmpl: string, args: Record<string, unknown>): string {
   return tmpl.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) =>
     args[k] !== undefined ? String(args[k]) : "");
 }

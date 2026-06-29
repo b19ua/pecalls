@@ -90,6 +90,17 @@ type Ctx = {
   objectionCategories: string[];
   objectionCustomResponses: Record<string, string>;
   emotionTrackingEnabled: boolean;
+  crm: {
+    enabled: boolean;
+    url: string;
+    authHeader: string;
+    authValue: string;
+    timeoutMs: number;
+    description: string;
+    object1: string;
+    object2: string;
+    object3: string;
+  } | null;
 };
 
 const OBJECTION_CATEGORY_LABELS: Record<string, string> = {
@@ -295,6 +306,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
             let result: unknown;
             if (fc.name === "log_objection") {
               result = await logObjectionEvent(ctx, callSid, (fc.args || {}) as Record<string, unknown>);
+            } else if (fc.name === "get_local_system_data") {
+              result = await callLocalCrm(ctx, (fc.args || {}) as Record<string, unknown>, callSid);
             } else {
               const tool = ctx?.tools.find((t) => t.name === fc.name);
               result = tool
@@ -643,7 +656,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
         handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
         outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
-        objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false,
+       objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false, crm: null,
       };
       ctx = fb;
       ctxResolver?.(fb);
@@ -667,11 +680,12 @@ async function loadContext(agentId: string): Promise<Ctx> {
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
       handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
       outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
-      objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false,
+      objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false, crm: null,
     };
   }
   const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
   const tools = await loadTools(agent.id, agent.owner_id);
+  const crm = await loadCrmConfig(agent.owner_id);
   return {
     agentId: agent.id,
     ownerId: agent.owner_id,
@@ -703,7 +717,34 @@ async function loadContext(agentId: string): Promise<Ctx> {
       ? agent.objection_custom_responses as Record<string, string>
       : {},
     emotionTrackingEnabled: agent.emotion_tracking_enabled !== false,
+    crm,
   };
+}
+
+async function loadCrmConfig(ownerId: string): Promise<Ctx["crm"]> {
+  try {
+    const { data } = await supa
+      .from("data_residency_configs")
+      .select("crm_enabled, crm_url, crm_auth_header, crm_auth_value, crm_timeout_ms, crm_tool_description, crm_object1_label, crm_object2_label, crm_object3_label")
+      .eq("owner_id", ownerId)
+      .maybeSingle();
+    if (!data || !data.crm_enabled || !data.crm_url) {
+      log("crm", "config", data?.crm_enabled ? "url missing" : "disabled", "→ tool will NOT be exposed");
+      return null;
+    }
+    log("crm", "config loaded url=", data.crm_url, "timeoutMs=", data.crm_timeout_ms);
+    return {
+      enabled: true,
+      url: String(data.crm_url),
+      authHeader: data.crm_auth_header || "",
+      authValue: data.crm_auth_value || "",
+      timeoutMs: Number(data.crm_timeout_ms ?? 2000),
+      description: data.crm_tool_description || "Get caller info from local CRM by phone number.",
+      object1: data.crm_object1_label || "object_1",
+      object2: data.crm_object2_label || "object_2",
+      object3: data.crm_object3_label || "object_3",
+    };
+  } catch (e) { console.error("loadCrmConfig", e); return null; }
 }
 
 async function logObjectionEvent(
@@ -914,6 +955,20 @@ function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
       },
     });
   }
+  if (ctx?.crm?.enabled) {
+    const c = ctx.crm;
+    decls.push({
+      name: "get_local_system_data",
+      description: `${c.description}\nSILENTLY call this the moment the caller's phone number is known (or as soon as they identify themselves) to enrich the conversation with CRM data. Returns fields: ${c.object1}, ${c.object2}, ${c.object3}. If the data is temporarily unavailable, continue the dialog naturally without mentioning the tool.`,
+      parameters: {
+        type: "object",
+        properties: {
+          phone_number: { type: "string", description: "Caller phone number in E.164 if known, otherwise as spoken." },
+        },
+        required: ["phone_number"],
+      },
+    });
+  }
   return decls;
 }
 
@@ -983,6 +1038,76 @@ async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promis
     return { error: e instanceof Error ? e.message : String(e) };
   }
 }
+
+/**
+ * Live Tool Calling — fetch caller data from the client's local CRM connector over VPN.
+ * Isolated: any failure (toggle off, timeout, network error, bad JSON) returns a structured
+ * "data unavailable" payload so Gemini keeps the conversation flowing. NEVER throws.
+ */
+async function callLocalCrm(
+  ctx: Ctx | null,
+  args: Record<string, unknown>,
+  callSid: string,
+): Promise<unknown> {
+  const c = ctx?.crm;
+  log("crm", "toolCall received", "enabled=", !!c?.enabled, "callSid=", callSid, "args=", JSON.stringify(args).slice(0, 200));
+  if (!c || !c.enabled) {
+    log("crm", "integration disabled at call time → returning unavailable");
+    return { ok: false, error: "Данные временно недоступны", reason: "integration_disabled" };
+  }
+  const phone = String(args.phone_number ?? "").trim();
+  if (!phone) {
+    log("crm", "missing phone_number arg");
+    return { ok: false, error: "Данные временно недоступны", reason: "missing_phone_number" };
+  }
+  if (!c.url) {
+    log("crm", "no CRM url configured");
+    return { ok: false, error: "Данные временно недоступны", reason: "no_url" };
+  }
+  const t0 = Date.now();
+  try {
+    const ctl = new AbortController();
+    const tid = setTimeout(() => ctl.abort(), Math.min(Math.max(c.timeoutMs, 500), 10000));
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (c.authHeader && c.authValue) headers[c.authHeader] = c.authValue;
+    log("crm", "→ VPN POST", c.url, "phone=", phone, "timeoutMs=", c.timeoutMs);
+    const r = await fetch(c.url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ phone_number: phone }),
+      signal: ctl.signal,
+    });
+    clearTimeout(tid);
+    let txt = await r.text();
+    if (txt.length > 30000) txt = txt.slice(0, 30000) + "\n…[truncated]";
+    let parsed: Record<string, unknown> = {};
+    try { parsed = JSON.parse(txt) as Record<string, unknown>; } catch { /* keep as text */ }
+    const ms = Date.now() - t0;
+    if (!r.ok) {
+      log("crm", "← VPN error", r.status, "in", ms, "ms");
+      return { ok: false, error: "Данные временно недоступны", reason: `http_${r.status}` };
+    }
+    // Map provider fields to caller-configured labels so the model gets stable keys.
+    const out: Record<string, unknown> = {
+      ok: true,
+      latency_ms: ms,
+      [c.object1]: parsed.object_1 ?? parsed[c.object1] ?? null,
+      [c.object2]: parsed.object_2 ?? parsed[c.object2] ?? null,
+      [c.object3]: parsed.object_3 ?? parsed[c.object3] ?? null,
+      raw: parsed,
+      instructions: "Use ALL three returned fields naturally in the conversation; do not read the field names out loud.",
+    };
+    log("crm", "← VPN ok in", ms, "ms keys=", Object.keys(parsed).join(","));
+    return out;
+  } catch (e) {
+    const ms = Date.now() - t0;
+    const msg = e instanceof Error ? e.message : String(e);
+    const aborted = msg.includes("abort") || msg.includes("AbortError");
+    log("crm", "← VPN fail in", ms, "ms aborted=", aborted, "err=", msg.slice(0, 200));
+    return { ok: false, error: "Данные временно недоступны", reason: aborted ? "timeout" : "network_error" };
+  }
+}
+
 
 
 async function gatewayKnowledgeSearch(

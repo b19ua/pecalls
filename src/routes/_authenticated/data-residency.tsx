@@ -339,6 +339,10 @@ function DataResidencyPage() {
 
       <GdprCard selfHosted={mode === "self_hosted" && enabled} />
 
+      <LocalCrmCard />
+
+
+
 
 
       <Card className="bg-gradient-card shadow-soft">
@@ -506,3 +510,191 @@ function GdprCard({ selfHosted }: { selfHosted: boolean }) {
     </Card>
   );
 }
+
+function LocalCrmCard() {
+  const get = useServerFn(getResidencyConfigFn);
+  const save = useServerFn(saveResidencyConfigFn);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; status?: number; ms?: number; body?: string; error?: string } | null>(null);
+
+  // Standalone state — independent toggle so disabling does NOT touch storage residency.
+  const [crmEnabled, setCrmEnabled] = useState(false);
+  const [crmUrl, setCrmUrl] = useState("http://10.8.0.2:8000/get-client-info");
+  const [authHeader, setAuthHeader] = useState("");
+  const [authValue, setAuthValue] = useState("");
+  const [timeoutMs, setTimeoutMs] = useState(2000);
+  const [description, setDescription] = useState("");
+  const [o1, setO1] = useState("object_1");
+  const [o2, setO2] = useState("object_2");
+  const [o3, setO3] = useState("object_3");
+  // Mirror of storage residency fields so saving CRM does not wipe them.
+  const [snapshot, setSnapshot] = useState<{ mode: Mode; enabled: boolean; gateway_url: string; hmac_secret: string; purge_twilio_after_ingest: boolean; proxy_audio: boolean } | null>(null);
+
+  useEffect(() => {
+    get().then((cfg) => {
+      setCrmEnabled(!!cfg.crm_enabled);
+      setCrmUrl(cfg.crm_url ?? "http://10.8.0.2:8000/get-client-info");
+      setAuthHeader(cfg.crm_auth_header ?? "");
+      setAuthValue(cfg.crm_auth_value ?? "");
+      setTimeoutMs(cfg.crm_timeout_ms ?? 2000);
+      setDescription(cfg.crm_tool_description ?? "Get caller info from local CRM by phone number. Returns three fields about the customer.");
+      setO1(cfg.crm_object1_label ?? "object_1");
+      setO2(cfg.crm_object2_label ?? "object_2");
+      setO3(cfg.crm_object3_label ?? "object_3");
+      setSnapshot({
+        mode: (cfg.mode as Mode) ?? "cloud",
+        enabled: !!cfg.enabled,
+        gateway_url: cfg.gateway_url ?? "",
+        hmac_secret: cfg.hmac_secret ?? "",
+        purge_twilio_after_ingest: cfg.purge_twilio_after_ingest ?? true,
+        proxy_audio: cfg.proxy_audio ?? false,
+      });
+      setLoading(false);
+    });
+  }, [get]);
+
+  const onSave = async () => {
+    if (!snapshot) return;
+    if (crmEnabled && !crmUrl.trim()) {
+      toast.error("Connector URL is required when CRM integration is enabled");
+      return;
+    }
+    setSaving(true);
+    try {
+      await save({ data: {
+        mode: snapshot.mode,
+        enabled: snapshot.enabled,
+        gateway_url: snapshot.gateway_url || null,
+        hmac_secret: snapshot.hmac_secret || null,
+        purge_twilio_after_ingest: snapshot.purge_twilio_after_ingest,
+        proxy_audio: snapshot.proxy_audio,
+        crm_enabled: crmEnabled,
+        crm_url: crmUrl.trim() || null,
+        crm_auth_header: authHeader,
+        crm_auth_value: authValue,
+        crm_timeout_ms: timeoutMs,
+        crm_tool_description: description,
+        crm_object1_label: o1,
+        crm_object2_label: o2,
+        crm_object3_label: o3,
+      } });
+      toast.success("CRM integration saved");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save failed");
+    } finally { setSaving(false); }
+  };
+
+  const onTest = async () => {
+    setTesting(true); setTestResult(null);
+    const t0 = Date.now();
+    try {
+      const ctl = new AbortController();
+      const tid = setTimeout(() => ctl.abort(), Math.min(timeoutMs + 500, 10000));
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (authHeader && authValue) headers[authHeader] = authValue;
+      const r = await fetch(crmUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ phone_number: "+10000000000" }),
+        signal: ctl.signal,
+      });
+      clearTimeout(tid);
+      const body = (await r.text()).slice(0, 600);
+      setTestResult({ ok: r.ok, status: r.status, ms: Date.now() - t0, body });
+    } catch (e) {
+      setTestResult({ ok: false, error: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 });
+    } finally { setTesting(false); }
+  };
+
+  if (loading) return null;
+
+  return (
+    <Card className="bg-gradient-card shadow-soft mt-5 border-primary/20">
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Server className="h-5 w-5 text-primary" />
+            <h3 className="font-display text-lg font-semibold">Local CRM Integration (Live Tool Calling)</h3>
+          </div>
+          <Switch checked={crmEnabled} onCheckedChange={setCrmEnabled} />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          When enabled, the AI agent can call your local CRM connector over VPN during a live call
+          and enrich the conversation with three customer fields. Toggle is fully isolated —
+          turning it off does not affect any other AI behavior.
+        </p>
+
+        <div className="grid gap-3">
+          <div>
+            <Label htmlFor="crm-url">Local connector URL (VPN)</Label>
+            <Input id="crm-url" value={crmUrl} onChange={(e) => setCrmUrl(e.target.value)} placeholder="http://10.8.0.2:8000/get-client-info" />
+            <p className="text-xs text-muted-foreground mt-1">
+              Recommended: deploy WireGuard on the client side, expose the connector only inside the VPN
+              (e.g. <code>10.8.0.2:8000</code>). Endpoint must accept <code>POST &#123;"phone_number":"..."&#125;</code> and
+              return JSON with <code>object_1</code>, <code>object_2</code>, <code>object_3</code>.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="crm-ah">Auth header name (optional)</Label>
+              <Input id="crm-ah" value={authHeader} onChange={(e) => setAuthHeader(e.target.value)} placeholder="X-API-Key" />
+            </div>
+            <div>
+              <Label htmlFor="crm-av">Auth header value (optional)</Label>
+              <Input id="crm-av" type="password" value={authValue} onChange={(e) => setAuthValue(e.target.value)} placeholder="••••••••" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="crm-to">Hard timeout (ms)</Label>
+              <Input id="crm-to" type="number" min={500} max={10000} value={timeoutMs} onChange={(e) => setTimeoutMs(Number(e.target.value) || 2000)} />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div><Label>Field 1 name</Label><Input value={o1} onChange={(e) => setO1(e.target.value)} /></div>
+              <div><Label>Field 2 name</Label><Input value={o2} onChange={(e) => setO2(e.target.value)} /></div>
+              <div><Label>Field 3 name</Label><Input value={o3} onChange={(e) => setO3(e.target.value)} /></div>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="crm-desc">Tool description for AI (what the data means)</Label>
+            <Input id="crm-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={onSave} disabled={saving}>
+            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save CRM settings
+          </Button>
+          <Button variant="outline" onClick={onTest} disabled={testing || !crmUrl.trim()}>
+            {testing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="h-4 w-4 mr-2" />}
+            Test connector
+          </Button>
+        </div>
+
+        {testResult && (
+          <div className="rounded-lg border p-3 text-xs space-y-1">
+            <div className="flex items-center gap-2">
+              <Badge variant={testResult.ok ? "default" : "destructive"}>
+                {testResult.ok ? `OK ${testResult.status}` : `Failed ${testResult.status ?? ""}`}
+              </Badge>
+              {typeof testResult.ms === "number" && <span className="text-muted-foreground">{testResult.ms} ms</span>}
+            </div>
+            {testResult.error && <div className="text-destructive">{testResult.error}</div>}
+            {testResult.body && <pre className="font-mono whitespace-pre-wrap break-all text-[11px]">{testResult.body}</pre>}
+            <p className="text-muted-foreground">
+              Note: this test runs from your browser, not the calling Edge Function. The Edge Function reaches
+              the same URL from Lovable's cloud — so the connector must be reachable from Lovable's egress (via
+              public VPN endpoint, port-forward, or a reverse tunnel). Browser test ≠ runtime reachability.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+

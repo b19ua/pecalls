@@ -871,6 +871,15 @@ export type Database = {
       data_residency_configs: {
         Row: {
           created_at: string
+          crm_auth_header: string
+          crm_auth_value: string
+          crm_enabled: boolean
+          crm_object1_label: string
+          crm_object2_label: string
+          crm_object3_label: string
+          crm_timeout_ms: number
+          crm_tool_description: string
+          crm_url: string | null
           enabled: boolean
           gateway_url: string | null
           gdpr_contact_email: string | null
@@ -892,6 +901,15 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          crm_auth_header?: string
+          crm_auth_value?: string
+          crm_enabled?: boolean
+          crm_object1_label?: string
+          crm_object2_label?: string
+          crm_object3_label?: string
+          crm_timeout_ms?: number
+          crm_tool_description?: string
+          crm_url?: string | null
           enabled?: boolean
           gateway_url?: string | null
           gdpr_contact_email?: string | null
@@ -913,6 +931,15 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          crm_auth_header?: string
+          crm_auth_value?: string
+          crm_enabled?: boolean
+          crm_object1_label?: string
+          crm_object2_label?: string
+          crm_object3_label?: string
+          crm_timeout_ms?: number
+          crm_tool_description?: string
+          crm_url?: string | null
           enabled?: boolean
           gateway_url?: string | null
           gdpr_contact_email?: string | null

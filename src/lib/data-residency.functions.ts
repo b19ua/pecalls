@@ -9,6 +9,15 @@ const ConfigInput = z.object({
   enabled: z.boolean(),
   purge_twilio_after_ingest: z.boolean().optional(),
   proxy_audio: z.boolean().optional(),
+  crm_enabled: z.boolean().optional(),
+  crm_url: z.string().url().max(500).nullable().optional(),
+  crm_auth_header: z.string().max(100).optional(),
+  crm_auth_value: z.string().max(2000).optional(),
+  crm_timeout_ms: z.number().int().min(500).max(10000).optional(),
+  crm_tool_description: z.string().max(1000).optional(),
+  crm_object1_label: z.string().max(80).optional(),
+  crm_object2_label: z.string().max(80).optional(),
+  crm_object3_label: z.string().max(80).optional(),
 });
 
 export const getResidencyConfigFn = createServerFn({ method: "GET" })
@@ -17,13 +26,17 @@ export const getResidencyConfigFn = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const { data } = await supabase
       .from("data_residency_configs")
-      .select("mode, gateway_url, hmac_secret, enabled, purge_twilio_after_ingest, proxy_audio, last_ping_at, last_ping_ok, last_ping_error")
+      .select("mode, gateway_url, hmac_secret, enabled, purge_twilio_after_ingest, proxy_audio, last_ping_at, last_ping_ok, last_ping_error, crm_enabled, crm_url, crm_auth_header, crm_auth_value, crm_timeout_ms, crm_tool_description, crm_object1_label, crm_object2_label, crm_object3_label")
       .eq("owner_id", userId)
       .maybeSingle();
     return data ?? {
       mode: "cloud", gateway_url: null, hmac_secret: null, enabled: false,
       purge_twilio_after_ingest: true, proxy_audio: false,
       last_ping_at: null, last_ping_ok: null, last_ping_error: null,
+      crm_enabled: false, crm_url: null, crm_auth_header: "", crm_auth_value: "",
+      crm_timeout_ms: 2000,
+      crm_tool_description: "Get caller info from local CRM by phone number. Returns three fields about the customer.",
+      crm_object1_label: "object_1", crm_object2_label: "object_2", crm_object3_label: "object_3",
     };
   });
 
@@ -40,6 +53,15 @@ export const saveResidencyConfigFn = createServerFn({ method: "POST" })
       enabled: data.enabled,
       ...(typeof data.purge_twilio_after_ingest === "boolean" ? { purge_twilio_after_ingest: data.purge_twilio_after_ingest } : {}),
       ...(typeof data.proxy_audio === "boolean" ? { proxy_audio: data.proxy_audio } : {}),
+      ...(typeof data.crm_enabled === "boolean" ? { crm_enabled: data.crm_enabled } : {}),
+      ...(data.crm_url !== undefined ? { crm_url: data.crm_url ?? null } : {}),
+      ...(typeof data.crm_auth_header === "string" ? { crm_auth_header: data.crm_auth_header } : {}),
+      ...(typeof data.crm_auth_value === "string" ? { crm_auth_value: data.crm_auth_value } : {}),
+      ...(typeof data.crm_timeout_ms === "number" ? { crm_timeout_ms: data.crm_timeout_ms } : {}),
+      ...(typeof data.crm_tool_description === "string" ? { crm_tool_description: data.crm_tool_description } : {}),
+      ...(typeof data.crm_object1_label === "string" ? { crm_object1_label: data.crm_object1_label } : {}),
+      ...(typeof data.crm_object2_label === "string" ? { crm_object2_label: data.crm_object2_label } : {}),
+      ...(typeof data.crm_object3_label === "string" ? { crm_object3_label: data.crm_object3_label } : {}),
     };
     const { error } = await supabase
       .from("data_residency_configs")

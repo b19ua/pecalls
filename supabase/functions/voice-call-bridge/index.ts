@@ -985,10 +985,66 @@ async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promis
 }
 
 
+async function gatewayKnowledgeSearch(
+  ownerId: string,
+  agentId: string,
+  queryEmbedding: number[],
+): Promise<string | null> {
+  try {
+    const { data: cfg } = await supa
+      .from("data_residency_configs")
+      .select("mode,enabled,gateway_url,hmac_secret,sync_knowledge")
+      .eq("owner_id", ownerId)
+      .maybeSingle();
+    if (!cfg || !cfg.enabled || cfg.mode !== "self_hosted" || !cfg.gateway_url || !cfg.hmac_secret || !cfg.sync_knowledge) {
+      return null;
+    }
+    const path = "/knowledge/search";
+    const body = JSON.stringify({ agent_id: agentId, query_embedding: queryEmbedding, k: 12 });
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey("raw", enc.encode(cfg.hmac_secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const macBuf = await crypto.subtle.sign("HMAC", key, enc.encode(`${ts}\nPOST\n${path}\n${body}`));
+    const sig = Array.from(new Uint8Array(macBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const url = cfg.gateway_url.replace(/\/+$/, "") + path;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-lunara-owner": ownerId,
+        "x-lunara-timestamp": ts,
+        "x-lunara-signature": sig,
+      },
+      body,
+      signal: ctrl.signal,
+    }).finally(() => clearTimeout(t));
+    if (!r.ok) { log("gateway RAG fail", r.status); return null; }
+    const j = await r.json();
+    const results = (j?.results ?? []) as Array<{ content: string; similarity: number }>;
+    if (!results.length) return "";
+    return results
+      .filter((row) => Number(row.similarity ?? 0) >= 0.25)
+      .map((row) => `- ${String(row.content || "").trim()}`)
+      .join("\n")
+      .slice(0, 18000);
+  } catch (e) {
+    log("gateway RAG error", e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
 async function loadKnowledgeContext(agentId: string, ownerId: string, seedText: string): Promise<string> {
   try {
-    // First: try to load ALL chunks. If the corpus is small (<= ~24k chars),
-    // give the model the full knowledge base — better than partial RAG.
+    // 1) If the client is self-hosted with sync_knowledge=true, query their gateway first.
+    const embedding = await embedText(seedText.slice(0, 3000));
+    if (embedding?.length) {
+      const remote = await gatewayKnowledgeSearch(ownerId, agentId, embedding);
+      if (remote !== null && remote.length > 0) return remote;
+    }
+
+    // 2) Cloud fallback: full corpus when small, else local semantic RAG.
     const { data: all } = await supa
       .from("knowledge_chunks")
       .select("content,chunk_index")
@@ -1006,8 +1062,6 @@ async function loadKnowledgeContext(agentId: string, ownerId: string, seedText: 
       return allText;
     }
 
-    // Large corpus: semantic RAG with relaxed threshold and more chunks.
-    const embedding = await embedText(seedText.slice(0, 3000));
     if (embedding?.length) {
       const { data, error } = await supa.rpc("match_chunks", {
         query_embedding: embedding,

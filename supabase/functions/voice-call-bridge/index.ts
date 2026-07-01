@@ -101,6 +101,13 @@ type Ctx = {
     object2: string;
     object3: string;
   } | null;
+  crm2: {
+    enabled: boolean;
+    url: string;
+    timeoutMs: number;
+    systemPromptTemplate: string;
+    hmacSecret: string;
+  } | null;
 };
 
 const OBJECTION_CATEGORY_LABELS: Record<string, string> = {
@@ -190,7 +197,10 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         ? `Human handoff rule: if the caller asks for an operator, manager, human, specialist, or transfer, do NOT say that you are transferring immediately and NEVER speak, dictate or read any phone number out loud (the system handles dialing). Just tell the caller in one short sentence to press ${c.handoffDigit || "0"} on the phone keypad to connect to the operator. Do not ask extra questions, do not mention digits other than ${c.handoffDigit || "0"}.`
         : "";
       const objectionInstr = buildObjectionInstructions(c);
-      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, handoffInstr, objectionInstr]
+      const crm2Instr = c.crm2?.enabled && c.crm2.systemPromptTemplate.trim()
+        ? `\n\n=== EMERGENCY TICKET CREATION (create_emergency_ticket) ===\n${c.crm2.systemPromptTemplate.trim()}\n=== END EMERGENCY TICKET ===`
+        : "";
+      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, handoffInstr, objectionInstr, crm2Instr]
         .filter(Boolean)
         .join("\n\n");
       // Lunara-proven payload shape (snake_case, NO languageCode lock).
@@ -308,6 +318,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
               result = await logObjectionEvent(ctx, callSid, (fc.args || {}) as Record<string, unknown>);
             } else if (fc.name === "get_local_system_data") {
               result = await callLocalCrm(ctx, (fc.args || {}) as Record<string, unknown>, callSid);
+            } else if (fc.name === "create_emergency_ticket") {
+              result = await callLocalCrm2(ctx, (fc.args || {}) as Record<string, unknown>, callSid);
             } else {
               const tool = ctx?.tools.find((t) => t.name === fc.name);
               result = tool
@@ -680,12 +692,12 @@ async function loadContext(agentId: string): Promise<Ctx> {
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
       handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
       outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
-      objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false, crm: null,
+      objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false, crm: null, crm2: null,
     };
   }
   const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
   const tools = await loadTools(agent.id, agent.owner_id);
-  const crm = await loadCrmConfig(agent.owner_id);
+  const { crm, crm2 } = await loadCrmConfig(agent.owner_id);
   return {
     agentId: agent.id,
     ownerId: agent.owner_id,
@@ -718,33 +730,49 @@ async function loadContext(agentId: string): Promise<Ctx> {
       : {},
     emotionTrackingEnabled: agent.emotion_tracking_enabled !== false,
     crm,
+    crm2,
   };
 }
 
-async function loadCrmConfig(ownerId: string): Promise<Ctx["crm"]> {
+async function loadCrmConfig(ownerId: string): Promise<{ crm: Ctx["crm"]; crm2: Ctx["crm2"] }> {
   try {
     const { data } = await supa
       .from("data_residency_configs")
-      .select("crm_enabled, crm_url, crm_auth_header, crm_auth_value, crm_timeout_ms, crm_tool_description, crm_object1_label, crm_object2_label, crm_object3_label")
+      .select("crm_enabled, crm_url, crm_auth_header, crm_auth_value, crm_timeout_ms, crm_tool_description, crm_object1_label, crm_object2_label, crm_object3_label, crm2_enabled, crm2_url, crm2_timeout_ms, crm2_system_prompt_template, hmac_secret")
       .eq("owner_id", ownerId)
       .maybeSingle();
-    if (!data || !data.crm_enabled || !data.crm_url) {
-      log("crm", "config", data?.crm_enabled ? "url missing" : "disabled", "→ tool will NOT be exposed");
-      return null;
+    let crm: Ctx["crm"] = null;
+    if (data && data.crm_enabled && data.crm_url) {
+      crm = {
+        enabled: true,
+        url: String(data.crm_url),
+        authHeader: data.crm_auth_header || "",
+        authValue: data.crm_auth_value || "",
+        timeoutMs: Number(data.crm_timeout_ms ?? 2000),
+        description: data.crm_tool_description || "Get caller info from local CRM by phone number.",
+        object1: data.crm_object1_label || "object_1",
+        object2: data.crm_object2_label || "object_2",
+        object3: data.crm_object3_label || "object_3",
+      };
+      log("crm", "config loaded url=", data.crm_url, "timeoutMs=", data.crm_timeout_ms);
+    } else {
+      log("crm", "disabled or url missing → tool NOT exposed");
     }
-    log("crm", "config loaded url=", data.crm_url, "timeoutMs=", data.crm_timeout_ms);
-    return {
-      enabled: true,
-      url: String(data.crm_url),
-      authHeader: data.crm_auth_header || "",
-      authValue: data.crm_auth_value || "",
-      timeoutMs: Number(data.crm_timeout_ms ?? 2000),
-      description: data.crm_tool_description || "Get caller info from local CRM by phone number.",
-      object1: data.crm_object1_label || "object_1",
-      object2: data.crm_object2_label || "object_2",
-      object3: data.crm_object3_label || "object_3",
-    };
-  } catch (e) { console.error("loadCrmConfig", e); return null; }
+    let crm2: Ctx["crm2"] = null;
+    if (data && data.crm2_enabled && data.crm2_url) {
+      crm2 = {
+        enabled: true,
+        url: String(data.crm2_url),
+        timeoutMs: Number(data.crm2_timeout_ms ?? 3000),
+        systemPromptTemplate: String(data.crm2_system_prompt_template || ""),
+        hmacSecret: String(data.hmac_secret || ""),
+      };
+      log("crm2", "config loaded url=", data.crm2_url, "timeoutMs=", data.crm2_timeout_ms, "hmac=", crm2.hmacSecret ? "set" : "missing");
+    } else {
+      log("crm2", "disabled or url missing → ticket tool NOT exposed");
+    }
+    return { crm, crm2 };
+  } catch (e) { console.error("loadCrmConfig", e); return { crm: null, crm2: null }; }
 }
 
 async function logObjectionEvent(
@@ -969,6 +997,23 @@ function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
       },
     });
   }
+  if (ctx?.crm2?.enabled) {
+    decls.push({
+      name: "create_emergency_ticket",
+      description: "Создает официальную заявку об аварии, отключении электричества или обрыве линий электропередач. Перед вызовом обязательно подтвердить у клиента адрес (или NLC) и тип проблемы устным согласием.",
+      parameters: {
+        type: "object",
+        properties: {
+          phone_number: { type: "string", description: "Caller phone number in E.164 or as spoken." },
+          nlc_number: { type: "string", description: "7-значный номер места потребления (NLC) из квитанции клиента, если известен." },
+          facility_address: { type: "string", description: "Адрес аварии: город/село, улица, дом. Обязательно, если nlc_number отсутствует." },
+          emergency_type: { type: "string", description: "Строго один из: no_light_individual, no_light_area, wire_down_danger, sparking_equipment." },
+          caller_comment: { type: "string", description: "Краткое описание проблемы со слов клиента." },
+        },
+        required: ["phone_number", "emergency_type"],
+      },
+    });
+  }
   return decls;
 }
 
@@ -1107,6 +1152,98 @@ async function callLocalCrm(
     return { ok: false, error: "Данные временно недоступны", reason: aborted ? "timeout" : "network_error" };
   }
 }
+
+/**
+ * Live Tool Calling #2 — create an emergency (power-outage) ticket in the client's
+ * second local CRM over VPN. Signed with HMAC-SHA256 (X-CRM-Signature / X-CRM-Timestamp)
+ * using the shared crm_hmac_secret. Fully isolated: any failure returns a soft error
+ * to Gemini so the caller hears a graceful apology instead of the call dropping.
+ */
+async function callLocalCrm2(
+  ctx: Ctx | null,
+  args: Record<string, unknown>,
+  callSid: string,
+): Promise<unknown> {
+  const c = ctx?.crm2;
+  log("crm2", "toolCall received", "enabled=", !!c?.enabled, "callSid=", callSid, "args=", JSON.stringify(args).slice(0, 300));
+  if (!c || !c.enabled) {
+    log("crm2", "integration disabled at call time");
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "integration_disabled" };
+  }
+  if (!c.url) {
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "no_url" };
+  }
+  const emergency_type = String(args.emergency_type ?? "").trim();
+  const phone_number = String(args.phone_number ?? "").trim();
+  const nlc_number = String(args.nlc_number ?? "").trim();
+  const facility_address = String(args.facility_address ?? "").trim();
+  const caller_comment = String(args.caller_comment ?? "").trim();
+  const ALLOWED = new Set(["no_light_individual", "no_light_area", "wire_down_danger", "sparking_equipment"]);
+  if (!ALLOWED.has(emergency_type)) {
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "invalid_emergency_type" };
+  }
+  if (!phone_number) {
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "missing_phone_number" };
+  }
+  if (!nlc_number && !facility_address) {
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "missing_address_and_nlc" };
+  }
+
+  const body = { phone_number, nlc_number, facility_address, emergency_type, caller_comment, call_sid: callSid };
+  const bodyStr = JSON.stringify(body);
+  const ts = Math.floor(Date.now() / 1000).toString();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-CRM-Timestamp": ts,
+  };
+  if (c.hmacSecret) {
+    try {
+      const enc = new TextEncoder();
+      const key = await crypto.subtle.importKey(
+        "raw", enc.encode(c.hmacSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+      );
+      const sigBuf = await crypto.subtle.sign("HMAC", key, enc.encode(`${ts}.${bodyStr}`));
+      const sigHex = Array.from(new Uint8Array(sigBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      headers["X-CRM-Signature"] = sigHex;
+    } catch (e) { log("crm2", "hmac sign failed", e instanceof Error ? e.message : String(e)); }
+  } else {
+    log("crm2", "WARN hmac_secret missing → sending unsigned request");
+  }
+
+  const t0 = Date.now();
+  try {
+    const ctl = new AbortController();
+    const tid = setTimeout(() => ctl.abort(), Math.min(Math.max(c.timeoutMs, 1000), 10000));
+    log("crm2", "→ VPN POST", c.url, "type=", emergency_type, "phone=", phone_number, "timeoutMs=", c.timeoutMs);
+    const r = await fetch(c.url, { method: "POST", headers, body: bodyStr, signal: ctl.signal });
+    clearTimeout(tid);
+    let txt = await r.text();
+    if (txt.length > 20000) txt = txt.slice(0, 20000) + "\n…[truncated]";
+    let parsed: Record<string, unknown> = {};
+    try { parsed = JSON.parse(txt) as Record<string, unknown>; } catch { /* keep text */ }
+    const ms = Date.now() - t0;
+    if (!r.ok) {
+      log("crm2", "← VPN error", r.status, "in", ms, "ms body=", txt.slice(0, 200));
+      return { ok: false, error: "Система регистрации заявок временно недоступна", reason: `http_${r.status}` };
+    }
+    log("crm2", "← VPN ok in", ms, "ms ticket=", parsed.ticket_id ?? parsed.id ?? "?");
+    return {
+      ok: true,
+      latency_ms: ms,
+      ticket_id: parsed.ticket_id ?? parsed.id ?? null,
+      data: parsed,
+      instructions: "Confirm the ticket to the caller: mention the ticket number if present, remind of safety (8m distance if wire_down_danger), then close politely.",
+    };
+  } catch (e) {
+    const ms = Date.now() - t0;
+    const msg = e instanceof Error ? e.message : String(e);
+    const aborted = msg.includes("abort") || msg.includes("AbortError");
+    log("crm2", "← VPN fail in", ms, "ms aborted=", aborted, "err=", msg.slice(0, 200));
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: aborted ? "timeout" : "network_error" };
+  }
+}
+
+
 
 
 

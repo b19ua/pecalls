@@ -880,6 +880,10 @@ export type Database = {
           crm_timeout_ms: number
           crm_tool_description: string
           crm_url: string | null
+          crm2_enabled: boolean
+          crm2_system_prompt_template: string | null
+          crm2_timeout_ms: number
+          crm2_url: string | null
           enabled: boolean
           gateway_url: string | null
           gdpr_contact_email: string | null
@@ -910,6 +914,10 @@ export type Database = {
           crm_timeout_ms?: number
           crm_tool_description?: string
           crm_url?: string | null
+          crm2_enabled?: boolean
+          crm2_system_prompt_template?: string | null
+          crm2_timeout_ms?: number
+          crm2_url?: string | null
           enabled?: boolean
           gateway_url?: string | null
           gdpr_contact_email?: string | null
@@ -940,6 +948,10 @@ export type Database = {
           crm_timeout_ms?: number
           crm_tool_description?: string
           crm_url?: string | null
+          crm2_enabled?: boolean
+          crm2_system_prompt_template?: string | null
+          crm2_timeout_ms?: number
+          crm2_url?: string | null
           enabled?: boolean
           gateway_url?: string | null
           gdpr_contact_email?: string | null

@@ -101,6 +101,13 @@ type Ctx = {
     object2: string;
     object3: string;
   } | null;
+  crm2: {
+    enabled: boolean;
+    url: string;
+    timeoutMs: number;
+    systemPromptTemplate: string;
+    hmacSecret: string;
+  } | null;
 };
 
 const OBJECTION_CATEGORY_LABELS: Record<string, string> = {

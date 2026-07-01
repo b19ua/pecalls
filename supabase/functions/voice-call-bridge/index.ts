@@ -318,6 +318,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
               result = await logObjectionEvent(ctx, callSid, (fc.args || {}) as Record<string, unknown>);
             } else if (fc.name === "get_local_system_data") {
               result = await callLocalCrm(ctx, (fc.args || {}) as Record<string, unknown>, callSid);
+            } else if (fc.name === "create_emergency_ticket") {
+              result = await callLocalCrm2(ctx, (fc.args || {}) as Record<string, unknown>, callSid);
             } else {
               const tool = ctx?.tools.find((t) => t.name === fc.name);
               result = tool

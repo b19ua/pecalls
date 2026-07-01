@@ -661,86 +661,176 @@ function LocalCrmCard() {
   return (
     <Card className="bg-gradient-card shadow-soft mt-5 border-primary/20">
       <CardContent className="p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Server className="h-5 w-5 text-primary" />
-            <h3 className="font-display text-lg font-semibold">Local CRM Integration (Live Tool Calling)</h3>
-          </div>
-          <Switch checked={crmEnabled} onCheckedChange={setCrmEnabled} />
-        </div>
-        <p className="text-sm text-muted-foreground">
-          When enabled, the AI agent can call your local CRM connector over VPN during a live call
-          and enrich the conversation with three customer fields. Toggle is fully isolated —
-          turning it off does not affect any other AI behavior.
-        </p>
-
-        <div className="grid gap-3">
-          <div>
-            <Label htmlFor="crm-url">Local connector URL (VPN)</Label>
-            <Input id="crm-url" value={crmUrl} onChange={(e) => setCrmUrl(e.target.value)} placeholder="http://10.8.0.2:8000/get-client-info" />
-            <p className="text-xs text-muted-foreground mt-1">
-              Recommended: deploy WireGuard on the client side, expose the connector only inside the VPN
-              (e.g. <code>10.8.0.2:8000</code>). Endpoint must accept <code>POST &#123;"phone_number":"..."&#125;</code> and
-              return JSON with <code>object_1</code>, <code>object_2</code>, <code>object_3</code>.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="crm-ah">Auth header name (optional)</Label>
-              <Input id="crm-ah" value={authHeader} onChange={(e) => setAuthHeader(e.target.value)} placeholder="X-API-Key" />
-            </div>
-            <div>
-              <Label htmlFor="crm-av">Auth header value (optional)</Label>
-              <Input id="crm-av" type="password" value={authValue} onChange={(e) => setAuthValue(e.target.value)} placeholder="••••••••" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="crm-to">Hard timeout (ms)</Label>
-              <Input id="crm-to" type="number" min={500} max={10000} value={timeoutMs} onChange={(e) => setTimeoutMs(Number(e.target.value) || 2000)} />
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div><Label>Field 1 name</Label><Input value={o1} onChange={(e) => setO1(e.target.value)} /></div>
-              <div><Label>Field 2 name</Label><Input value={o2} onChange={(e) => setO2(e.target.value)} /></div>
-              <div><Label>Field 3 name</Label><Input value={o3} onChange={(e) => setO3(e.target.value)} /></div>
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="crm-desc">Tool description for AI (what the data means)</Label>
-            <Input id="crm-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
+        <div className="flex items-center gap-2">
+          <Server className="h-5 w-5 text-primary" />
+          <h3 className="font-display text-lg font-semibold">Local CRM Integration (Live Tool Calling)</h3>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={onSave} disabled={saving}>
-            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save CRM settings
-          </Button>
-          <Button variant="outline" onClick={onTest} disabled={testing || !crmUrl.trim()}>
-            {testing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="h-4 w-4 mr-2" />}
-            Test connector
-          </Button>
-        </div>
+        <Tabs defaultValue="crm1">
+          <TabsList>
+            <TabsTrigger value="crm1">CRM #1: Client Lookup</TabsTrigger>
+            <TabsTrigger value="crm2">CRM #2: Emergency Ticket Creation</TabsTrigger>
+          </TabsList>
 
-        {testResult && (
-          <div className="rounded-lg border p-3 text-xs space-y-1">
-            <div className="flex items-center gap-2">
-              <Badge variant={testResult.ok ? "default" : "destructive"}>
-                {testResult.ok ? `OK ${testResult.status}` : `Failed ${testResult.status ?? ""}`}
-              </Badge>
-              {typeof testResult.ms === "number" && <span className="text-muted-foreground">{testResult.ms} ms</span>}
+          <TabsContent value="crm1" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                When enabled, the AI agent can call your local CRM connector over VPN during a live call
+                and enrich the conversation with three customer fields. Fully isolated toggle.
+              </p>
+              <Switch checked={crmEnabled} onCheckedChange={setCrmEnabled} />
             </div>
-            {testResult.error && <div className="text-destructive">{testResult.error}</div>}
-            {testResult.body && <pre className="font-mono whitespace-pre-wrap break-all text-[11px]">{testResult.body}</pre>}
-            <p className="text-muted-foreground">
-              Note: this test runs from your browser, not the calling Edge Function. The Edge Function reaches
-              the same URL from Lovable's cloud — so the connector must be reachable from Lovable's egress (via
-              public VPN endpoint, port-forward, or a reverse tunnel). Browser test ≠ runtime reachability.
-            </p>
-          </div>
-        )}
+
+            <div className="grid gap-3">
+              <div>
+                <Label htmlFor="crm-url">Local connector URL (VPN)</Label>
+                <Input id="crm-url" value={crmUrl} onChange={(e) => setCrmUrl(e.target.value)} placeholder="http://10.8.0.2:8000/get-client-info" />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Recommended: deploy WireGuard on the client side, expose the connector only inside the VPN
+                  (e.g. <code>10.8.0.2:8000</code>). Endpoint must accept <code>POST &#123;"phone_number":"..."&#125;</code> and
+                  return JSON with <code>object_1</code>, <code>object_2</code>, <code>object_3</code>.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="crm-ah">Auth header name (optional)</Label>
+                  <Input id="crm-ah" value={authHeader} onChange={(e) => setAuthHeader(e.target.value)} placeholder="X-API-Key" />
+                </div>
+                <div>
+                  <Label htmlFor="crm-av">Auth header value (optional)</Label>
+                  <Input id="crm-av" type="password" value={authValue} onChange={(e) => setAuthValue(e.target.value)} placeholder="••••••••" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="crm-to">Hard timeout (ms)</Label>
+                  <Input id="crm-to" type="number" min={500} max={10000} value={timeoutMs} onChange={(e) => setTimeoutMs(Number(e.target.value) || 2000)} />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div><Label>Field 1 name</Label><Input value={o1} onChange={(e) => setO1(e.target.value)} /></div>
+                  <div><Label>Field 2 name</Label><Input value={o2} onChange={(e) => setO2(e.target.value)} /></div>
+                  <div><Label>Field 3 name</Label><Input value={o3} onChange={(e) => setO3(e.target.value)} /></div>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="crm-desc">Tool description for AI (what the data means)</Label>
+                <Input id="crm-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={onSave} disabled={saving}>
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save CRM settings
+              </Button>
+              <Button variant="outline" onClick={onTest} disabled={testing || !crmUrl.trim()}>
+                {testing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="h-4 w-4 mr-2" />}
+                Test connector
+              </Button>
+            </div>
+
+            {testResult && (
+              <div className="rounded-lg border p-3 text-xs space-y-1">
+                <div className="flex items-center gap-2">
+                  <Badge variant={testResult.ok ? "default" : "destructive"}>
+                    {testResult.ok ? `OK ${testResult.status}` : `Failed ${testResult.status ?? ""}`}
+                  </Badge>
+                  {typeof testResult.ms === "number" && <span className="text-muted-foreground">{testResult.ms} ms</span>}
+                </div>
+                {testResult.error && <div className="text-destructive">{testResult.error}</div>}
+                {testResult.body && <pre className="font-mono whitespace-pre-wrap break-all text-[11px]">{testResult.body}</pre>}
+                <p className="text-muted-foreground">
+                  Note: this test runs from your browser, not the calling Edge Function. Browser test ≠ runtime reachability.
+                </p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="crm2" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Emergency Ticket Creation (create_emergency_ticket)</p>
+                <p className="text-sm text-muted-foreground">
+                  When enabled, the AI agent can create emergency outage tickets in your second local system.
+                  Requests are HMAC-SHA256 signed with the residency shared secret
+                  (headers <code>X-CRM-Signature</code>, <code>X-CRM-Timestamp</code>).
+                </p>
+              </div>
+              <Switch checked={crm2Enabled} onCheckedChange={setCrm2Enabled} />
+            </div>
+
+            <div className="grid gap-3">
+              <div>
+                <Label htmlFor="crm2-url">Ticket connector URL (VPN)</Label>
+                <Input id="crm2-url" value={crm2Url} onChange={(e) => setCrm2Url(e.target.value)} placeholder="http://10.8.0.2:8000/create-ticket" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="crm2-to">Hard timeout (ms, 1000–10000)</Label>
+                  <Input
+                    id="crm2-to"
+                    type="number"
+                    min={1000}
+                    max={10000}
+                    value={crm2Timeout}
+                    onChange={(e) => {
+                      const v = Number(e.target.value) || 3000;
+                      setCrm2Timeout(Math.min(Math.max(v, 1000), 10000));
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+                  <strong className="text-amber-500 flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5" /> Инструкция для ИИ по авариям
+                  </strong>
+                  <p className="mt-1">
+                    Обязательно пропишите инструкцию для Gemini: перед вызовом функции создания заявки робот
+                    обязан перечислить клиенту адрес (или NLC) и тип проблемы и получить чёткое устное согласие
+                    («Да»). Если обнаружен обрыв провода, ИИ обязан сказать:
+                    <em> «Пожалуйста, не приближайтесь к проводу ближе чем на 8 метров!»</em>
+                  </p>
+                </div>
+                <Textarea
+                  className="mt-2 min-h-[180px] font-mono text-xs"
+                  value={crm2Prompt}
+                  onChange={(e) => setCrm2Prompt(e.target.value)}
+                  placeholder={`Перед создание заявки:\n1. Перечисли адрес (или NLC) и emergency_type клиенту.\n2. Получи устное «Да».\n3. Если emergency_type = wire_down_danger — обязательно скажи: «Пожалуйста, не приближайтесь к проводу ближе чем на 8 метров!»\n4. Только после этого вызывай create_emergency_ticket.`}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={onSave} disabled={saving}>
+                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save
+              </Button>
+              <Button variant="outline" onClick={onTest2} disabled={testing2 || !crm2Url.trim()}>
+                {testing2 ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="h-4 w-4 mr-2" />}
+                Test ticket creation
+              </Button>
+            </div>
+
+            {testResult2 && (
+              <div className="rounded-lg border p-3 text-xs space-y-1">
+                <div className="flex items-center gap-2">
+                  <Badge variant={testResult2.ok ? "default" : "destructive"}>
+                    {testResult2.ok ? `OK ${testResult2.status}` : `Failed ${testResult2.status ?? ""}`}
+                  </Badge>
+                  {typeof testResult2.ms === "number" && <span className="text-muted-foreground">{testResult2.ms} ms</span>}
+                </div>
+                {testResult2.error && <div className="text-destructive">{testResult2.error}</div>}
+                {testResult2.body && <pre className="font-mono whitespace-pre-wrap break-all text-[11px]">{testResult2.body}</pre>}
+                <p className="text-muted-foreground">
+                  Browser test sends an unsigned request. The Edge Function will add HMAC signature headers at runtime.
+                </p>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );

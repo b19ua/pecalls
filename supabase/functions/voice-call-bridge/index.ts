@@ -725,6 +725,7 @@ async function loadContext(agentId: string): Promise<Ctx> {
       : {},
     emotionTrackingEnabled: agent.emotion_tracking_enabled !== false,
     crm,
+    crm2,
   };
 }
 

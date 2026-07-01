@@ -531,6 +531,13 @@ function LocalCrmCard() {
   const [o1, setO1] = useState("object_1");
   const [o2, setO2] = useState("object_2");
   const [o3, setO3] = useState("object_3");
+  // CRM #2 — Emergency Ticket Creation
+  const [crm2Enabled, setCrm2Enabled] = useState(false);
+  const [crm2Url, setCrm2Url] = useState("http://10.8.0.2:8000/create-ticket");
+  const [crm2Timeout, setCrm2Timeout] = useState(3000);
+  const [crm2Prompt, setCrm2Prompt] = useState("");
+  const [testing2, setTesting2] = useState(false);
+  const [testResult2, setTestResult2] = useState<{ ok: boolean; status?: number; ms?: number; body?: string; error?: string } | null>(null);
   // Mirror of storage residency fields so saving CRM does not wipe them.
   const [snapshot, setSnapshot] = useState<{ mode: Mode; enabled: boolean; gateway_url: string; hmac_secret: string; purge_twilio_after_ingest: boolean; proxy_audio: boolean } | null>(null);
 

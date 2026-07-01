@@ -30,7 +30,7 @@ export const getResidencyConfigFn = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const { data } = await supabase
       .from("data_residency_configs")
-      .select("mode, gateway_url, hmac_secret, enabled, purge_twilio_after_ingest, proxy_audio, last_ping_at, last_ping_ok, last_ping_error, crm_enabled, crm_url, crm_auth_header, crm_auth_value, crm_timeout_ms, crm_tool_description, crm_object1_label, crm_object2_label, crm_object3_label")
+      .select("mode, gateway_url, hmac_secret, enabled, purge_twilio_after_ingest, proxy_audio, last_ping_at, last_ping_ok, last_ping_error, crm_enabled, crm_url, crm_auth_header, crm_auth_value, crm_timeout_ms, crm_tool_description, crm_object1_label, crm_object2_label, crm_object3_label, crm2_enabled, crm2_url, crm2_timeout_ms, crm2_system_prompt_template")
       .eq("owner_id", userId)
       .maybeSingle();
     return data ?? {
@@ -41,6 +41,8 @@ export const getResidencyConfigFn = createServerFn({ method: "GET" })
       crm_timeout_ms: 2000,
       crm_tool_description: "Get caller info from local CRM by phone number. Returns three fields about the customer.",
       crm_object1_label: "object_1", crm_object2_label: "object_2", crm_object3_label: "object_3",
+      crm2_enabled: false, crm2_url: "http://10.8.0.2:8000/create-ticket", crm2_timeout_ms: 3000,
+      crm2_system_prompt_template: "",
     };
   });
 

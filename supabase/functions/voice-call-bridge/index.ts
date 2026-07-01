@@ -692,7 +692,7 @@ async function loadContext(agentId: string): Promise<Ctx> {
   }
   const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
   const tools = await loadTools(agent.id, agent.owner_id);
-  const crm = await loadCrmConfig(agent.owner_id);
+  const { crm, crm2 } = await loadCrmConfig(agent.owner_id);
   return {
     agentId: agent.id,
     ownerId: agent.owner_id,

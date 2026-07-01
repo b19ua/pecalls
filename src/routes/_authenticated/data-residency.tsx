@@ -552,6 +552,10 @@ function LocalCrmCard() {
       setO1(cfg.crm_object1_label ?? "object_1");
       setO2(cfg.crm_object2_label ?? "object_2");
       setO3(cfg.crm_object3_label ?? "object_3");
+      setCrm2Enabled(!!cfg.crm2_enabled);
+      setCrm2Url(cfg.crm2_url ?? "http://10.8.0.2:8000/create-ticket");
+      setCrm2Timeout(cfg.crm2_timeout_ms ?? 3000);
+      setCrm2Prompt(cfg.crm2_system_prompt_template ?? "");
       setSnapshot({
         mode: (cfg.mode as Mode) ?? "cloud",
         enabled: !!cfg.enabled,

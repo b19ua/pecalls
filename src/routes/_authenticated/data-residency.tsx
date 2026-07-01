@@ -574,6 +574,11 @@ function LocalCrmCard() {
       toast.error("Connector URL is required when CRM integration is enabled");
       return;
     }
+    if (crm2Enabled && !crm2Url.trim()) {
+      toast.error("Ticket connector URL is required when CRM #2 is enabled");
+      return;
+    }
+    const clampedT2 = Math.min(Math.max(Number(crm2Timeout) || 3000, 1000), 10000);
     setSaving(true);
     try {
       await save({ data: {
@@ -592,11 +597,41 @@ function LocalCrmCard() {
         crm_object1_label: o1,
         crm_object2_label: o2,
         crm_object3_label: o3,
+        crm2_enabled: crm2Enabled,
+        crm2_url: crm2Url.trim() || null,
+        crm2_timeout_ms: clampedT2,
+        crm2_system_prompt_template: crm2Prompt,
       } });
       toast.success("CRM integration saved");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
     } finally { setSaving(false); }
+  };
+
+  const onTest2 = async () => {
+    setTesting2(true); setTestResult2(null);
+    const t0 = Date.now();
+    try {
+      const ctl = new AbortController();
+      const tid = setTimeout(() => ctl.abort(), Math.min(crm2Timeout + 500, 11000));
+      const r = await fetch(crm2Url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone_number: "+10000000000",
+          nlc_number: "1234567",
+          facility_address: "Test street 1",
+          emergency_type: "no_light_individual",
+          caller_comment: "Test ticket from data-residency UI",
+        }),
+        signal: ctl.signal,
+      });
+      clearTimeout(tid);
+      const body = (await r.text()).slice(0, 600);
+      setTestResult2({ ok: r.ok, status: r.status, ms: Date.now() - t0, body });
+    } catch (e) {
+      setTestResult2({ ok: false, error: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 });
+    } finally { setTesting2(false); }
   };
 
   const onTest = async () => {

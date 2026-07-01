@@ -1153,6 +1153,98 @@ async function callLocalCrm(
   }
 }
 
+/**
+ * Live Tool Calling #2 — create an emergency (power-outage) ticket in the client's
+ * second local CRM over VPN. Signed with HMAC-SHA256 (X-CRM-Signature / X-CRM-Timestamp)
+ * using the shared crm_hmac_secret. Fully isolated: any failure returns a soft error
+ * to Gemini so the caller hears a graceful apology instead of the call dropping.
+ */
+async function callLocalCrm2(
+  ctx: Ctx | null,
+  args: Record<string, unknown>,
+  callSid: string,
+): Promise<unknown> {
+  const c = ctx?.crm2;
+  log("crm2", "toolCall received", "enabled=", !!c?.enabled, "callSid=", callSid, "args=", JSON.stringify(args).slice(0, 300));
+  if (!c || !c.enabled) {
+    log("crm2", "integration disabled at call time");
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "integration_disabled" };
+  }
+  if (!c.url) {
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "no_url" };
+  }
+  const emergency_type = String(args.emergency_type ?? "").trim();
+  const phone_number = String(args.phone_number ?? "").trim();
+  const nlc_number = String(args.nlc_number ?? "").trim();
+  const facility_address = String(args.facility_address ?? "").trim();
+  const caller_comment = String(args.caller_comment ?? "").trim();
+  const ALLOWED = new Set(["no_light_individual", "no_light_area", "wire_down_danger", "sparking_equipment"]);
+  if (!ALLOWED.has(emergency_type)) {
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "invalid_emergency_type" };
+  }
+  if (!phone_number) {
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "missing_phone_number" };
+  }
+  if (!nlc_number && !facility_address) {
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "missing_address_and_nlc" };
+  }
+
+  const body = { phone_number, nlc_number, facility_address, emergency_type, caller_comment, call_sid: callSid };
+  const bodyStr = JSON.stringify(body);
+  const ts = Math.floor(Date.now() / 1000).toString();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-CRM-Timestamp": ts,
+  };
+  if (c.hmacSecret) {
+    try {
+      const enc = new TextEncoder();
+      const key = await crypto.subtle.importKey(
+        "raw", enc.encode(c.hmacSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+      );
+      const sigBuf = await crypto.subtle.sign("HMAC", key, enc.encode(`${ts}.${bodyStr}`));
+      const sigHex = Array.from(new Uint8Array(sigBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      headers["X-CRM-Signature"] = sigHex;
+    } catch (e) { log("crm2", "hmac sign failed", e instanceof Error ? e.message : String(e)); }
+  } else {
+    log("crm2", "WARN hmac_secret missing → sending unsigned request");
+  }
+
+  const t0 = Date.now();
+  try {
+    const ctl = new AbortController();
+    const tid = setTimeout(() => ctl.abort(), Math.min(Math.max(c.timeoutMs, 1000), 10000));
+    log("crm2", "→ VPN POST", c.url, "type=", emergency_type, "phone=", phone_number, "timeoutMs=", c.timeoutMs);
+    const r = await fetch(c.url, { method: "POST", headers, body: bodyStr, signal: ctl.signal });
+    clearTimeout(tid);
+    let txt = await r.text();
+    if (txt.length > 20000) txt = txt.slice(0, 20000) + "\n…[truncated]";
+    let parsed: Record<string, unknown> = {};
+    try { parsed = JSON.parse(txt) as Record<string, unknown>; } catch { /* keep text */ }
+    const ms = Date.now() - t0;
+    if (!r.ok) {
+      log("crm2", "← VPN error", r.status, "in", ms, "ms body=", txt.slice(0, 200));
+      return { ok: false, error: "Система регистрации заявок временно недоступна", reason: `http_${r.status}` };
+    }
+    log("crm2", "← VPN ok in", ms, "ms ticket=", parsed.ticket_id ?? parsed.id ?? "?");
+    return {
+      ok: true,
+      latency_ms: ms,
+      ticket_id: parsed.ticket_id ?? parsed.id ?? null,
+      data: parsed,
+      instructions: "Confirm the ticket to the caller: mention the ticket number if present, remind of safety (8m distance if wire_down_danger), then close politely.",
+    };
+  } catch (e) {
+    const ms = Date.now() - t0;
+    const msg = e instanceof Error ? e.message : String(e);
+    const aborted = msg.includes("abort") || msg.includes("AbortError");
+    log("crm2", "← VPN fail in", ms, "ms aborted=", aborted, "err=", msg.slice(0, 200));
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: aborted ? "timeout" : "network_error" };
+  }
+}
+
+
+
 
 
 async function gatewayKnowledgeSearch(

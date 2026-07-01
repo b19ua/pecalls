@@ -997,6 +997,23 @@ function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
       },
     });
   }
+  if (ctx?.crm2?.enabled) {
+    decls.push({
+      name: "create_emergency_ticket",
+      description: "Создает официальную заявку об аварии, отключении электричества или обрыве линий электропередач. Перед вызовом обязательно подтвердить у клиента адрес (или NLC) и тип проблемы устным согласием.",
+      parameters: {
+        type: "object",
+        properties: {
+          phone_number: { type: "string", description: "Caller phone number in E.164 or as spoken." },
+          nlc_number: { type: "string", description: "7-значный номер места потребления (NLC) из квитанции клиента, если известен." },
+          facility_address: { type: "string", description: "Адрес аварии: город/село, улица, дом. Обязательно, если nlc_number отсутствует." },
+          emergency_type: { type: "string", description: "Строго один из: no_light_individual, no_light_area, wire_down_danger, sparking_equipment." },
+          caller_comment: { type: "string", description: "Краткое описание проблемы со слов клиента." },
+        },
+        required: ["phone_number", "emergency_type"],
+      },
+    });
+  }
   return decls;
 }
 

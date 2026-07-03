@@ -868,6 +868,39 @@ export type Database = {
           },
         ]
       }
+      crm_health: {
+        Row: {
+          breaker_open_until: string | null
+          consecutive_failures: number
+          crm_id: string
+          last_error: string | null
+          last_failure_at: string | null
+          last_success_at: string | null
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          breaker_open_until?: string | null
+          consecutive_failures?: number
+          crm_id: string
+          last_error?: string | null
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          breaker_open_until?: string | null
+          consecutive_failures?: number
+          crm_id?: string
+          last_error?: string | null
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       data_residency_configs: {
         Row: {
           created_at: string
@@ -1232,6 +1265,75 @@ export type Database = {
           id?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      tickets: {
+        Row: {
+          agent_id: string | null
+          attempts: number
+          call_id: string | null
+          call_sid: string | null
+          caller_comment: string | null
+          created_at: string
+          crm_id: string
+          emergency_type: string | null
+          external_ticket_id: string | null
+          facility_address: string | null
+          id: string
+          last_error: string | null
+          latency_ms: number | null
+          nlc_number: string | null
+          owner_id: string
+          payload: Json
+          phone_number: string | null
+          response: Json | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id?: string | null
+          attempts?: number
+          call_id?: string | null
+          call_sid?: string | null
+          caller_comment?: string | null
+          created_at?: string
+          crm_id?: string
+          emergency_type?: string | null
+          external_ticket_id?: string | null
+          facility_address?: string | null
+          id?: string
+          last_error?: string | null
+          latency_ms?: number | null
+          nlc_number?: string | null
+          owner_id: string
+          payload?: Json
+          phone_number?: string | null
+          response?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string | null
+          attempts?: number
+          call_id?: string | null
+          call_sid?: string | null
+          caller_comment?: string | null
+          created_at?: string
+          crm_id?: string
+          emergency_type?: string | null
+          external_ticket_id?: string | null
+          facility_address?: string | null
+          id?: string
+          last_error?: string | null
+          latency_ms?: number | null
+          nlc_number?: string | null
+          owner_id?: string
+          payload?: Json
+          phone_number?: string | null
+          response?: Json | null
+          status?: string
+          updated_at?: string
         }
         Relationships: []
       }

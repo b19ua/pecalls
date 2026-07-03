@@ -834,7 +834,112 @@ function LocalCrmCard() {
           </TabsContent>
         </Tabs>
       </CardContent>
+      <RecentTicketsSection />
     </Card>
   );
 }
+
+function RecentTicketsSection() {
+  const listTickets = useServerFn(listRecentTicketsFn);
+  const getHealth = useServerFn(getCrmHealthFn);
+  const [tickets, setTickets] = useState<Array<{
+    id: string; created_at: string; status: string; attempts: number; latency_ms: number | null;
+    emergency_type: string | null; phone_number: string | null; nlc_number: string | null;
+    facility_address: string | null; external_ticket_id: string | null; last_error: string | null;
+    call_sid: string | null;
+  }>>([]);
+  const [health, setHealth] = useState<Array<{
+    crm_id: string; consecutive_failures: number; breaker_open_until: string | null;
+    last_success_at: string | null; last_failure_at: string | null; last_error: string | null;
+  }>>([]);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const [t, h] = await Promise.all([listTickets({ data: { limit: 50 } }), getHealth()]);
+      setTickets(t.tickets);
+      setHealth(h.rows);
+    } catch (e) {
+      console.error("tickets refresh", e);
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { void refresh(); const id = setInterval(refresh, 15000); return () => clearInterval(id); }, []);
+
+  return (
+    <CardContent className="border-t pt-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium">Recent tickets (audit log)</p>
+          <p className="text-xs text-muted-foreground">Все попытки создания аварийных заявок за последнее время. Обновляется каждые 15 секунд.</p>
+        </div>
+        <Button size="sm" variant="outline" onClick={refresh} disabled={loading}>
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+
+      {health.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {health.map((h) => {
+            const breakerOpen = h.breaker_open_until && new Date(h.breaker_open_until).getTime() > Date.now();
+            return (
+              <div key={h.crm_id} className="rounded-md border px-3 py-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <Badge variant={breakerOpen ? "destructive" : h.consecutive_failures > 0 ? "secondary" : "default"}>
+                    {h.crm_id}
+                  </Badge>
+                  {breakerOpen ? (
+                    <span className="text-destructive">Breaker OPEN до {new Date(h.breaker_open_until!).toLocaleTimeString()}</span>
+                  ) : (
+                    <span className="text-muted-foreground">fails: {h.consecutive_failures}</span>
+                  )}
+                </div>
+                {h.last_success_at && <div className="text-muted-foreground">✓ {new Date(h.last_success_at).toLocaleString()}</div>}
+                {h.last_error && <div className="text-destructive truncate max-w-[280px]">{h.last_error}</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="rounded-md border overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-muted/50">
+            <tr className="text-left">
+              <th className="p-2">Time</th>
+              <th className="p-2">Status</th>
+              <th className="p-2">Type</th>
+              <th className="p-2">Phone / NLC / Addr</th>
+              <th className="p-2">Ticket #</th>
+              <th className="p-2">Attempts</th>
+              <th className="p-2">Latency</th>
+              <th className="p-2">Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tickets.length === 0 && (
+              <tr><td className="p-3 text-muted-foreground" colSpan={8}>Заявок пока нет.</td></tr>
+            )}
+            {tickets.map((t) => (
+              <tr key={t.id} className="border-t">
+                <td className="p-2 whitespace-nowrap">{new Date(t.created_at).toLocaleString()}</td>
+                <td className="p-2">
+                  <Badge variant={t.status === "success" ? "default" : t.status === "failed" ? "destructive" : "secondary"}>{t.status}</Badge>
+                </td>
+                <td className="p-2">{t.emergency_type ?? "-"}</td>
+                <td className="p-2">{[t.phone_number, t.nlc_number, t.facility_address].filter(Boolean).join(" / ") || "-"}</td>
+                <td className="p-2 font-mono">{t.external_ticket_id ?? "-"}</td>
+                <td className="p-2">{t.attempts}</td>
+                <td className="p-2">{t.latency_ms != null ? `${t.latency_ms} ms` : "-"}</td>
+                <td className="p-2 text-destructive max-w-[220px] truncate">{t.last_error ?? ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </CardContent>
+  );
+}
+
 

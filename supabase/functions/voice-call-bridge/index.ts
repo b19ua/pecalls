@@ -1159,88 +1159,194 @@ async function callLocalCrm(
  * using the shared crm_hmac_secret. Fully isolated: any failure returns a soft error
  * to Gemini so the caller hears a graceful apology instead of the call dropping.
  */
+// In-memory guards (per edge instance).
+// Circuit breaker: 5 consecutive failures per (owner,crm2) → 60s cooldown.
+// Rate limit: at most 1 successful ticket per callSid.
+type BreakerState = { fails: number; openUntil: number };
+const crm2Breakers = new Map<string, BreakerState>();
+const crm2TicketPerCall = new Map<string, number>(); // callSid -> count
+
+function crm2BreakerKey(ownerId: string) { return `crm2:${ownerId}`; }
+async function persistCrmHealth(ownerId: string, ok: boolean, err: string | null) {
+  try {
+    const key = crm2BreakerKey(ownerId);
+    const state = crm2Breakers.get(key) ?? { fails: 0, openUntil: 0 };
+    const patch: Record<string, unknown> = {
+      owner_id: ownerId,
+      crm_id: "crm2",
+      consecutive_failures: state.fails,
+      breaker_open_until: state.openUntil ? new Date(state.openUntil).toISOString() : null,
+      last_error: err,
+      updated_at: new Date().toISOString(),
+    };
+    if (ok) patch.last_success_at = new Date().toISOString();
+    else patch.last_failure_at = new Date().toISOString();
+    await supa.from("crm_health").upsert(patch, { onConflict: "owner_id,crm_id" });
+  } catch (e) { log("crm2", "persistCrmHealth fail", e instanceof Error ? e.message : String(e)); }
+}
+
+const PHONE_RE = /^\+?[0-9]{7,15}$/;
+const NLC_RE = /^[0-9]{6,12}$/;
+
 async function callLocalCrm2(
   ctx: Ctx | null,
   args: Record<string, unknown>,
   callSid: string,
 ): Promise<unknown> {
   const c = ctx?.crm2;
+  const ownerId = ctx?.ownerId || "";
+  const agentId = ctx?.agentId || null;
   log("crm2", "toolCall received", "enabled=", !!c?.enabled, "callSid=", callSid, "args=", JSON.stringify(args).slice(0, 300));
-  if (!c || !c.enabled) {
-    log("crm2", "integration disabled at call time");
-    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "integration_disabled" };
+
+  if (!c || !c.enabled) return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "integration_disabled" };
+  if (!c.url) return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "no_url" };
+
+  // Per-call rate limit
+  const rlCount = crm2TicketPerCall.get(callSid) ?? 0;
+  if (rlCount >= 1) {
+    log("crm2", "rate limit hit for callSid=", callSid);
+    return { ok: false, error: "По этому звонку заявка уже создана.", reason: "rate_limit" };
   }
-  if (!c.url) {
-    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "no_url" };
+
+  // Circuit breaker
+  const bkey = crm2BreakerKey(ownerId);
+  const bstate = crm2Breakers.get(bkey) ?? { fails: 0, openUntil: 0 };
+  if (bstate.openUntil > Date.now()) {
+    const secLeft = Math.ceil((bstate.openUntil - Date.now()) / 1000);
+    log("crm2", "breaker OPEN for", secLeft, "s owner=", ownerId);
+    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "breaker_open" };
   }
+
   const emergency_type = String(args.emergency_type ?? "").trim();
   const phone_number = String(args.phone_number ?? "").trim();
   const nlc_number = String(args.nlc_number ?? "").trim();
   const facility_address = String(args.facility_address ?? "").trim();
   const caller_comment = String(args.caller_comment ?? "").trim();
   const ALLOWED = new Set(["no_light_individual", "no_light_area", "wire_down_danger", "sparking_equipment"]);
-  if (!ALLOWED.has(emergency_type)) {
-    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "invalid_emergency_type" };
+  if (!ALLOWED.has(emergency_type)) return { ok: false, error: "Некорректный тип аварии.", reason: "invalid_emergency_type" };
+  if (!phone_number || !PHONE_RE.test(phone_number.replace(/[\s\-()]/g, ""))) {
+    return { ok: false, error: "Некорректный номер телефона.", reason: "invalid_phone" };
   }
-  if (!phone_number) {
-    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "missing_phone_number" };
-  }
-  if (!nlc_number && !facility_address) {
-    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: "missing_address_and_nlc" };
-  }
+  if (!nlc_number && !facility_address) return { ok: false, error: "Нужен NLC или адрес.", reason: "missing_address_and_nlc" };
+  if (nlc_number && !NLC_RE.test(nlc_number)) return { ok: false, error: "Некорректный NLC.", reason: "invalid_nlc" };
 
-  const body = { phone_number, nlc_number, facility_address, emergency_type, caller_comment, call_sid: callSid };
-  const bodyStr = JSON.stringify(body);
-  const ts = Math.floor(Date.now() / 1000).toString();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "X-CRM-Timestamp": ts,
-  };
-  if (c.hmacSecret) {
-    try {
-      const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        "raw", enc.encode(c.hmacSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
-      );
-      const sigBuf = await crypto.subtle.sign("HMAC", key, enc.encode(`${ts}.${bodyStr}`));
-      const sigHex = Array.from(new Uint8Array(sigBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-      headers["X-CRM-Signature"] = sigHex;
-    } catch (e) { log("crm2", "hmac sign failed", e instanceof Error ? e.message : String(e)); }
-  } else {
-    log("crm2", "WARN hmac_secret missing → sending unsigned request");
-  }
-
-  const t0 = Date.now();
+  // Resolve internal call_id
+  let callUuid: string | null = null;
   try {
-    const ctl = new AbortController();
-    const tid = setTimeout(() => ctl.abort(), Math.min(Math.max(c.timeoutMs, 1000), 10000));
-    log("crm2", "→ VPN POST", c.url, "type=", emergency_type, "phone=", phone_number, "timeoutMs=", c.timeoutMs);
-    const r = await fetch(c.url, { method: "POST", headers, body: bodyStr, signal: ctl.signal });
-    clearTimeout(tid);
-    let txt = await r.text();
-    if (txt.length > 20000) txt = txt.slice(0, 20000) + "\n…[truncated]";
-    let parsed: Record<string, unknown> = {};
-    try { parsed = JSON.parse(txt) as Record<string, unknown>; } catch { /* keep text */ }
-    const ms = Date.now() - t0;
-    if (!r.ok) {
-      log("crm2", "← VPN error", r.status, "in", ms, "ms body=", txt.slice(0, 200));
-      return { ok: false, error: "Система регистрации заявок временно недоступна", reason: `http_${r.status}` };
+    const { data: row } = await supa.from("calls").select("id").eq("twilio_call_sid", callSid).maybeSingle();
+    callUuid = row?.id ?? null;
+  } catch { /* ignore */ }
+
+  // Insert pending ticket row
+  let ticketRowId: string | null = null;
+  try {
+    const idempotency_key = `${callSid}:${emergency_type}:${nlc_number || facility_address}`;
+    const { data: ins } = await supa.from("tickets").insert({
+      owner_id: ownerId, agent_id: agentId, call_id: callUuid, call_sid: callSid,
+      crm_id: "crm2",
+      phone_number, nlc_number: nlc_number || null, facility_address: facility_address || null,
+      emergency_type, caller_comment: caller_comment || null,
+      payload: { idempotency_key },
+      status: "pending", attempts: 0,
+    }).select("id").maybeSingle();
+    ticketRowId = ins?.id ?? null;
+  } catch (e) { log("crm2", "ticket pre-insert fail", e instanceof Error ? e.message : String(e)); }
+
+  const idempotencyKey = `${callSid}:${emergency_type}:${nlc_number || facility_address}`;
+  const bodyObj = { phone_number, nlc_number, facility_address, emergency_type, caller_comment, call_sid: callSid, idempotency_key: idempotencyKey };
+  const bodyStr = JSON.stringify(bodyObj);
+
+  async function signHeaders(): Promise<Record<string, string>> {
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const h: Record<string, string> = { "Content-Type": "application/json", "X-CRM-Timestamp": ts, "X-Idempotency-Key": idempotencyKey };
+    if (c!.hmacSecret) {
+      try {
+        const enc = new TextEncoder();
+        const key = await crypto.subtle.importKey("raw", enc.encode(c!.hmacSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+        const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${ts}.${bodyStr}`));
+        h["X-CRM-Signature"] = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      } catch (e) { log("crm2", "hmac sign failed", e instanceof Error ? e.message : String(e)); }
     }
-    log("crm2", "← VPN ok in", ms, "ms ticket=", parsed.ticket_id ?? parsed.id ?? "?");
-    return {
-      ok: true,
-      latency_ms: ms,
-      ticket_id: parsed.ticket_id ?? parsed.id ?? null,
-      data: parsed,
-      instructions: "Confirm the ticket to the caller: mention the ticket number if present, remind of safety (8m distance if wire_down_danger), then close politely.",
-    };
-  } catch (e) {
-    const ms = Date.now() - t0;
-    const msg = e instanceof Error ? e.message : String(e);
-    const aborted = msg.includes("abort") || msg.includes("AbortError");
-    log("crm2", "← VPN fail in", ms, "ms aborted=", aborted, "err=", msg.slice(0, 200));
-    return { ok: false, error: "Система регистрации заявок временно недоступна", reason: aborted ? "timeout" : "network_error" };
+    return h;
   }
+
+  // Attempt with 1 retry on 5xx/timeout
+  const timeoutMs = Math.min(Math.max(c.timeoutMs, 1000), 10000);
+  let attempts = 0;
+  let lastError = "";
+  let ok = false;
+  let httpStatus = 0;
+  let parsed: Record<string, unknown> = {};
+  let latencyMs = 0;
+  const attemptOnce = async () => {
+    const t0 = Date.now();
+    const ctl = new AbortController();
+    const tid = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const headers = await signHeaders();
+      log("crm2", "→ VPN POST", c!.url, "attempt=", attempts + 1, "type=", emergency_type);
+      const r = await fetch(c!.url, { method: "POST", headers, body: bodyStr, signal: ctl.signal });
+      clearTimeout(tid);
+      let txt = await r.text();
+      if (txt.length > 20000) txt = txt.slice(0, 20000) + "\n…[truncated]";
+      try { parsed = JSON.parse(txt) as Record<string, unknown>; } catch { parsed = { raw: txt }; }
+      httpStatus = r.status;
+      latencyMs = Date.now() - t0;
+      if (r.ok) { ok = true; return { retriable: false }; }
+      lastError = `http_${r.status}`;
+      log("crm2", "← VPN error", r.status, "in", latencyMs, "ms");
+      return { retriable: r.status >= 500 };
+    } catch (e) {
+      clearTimeout(tid);
+      latencyMs = Date.now() - t0;
+      const msg = e instanceof Error ? e.message : String(e);
+      const aborted = msg.includes("abort") || msg.includes("AbortError");
+      lastError = aborted ? "timeout" : "network_error";
+      log("crm2", "← VPN fail in", latencyMs, "ms err=", msg.slice(0, 200));
+      return { retriable: true };
+    }
+  };
+
+  for (let i = 0; i < 2; i++) {
+    attempts++;
+    const res = await attemptOnce();
+    if (ok || !res.retriable) break;
+    if (i === 0) await new Promise((r) => setTimeout(r, 300));
+  }
+
+  // Update ticket row + breaker + persist health
+  if (ok) {
+    crm2TicketPerCall.set(callSid, rlCount + 1);
+    crm2Breakers.set(bkey, { fails: 0, openUntil: 0 });
+    const externalId = (parsed.ticket_id ?? parsed.id ?? null) as string | number | null;
+    if (ticketRowId) {
+      await supa.from("tickets").update({
+        status: "success", attempts, latency_ms: latencyMs,
+        external_ticket_id: externalId != null ? String(externalId) : null,
+        response: parsed, last_error: null,
+      }).eq("id", ticketRowId);
+    }
+    await persistCrmHealth(ownerId, true, null);
+    log("crm2", "✓ ticket created", externalId, "in", latencyMs, "ms attempts=", attempts);
+    return {
+      ok: true, latency_ms: latencyMs, attempts,
+      ticket_id: externalId, data: parsed,
+      instructions: "Подтверди клиенту номер заявки (если есть), напомни о безопасности (8 м от провода при wire_down_danger) и вежливо закончи разговор.",
+    };
+  }
+
+  const nextFails = bstate.fails + 1;
+  const openUntil = nextFails >= 5 ? Date.now() + 60_000 : 0;
+  crm2Breakers.set(bkey, { fails: nextFails, openUntil });
+  if (ticketRowId) {
+    await supa.from("tickets").update({
+      status: "failed", attempts, latency_ms: latencyMs,
+      last_error: lastError, response: parsed,
+    }).eq("id", ticketRowId);
+  }
+  await persistCrmHealth(ownerId, false, lastError);
+  log("crm2", "✗ failed reason=", lastError, "consecutiveFails=", nextFails, "breakerOpen=", openUntil > 0);
+  return { ok: false, error: "Система регистрации заявок временно недоступна", reason: lastError, attempts, http_status: httpStatus };
 }
 
 

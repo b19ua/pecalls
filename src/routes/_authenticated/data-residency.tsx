@@ -18,6 +18,8 @@ import {
   saveResidencyConfigFn,
   pingResidencyGatewayFn,
   gatewayHealthFn,
+  listRecentTicketsFn,
+  getCrmHealthFn,
 } from "@/lib/data-residency.functions";
 import { exportMyDataFn, eraseMyDataFn, syncToGatewayFn, listMyDsrRequestsFn } from "@/lib/gdpr.functions";
 import { useI18n } from "@/lib/i18n";

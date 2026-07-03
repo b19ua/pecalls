@@ -179,3 +179,43 @@ export const getCallContentFn = createServerFn({ method: "POST" })
       source: "cloud" as const,
     };
   });
+
+type TicketRow = {
+  id: string; created_at: string; status: string; attempts: number; latency_ms: number | null;
+  emergency_type: string | null; phone_number: string | null; nlc_number: string | null;
+  facility_address: string | null; external_ticket_id: string | null; last_error: string | null;
+  call_sid: string | null; call_id: string | null;
+};
+
+export const listRecentTicketsFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ limit: z.number().int().min(1).max(200).default(50) }).parse(d))
+  .handler(async ({ data, context }): Promise<{ tickets: TicketRow[] }> => {
+    const { supabase, userId } = context;
+    const { data: rows, error } = await supabase
+      .from("tickets" as never)
+      .select("id, created_at, status, attempts, latency_ms, emergency_type, phone_number, nlc_number, facility_address, external_ticket_id, last_error, call_sid, call_id")
+      .eq("owner_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(data.limit);
+    if (error) throw new Error(error.message);
+    return { tickets: (rows ?? []) as unknown as TicketRow[] };
+  });
+
+type CrmHealthRow = {
+  crm_id: string; consecutive_failures: number; breaker_open_until: string | null;
+  last_success_at: string | null; last_failure_at: string | null; last_error: string | null;
+  updated_at: string;
+};
+
+export const getCrmHealthFn = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<{ rows: CrmHealthRow[] }> => {
+    const { supabase, userId } = context;
+    const { data, error } = await supabase
+      .from("crm_health" as never)
+      .select("crm_id, consecutive_failures, breaker_open_until, last_success_at, last_failure_at, last_error, updated_at")
+      .eq("owner_id", userId);
+    if (error) throw new Error(error.message);
+    return { rows: (data ?? []) as unknown as CrmHealthRow[] };
+  });

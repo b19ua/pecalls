@@ -689,7 +689,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 async function loadContext(agentId: string): Promise<Ctx> {
   const { data: agent } = await supa
     .from("agents")
-    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix, objection_handling_enabled, objection_aaa_enabled, objection_categories, objection_custom_responses, emotion_tracking_enabled")
+    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix, objection_handling_enabled, objection_aaa_enabled, objection_categories, objection_custom_responses, emotion_tracking_enabled, tools_config")
     .eq("id", agentId)
     .maybeSingle();
   if (!agent) {
@@ -700,12 +700,15 @@ async function loadContext(agentId: string): Promise<Ctx> {
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
       handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
       outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
-      objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false, crm: null, crm2: null,
+      objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false, crm: null, crm2: null, toolsConfig: {},
     };
   }
   const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
   const tools = await loadTools(agent.id, agent.owner_id);
   const { crm, crm2 } = await loadCrmConfig(agent.owner_id);
+  const toolsConfig = (agent.tools_config && typeof agent.tools_config === "object" && !Array.isArray(agent.tools_config))
+    ? agent.tools_config as Record<string, boolean>
+    : {};
   return {
     agentId: agent.id,
     ownerId: agent.owner_id,
@@ -739,6 +742,7 @@ async function loadContext(agentId: string): Promise<Ctx> {
     emotionTrackingEnabled: agent.emotion_tracking_enabled !== false,
     crm,
     crm2,
+    toolsConfig,
   };
 }
 

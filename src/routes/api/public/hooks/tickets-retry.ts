@@ -75,7 +75,7 @@ export const Route = createFileRoute("/api/public/hooks/tickets-retry")({
             await supabaseAdmin.from("tickets").update({
               status: "success", attempts: nextAttempts, latency_ms: latency,
               external_ticket_id: externalId != null ? String(externalId) : null,
-              response: parsed, last_error: null, next_retry_at: null,
+              response: parsed as never, last_error: null, next_retry_at: null,
             }).eq("id", t.id);
             results.push({ id: t.id, ok: true });
           } else {
@@ -84,7 +84,7 @@ export const Route = createFileRoute("/api/public/hooks/tickets-retry")({
             await supabaseAdmin.from("tickets").update({
               status: escalate ? "escalated" : "failed",
               attempts: nextAttempts, latency_ms: latency,
-              last_error: err || `http_${status}`, response: parsed,
+              last_error: err || `http_${status}`, response: parsed as never,
               next_retry_at: escalate ? null : new Date(Date.now() + nextDelayMin * 60_000).toISOString(),
               escalated_at: escalate ? nowIso : null,
               escalation_reason: escalate ? "max_attempts_reached" : null,

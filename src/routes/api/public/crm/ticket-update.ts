@@ -47,7 +47,7 @@ export const Route = createFileRoute("/api/public/crm/ticket-update")({
           _owner_id: parsed.owner_id,
           _external_ticket_id: parsed.external_ticket_id,
           _status: parsed.status,
-          _payload: parsed.payload ?? {},
+          _payload: (parsed.payload ?? {}) as never,
         });
         if (error) return new Response(error.message, { status: 500 });
         return Response.json({ ok: true, ticket_id: id });

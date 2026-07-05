@@ -96,6 +96,7 @@ export type Database = {
           telegram_bot_token: string | null
           telegram_bot_username: string | null
           temperature: number
+          tools_config: Json
           twilio_number_e164: string | null
           updated_at: string
           voice: string
@@ -142,6 +143,7 @@ export type Database = {
           telegram_bot_token?: string | null
           telegram_bot_username?: string | null
           temperature?: number
+          tools_config?: Json
           twilio_number_e164?: string | null
           updated_at?: string
           voice?: string
@@ -188,6 +190,7 @@ export type Database = {
           telegram_bot_token?: string | null
           telegram_bot_username?: string | null
           temperature?: number
+          tools_config?: Json
           twilio_number_e164?: string | null
           updated_at?: string
           voice?: string
@@ -873,6 +876,9 @@ export type Database = {
           breaker_open_until: string | null
           consecutive_failures: number
           crm_id: string
+          is_up: boolean | null
+          last_check_at: string | null
+          last_check_latency_ms: number | null
           last_error: string | null
           last_failure_at: string | null
           last_success_at: string | null
@@ -883,6 +889,9 @@ export type Database = {
           breaker_open_until?: string | null
           consecutive_failures?: number
           crm_id: string
+          is_up?: boolean | null
+          last_check_at?: string | null
+          last_check_latency_ms?: number | null
           last_error?: string | null
           last_failure_at?: string | null
           last_success_at?: string | null
@@ -893,6 +902,9 @@ export type Database = {
           breaker_open_until?: string | null
           consecutive_failures?: number
           crm_id?: string
+          is_up?: boolean | null
+          last_check_at?: string | null
+          last_check_latency_ms?: number | null
           last_error?: string | null
           last_failure_at?: string | null
           last_success_at?: string | null
@@ -1278,11 +1290,17 @@ export type Database = {
           created_at: string
           crm_id: string
           emergency_type: string | null
+          escalated_at: string | null
+          escalation_reason: string | null
+          external_status: string | null
           external_ticket_id: string | null
           facility_address: string | null
           id: string
+          idempotency_key: string | null
           last_error: string | null
           latency_ms: number | null
+          max_attempts: number
+          next_retry_at: string | null
           nlc_number: string | null
           owner_id: string
           payload: Json
@@ -1300,11 +1318,17 @@ export type Database = {
           created_at?: string
           crm_id?: string
           emergency_type?: string | null
+          escalated_at?: string | null
+          escalation_reason?: string | null
+          external_status?: string | null
           external_ticket_id?: string | null
           facility_address?: string | null
           id?: string
+          idempotency_key?: string | null
           last_error?: string | null
           latency_ms?: number | null
+          max_attempts?: number
+          next_retry_at?: string | null
           nlc_number?: string | null
           owner_id: string
           payload?: Json
@@ -1322,11 +1346,17 @@ export type Database = {
           created_at?: string
           crm_id?: string
           emergency_type?: string | null
+          escalated_at?: string | null
+          escalation_reason?: string | null
+          external_status?: string | null
           external_ticket_id?: string | null
           facility_address?: string | null
           id?: string
+          idempotency_key?: string | null
           last_error?: string | null
           latency_ms?: number | null
+          max_attempts?: number
+          next_retry_at?: string | null
           nlc_number?: string | null
           owner_id?: string
           payload?: Json
@@ -1476,6 +1506,15 @@ export type Database = {
           owner_id: string
           transcript_deleted: number
         }[]
+      }
+      update_ticket_from_webhook: {
+        Args: {
+          _external_ticket_id: string
+          _owner_id: string
+          _payload: Json
+          _status: string
+        }
+        Returns: string
       }
     }
     Enums: {

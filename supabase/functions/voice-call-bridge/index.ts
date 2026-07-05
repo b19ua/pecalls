@@ -108,7 +108,15 @@ type Ctx = {
     systemPromptTemplate: string;
     hmacSecret: string;
   } | null;
+  toolsConfig: Record<string, boolean>;
 };
+
+// Per-agent tool gate. Empty/missing config → tool is allowed.
+function toolAllowed(cfg: Record<string, boolean> | undefined, name: string): boolean {
+  if (!cfg || typeof cfg !== "object") return true;
+  if (!(name in cfg)) return true;
+  return cfg[name] !== false;
+}
 
 const OBJECTION_CATEGORY_LABELS: Record<string, string> = {
   price: "💰 Price / Budget — клиент говорит «дорого», «нет бюджета», «дешевле есть»",

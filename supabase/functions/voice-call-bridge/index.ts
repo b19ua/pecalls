@@ -1252,22 +1252,36 @@ async function callLocalCrm2(
     callUuid = row?.id ?? null;
   } catch { /* ignore */ }
 
-  // Insert pending ticket row
+  const idempotencyKey = `${callSid}:${emergency_type}:${nlc_number || facility_address}`;
+
+  // Dedupe: if this idempotency_key already has a success row, don't hit CRM again.
   let ticketRowId: string | null = null;
   try {
-    const idempotency_key = `${callSid}:${emergency_type}:${nlc_number || facility_address}`;
-    const { data: ins } = await supa.from("tickets").insert({
-      owner_id: ownerId, agent_id: agentId, call_id: callUuid, call_sid: callSid,
-      crm_id: "crm2",
-      phone_number, nlc_number: nlc_number || null, facility_address: facility_address || null,
-      emergency_type, caller_comment: caller_comment || null,
-      payload: { idempotency_key },
-      status: "pending", attempts: 0,
-    }).select("id").maybeSingle();
-    ticketRowId = ins?.id ?? null;
+    const { data: existing } = await supa
+      .from("tickets")
+      .select("id, status, external_ticket_id")
+      .eq("owner_id", ownerId).eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (existing?.status === "success") {
+      log("crm2", "idempotent hit, ticket already created", existing.external_ticket_id);
+      return { ok: true, ticket_id: existing.external_ticket_id, idempotent: true,
+        instructions: "Заявка уже была создана ранее. Подтверди клиенту номер и вежливо закончи разговор." };
+    }
+    ticketRowId = existing?.id ?? null;
+    if (!ticketRowId) {
+      const { data: ins } = await supa.from("tickets").insert({
+        owner_id: ownerId, agent_id: agentId, call_id: callUuid, call_sid: callSid,
+        crm_id: "crm2",
+        phone_number, nlc_number: nlc_number || null, facility_address: facility_address || null,
+        emergency_type, caller_comment: caller_comment || null,
+        payload: { idempotency_key: idempotencyKey },
+        idempotency_key: idempotencyKey,
+        status: "pending", attempts: 0,
+      }).select("id").maybeSingle();
+      ticketRowId = ins?.id ?? null;
+    }
   } catch (e) { log("crm2", "ticket pre-insert fail", e instanceof Error ? e.message : String(e)); }
 
-  const idempotencyKey = `${callSid}:${emergency_type}:${nlc_number || facility_address}`;
   const bodyObj = { phone_number, nlc_number, facility_address, emergency_type, caller_comment, call_sid: callSid, idempotency_key: idempotencyKey };
   const bodyStr = JSON.stringify(bodyObj);
 

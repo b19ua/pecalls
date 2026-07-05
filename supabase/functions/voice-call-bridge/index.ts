@@ -108,7 +108,15 @@ type Ctx = {
     systemPromptTemplate: string;
     hmacSecret: string;
   } | null;
+  toolsConfig: Record<string, boolean>;
 };
+
+// Per-agent tool gate. Empty/missing config → tool is allowed.
+function toolAllowed(cfg: Record<string, boolean> | undefined, name: string): boolean {
+  if (!cfg || typeof cfg !== "object") return true;
+  if (!(name in cfg)) return true;
+  return cfg[name] !== false;
+}
 
 const OBJECTION_CATEGORY_LABELS: Record<string, string> = {
   price: "💰 Price / Budget — клиент говорит «дорого», «нет бюджета», «дешевле есть»",
@@ -668,7 +676,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         recordCalls: false, handoffEnabled: false, handoffDigit: "0",
         handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
         outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
-       objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false, crm: null,
+       objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false, crm: null, crm2: null, toolsConfig: {},
       };
       ctx = fb;
       ctxResolver?.(fb);
@@ -681,7 +689,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
 async function loadContext(agentId: string): Promise<Ctx> {
   const { data: agent } = await supa
     .from("agents")
-    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix, objection_handling_enabled, objection_aaa_enabled, objection_categories, objection_custom_responses, emotion_tracking_enabled")
+    .select("id, owner_id, system_prompt, voice, language, model, temperature, greeting, record_calls, handoff_enabled, handoff_dtmf_digit, handoff_trigger_phrases, handoff_numbers, twilio_number_e164, outbound_mode, sip_domain, sip_username, sip_password, sip_transport, sip_from_number, sip_route_prefix, objection_handling_enabled, objection_aaa_enabled, objection_categories, objection_custom_responses, emotion_tracking_enabled, tools_config")
     .eq("id", agentId)
     .maybeSingle();
   if (!agent) {
@@ -692,12 +700,15 @@ async function loadContext(agentId: string): Promise<Ctx> {
       recordCalls: false, handoffEnabled: false, handoffDigit: "0",
       handoffPhrases: [], handoffNumbers: [], twilioNumberE164: "",
       outboundMode: "twilio_number", sipDomain: "", sipUsername: "", sipPassword: "", sipTransport: "tls", sipFromNumber: "", sipRoutePrefix: "", tools: [],
-      objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false, crm: null, crm2: null,
+      objectionEnabled: false, objectionAaaEnabled: true, objectionCategories: [], objectionCustomResponses: {}, emotionTrackingEnabled: false, crm: null, crm2: null, toolsConfig: {},
     };
   }
   const knowledgeContext = await loadKnowledgeContext(agent.id, agent.owner_id, `${agent.system_prompt}\n${agent.greeting || ""}`);
   const tools = await loadTools(agent.id, agent.owner_id);
   const { crm, crm2 } = await loadCrmConfig(agent.owner_id);
+  const toolsConfig = (agent.tools_config && typeof agent.tools_config === "object" && !Array.isArray(agent.tools_config))
+    ? agent.tools_config as Record<string, boolean>
+    : {};
   return {
     agentId: agent.id,
     ownerId: agent.owner_id,
@@ -731,6 +742,7 @@ async function loadContext(agentId: string): Promise<Ctx> {
     emotionTrackingEnabled: agent.emotion_tracking_enabled !== false,
     crm,
     crm2,
+    toolsConfig,
   };
 }
 
@@ -949,7 +961,10 @@ async function loadTools(agentId: string, ownerId: string): Promise<ToolRow[]> {
 }
 
 function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
-  const decls = tools.map((t) => {
+  const cfg = ctx?.toolsConfig;
+  const decls = tools
+    .filter((t) => toolAllowed(cfg, t.name))
+    .map((t) => {
     const params = t.config.parameters ?? [];
     const properties: Record<string, { type: string; description?: string }> = {};
     const required: string[] = [];
@@ -964,7 +979,7 @@ function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
       parameters: { type: "object", properties, required },
     };
   });
-  if (ctx?.objectionEnabled) {
+  if (ctx?.objectionEnabled && toolAllowed(cfg, "log_objection")) {
     const cats = (ctx.objectionCategories || []).filter((k) => OBJECTION_CATEGORY_LABELS[k]);
     decls.push({
       name: "log_objection",
@@ -983,7 +998,7 @@ function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
       },
     });
   }
-  if (ctx?.crm?.enabled) {
+  if (ctx?.crm?.enabled && toolAllowed(cfg, "get_local_system_data")) {
     const c = ctx.crm;
     decls.push({
       name: "get_local_system_data",
@@ -997,7 +1012,7 @@ function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
       },
     });
   }
-  if (ctx?.crm2?.enabled) {
+  if (ctx?.crm2?.enabled && toolAllowed(cfg, "create_emergency_ticket")) {
     decls.push({
       name: "create_emergency_ticket",
       description: "Создает официальную заявку об аварии, отключении электричества или обрыве линий электропередач. Перед вызовом обязательно подтвердить у клиента адрес (или NLC) и тип проблемы устным согласием.",
@@ -1237,22 +1252,36 @@ async function callLocalCrm2(
     callUuid = row?.id ?? null;
   } catch { /* ignore */ }
 
-  // Insert pending ticket row
+  const idempotencyKey = `${callSid}:${emergency_type}:${nlc_number || facility_address}`;
+
+  // Dedupe: if this idempotency_key already has a success row, don't hit CRM again.
   let ticketRowId: string | null = null;
   try {
-    const idempotency_key = `${callSid}:${emergency_type}:${nlc_number || facility_address}`;
-    const { data: ins } = await supa.from("tickets").insert({
-      owner_id: ownerId, agent_id: agentId, call_id: callUuid, call_sid: callSid,
-      crm_id: "crm2",
-      phone_number, nlc_number: nlc_number || null, facility_address: facility_address || null,
-      emergency_type, caller_comment: caller_comment || null,
-      payload: { idempotency_key },
-      status: "pending", attempts: 0,
-    }).select("id").maybeSingle();
-    ticketRowId = ins?.id ?? null;
+    const { data: existing } = await supa
+      .from("tickets")
+      .select("id, status, external_ticket_id")
+      .eq("owner_id", ownerId).eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (existing?.status === "success") {
+      log("crm2", "idempotent hit, ticket already created", existing.external_ticket_id);
+      return { ok: true, ticket_id: existing.external_ticket_id, idempotent: true,
+        instructions: "Заявка уже была создана ранее. Подтверди клиенту номер и вежливо закончи разговор." };
+    }
+    ticketRowId = existing?.id ?? null;
+    if (!ticketRowId) {
+      const { data: ins } = await supa.from("tickets").insert({
+        owner_id: ownerId, agent_id: agentId, call_id: callUuid, call_sid: callSid,
+        crm_id: "crm2",
+        phone_number, nlc_number: nlc_number || null, facility_address: facility_address || null,
+        emergency_type, caller_comment: caller_comment || null,
+        payload: { idempotency_key: idempotencyKey },
+        idempotency_key: idempotencyKey,
+        status: "pending", attempts: 0,
+      }).select("id").maybeSingle();
+      ticketRowId = ins?.id ?? null;
+    }
   } catch (e) { log("crm2", "ticket pre-insert fail", e instanceof Error ? e.message : String(e)); }
 
-  const idempotencyKey = `${callSid}:${emergency_type}:${nlc_number || facility_address}`;
   const bodyObj = { phone_number, nlc_number, facility_address, emergency_type, caller_comment, call_sid: callSid, idempotency_key: idempotencyKey };
   const bodyStr = JSON.stringify(bodyObj);
 
@@ -1339,9 +1368,13 @@ async function callLocalCrm2(
   const openUntil = nextFails >= 5 ? Date.now() + 60_000 : 0;
   crm2Breakers.set(bkey, { fails: nextFails, openUntil });
   if (ticketRowId) {
+    // Exponential backoff scheduling for the retry cron: 1min, 5min, 15min, 60min…
+    const nextDelayMin = Math.min(60, Math.pow(3, attempts));
+    const nextRetryAt = new Date(Date.now() + nextDelayMin * 60_000).toISOString();
     await supa.from("tickets").update({
       status: "failed", attempts, latency_ms: latencyMs,
       last_error: lastError, response: parsed,
+      next_retry_at: nextRetryAt,
     }).eq("id", ticketRowId);
   }
   await persistCrmHealth(ownerId, false, lastError);

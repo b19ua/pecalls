@@ -42,6 +42,10 @@ import { Route as ApiPublicTwilioCopilotTestTwimlRouteImport } from './routes/ap
 import { Route as ApiPublicTwilioCopilotStreamRouteImport } from './routes/api/public/twilio/copilot-stream'
 import { Route as ApiPublicJambonzStatusRouteImport } from './routes/api/public/jambonz/status'
 import { Route as ApiPublicJambonzCallRouteImport } from './routes/api/public/jambonz/call'
+import { Route as ApiPublicHooksTicketsRetryRouteImport } from './routes/api/public/hooks/tickets-retry'
+import { Route as ApiPublicHooksCrmHealthcheckRouteImport } from './routes/api/public/hooks/crm-healthcheck'
+import { Route as ApiPublicCrmTicketUpdateRouteImport } from './routes/api/public/crm/ticket-update'
+import { Route as ApiPublicCrmSandboxRouteImport } from './routes/api/public/crm/sandbox'
 import { Route as ApiPublicCrmCallsRouteImport } from './routes/api/public/crm/calls'
 import { Route as AuthenticatedCopilotSessionsSessionIdRouteImport } from './routes/_authenticated/copilot.sessions.$sessionId'
 import { Route as AuthenticatedCopilotAgentsAgentIdRouteImport } from './routes/_authenticated/copilot.agents.$agentId'
@@ -220,6 +224,29 @@ const ApiPublicJambonzCallRoute = ApiPublicJambonzCallRouteImport.update({
   path: '/api/public/jambonz/call',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHooksTicketsRetryRoute =
+  ApiPublicHooksTicketsRetryRouteImport.update({
+    id: '/api/public/hooks/tickets-retry',
+    path: '/api/public/hooks/tickets-retry',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksCrmHealthcheckRoute =
+  ApiPublicHooksCrmHealthcheckRouteImport.update({
+    id: '/api/public/hooks/crm-healthcheck',
+    path: '/api/public/hooks/crm-healthcheck',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicCrmTicketUpdateRoute =
+  ApiPublicCrmTicketUpdateRouteImport.update({
+    id: '/api/public/crm/ticket-update',
+    path: '/api/public/crm/ticket-update',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicCrmSandboxRoute = ApiPublicCrmSandboxRouteImport.update({
+  id: '/api/public/crm/sandbox',
+  path: '/api/public/crm/sandbox',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicCrmCallsRoute = ApiPublicCrmCallsRouteImport.update({
   id: '/api/public/crm/calls',
   path: '/api/public/crm/calls',
@@ -271,6 +298,10 @@ export interface FileRoutesByFullPath {
   '/copilot/agents/$agentId': typeof AuthenticatedCopilotAgentsAgentIdRoute
   '/copilot/sessions/$sessionId': typeof AuthenticatedCopilotSessionsSessionIdRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
+  '/api/public/crm/sandbox': typeof ApiPublicCrmSandboxRoute
+  '/api/public/crm/ticket-update': typeof ApiPublicCrmTicketUpdateRoute
+  '/api/public/hooks/crm-healthcheck': typeof ApiPublicHooksCrmHealthcheckRoute
+  '/api/public/hooks/tickets-retry': typeof ApiPublicHooksTicketsRetryRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
   '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
   '/api/public/twilio/copilot-stream': typeof ApiPublicTwilioCopilotStreamRoute
@@ -307,6 +338,10 @@ export interface FileRoutesByTo {
   '/copilot/agents/$agentId': typeof AuthenticatedCopilotAgentsAgentIdRoute
   '/copilot/sessions/$sessionId': typeof AuthenticatedCopilotSessionsSessionIdRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
+  '/api/public/crm/sandbox': typeof ApiPublicCrmSandboxRoute
+  '/api/public/crm/ticket-update': typeof ApiPublicCrmTicketUpdateRoute
+  '/api/public/hooks/crm-healthcheck': typeof ApiPublicHooksCrmHealthcheckRoute
+  '/api/public/hooks/tickets-retry': typeof ApiPublicHooksTicketsRetryRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
   '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
   '/api/public/twilio/copilot-stream': typeof ApiPublicTwilioCopilotStreamRoute
@@ -347,6 +382,10 @@ export interface FileRoutesById {
   '/_authenticated/copilot/agents/$agentId': typeof AuthenticatedCopilotAgentsAgentIdRoute
   '/_authenticated/copilot/sessions/$sessionId': typeof AuthenticatedCopilotSessionsSessionIdRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
+  '/api/public/crm/sandbox': typeof ApiPublicCrmSandboxRoute
+  '/api/public/crm/ticket-update': typeof ApiPublicCrmTicketUpdateRoute
+  '/api/public/hooks/crm-healthcheck': typeof ApiPublicHooksCrmHealthcheckRoute
+  '/api/public/hooks/tickets-retry': typeof ApiPublicHooksTicketsRetryRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
   '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
   '/api/public/twilio/copilot-stream': typeof ApiPublicTwilioCopilotStreamRoute
@@ -387,6 +426,10 @@ export interface FileRouteTypes {
     | '/copilot/agents/$agentId'
     | '/copilot/sessions/$sessionId'
     | '/api/public/crm/calls'
+    | '/api/public/crm/sandbox'
+    | '/api/public/crm/ticket-update'
+    | '/api/public/hooks/crm-healthcheck'
+    | '/api/public/hooks/tickets-retry'
     | '/api/public/jambonz/call'
     | '/api/public/jambonz/status'
     | '/api/public/twilio/copilot-stream'
@@ -423,6 +466,10 @@ export interface FileRouteTypes {
     | '/copilot/agents/$agentId'
     | '/copilot/sessions/$sessionId'
     | '/api/public/crm/calls'
+    | '/api/public/crm/sandbox'
+    | '/api/public/crm/ticket-update'
+    | '/api/public/hooks/crm-healthcheck'
+    | '/api/public/hooks/tickets-retry'
     | '/api/public/jambonz/call'
     | '/api/public/jambonz/status'
     | '/api/public/twilio/copilot-stream'
@@ -462,6 +509,10 @@ export interface FileRouteTypes {
     | '/_authenticated/copilot/agents/$agentId'
     | '/_authenticated/copilot/sessions/$sessionId'
     | '/api/public/crm/calls'
+    | '/api/public/crm/sandbox'
+    | '/api/public/crm/ticket-update'
+    | '/api/public/hooks/crm-healthcheck'
+    | '/api/public/hooks/tickets-retry'
     | '/api/public/jambonz/call'
     | '/api/public/jambonz/status'
     | '/api/public/twilio/copilot-stream'
@@ -483,6 +534,10 @@ export interface RootRouteChildren {
   SnRoute: typeof SnRoute
   ApiAudioCallIdRoute: typeof ApiAudioCallIdRoute
   ApiPublicCrmCallsRoute: typeof ApiPublicCrmCallsRoute
+  ApiPublicCrmSandboxRoute: typeof ApiPublicCrmSandboxRoute
+  ApiPublicCrmTicketUpdateRoute: typeof ApiPublicCrmTicketUpdateRoute
+  ApiPublicHooksCrmHealthcheckRoute: typeof ApiPublicHooksCrmHealthcheckRoute
+  ApiPublicHooksTicketsRetryRoute: typeof ApiPublicHooksTicketsRetryRoute
   ApiPublicJambonzCallRoute: typeof ApiPublicJambonzCallRoute
   ApiPublicJambonzStatusRoute: typeof ApiPublicJambonzStatusRoute
   ApiPublicTwilioCopilotStreamRoute: typeof ApiPublicTwilioCopilotStreamRoute
@@ -727,6 +782,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicJambonzCallRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/tickets-retry': {
+      id: '/api/public/hooks/tickets-retry'
+      path: '/api/public/hooks/tickets-retry'
+      fullPath: '/api/public/hooks/tickets-retry'
+      preLoaderRoute: typeof ApiPublicHooksTicketsRetryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/crm-healthcheck': {
+      id: '/api/public/hooks/crm-healthcheck'
+      path: '/api/public/hooks/crm-healthcheck'
+      fullPath: '/api/public/hooks/crm-healthcheck'
+      preLoaderRoute: typeof ApiPublicHooksCrmHealthcheckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/crm/ticket-update': {
+      id: '/api/public/crm/ticket-update'
+      path: '/api/public/crm/ticket-update'
+      fullPath: '/api/public/crm/ticket-update'
+      preLoaderRoute: typeof ApiPublicCrmTicketUpdateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/crm/sandbox': {
+      id: '/api/public/crm/sandbox'
+      path: '/api/public/crm/sandbox'
+      fullPath: '/api/public/crm/sandbox'
+      preLoaderRoute: typeof ApiPublicCrmSandboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/crm/calls': {
       id: '/api/public/crm/calls'
       path: '/api/public/crm/calls'
@@ -846,6 +929,10 @@ const rootRouteChildren: RootRouteChildren = {
   SnRoute: SnRoute,
   ApiAudioCallIdRoute: ApiAudioCallIdRoute,
   ApiPublicCrmCallsRoute: ApiPublicCrmCallsRoute,
+  ApiPublicCrmSandboxRoute: ApiPublicCrmSandboxRoute,
+  ApiPublicCrmTicketUpdateRoute: ApiPublicCrmTicketUpdateRoute,
+  ApiPublicHooksCrmHealthcheckRoute: ApiPublicHooksCrmHealthcheckRoute,
+  ApiPublicHooksTicketsRetryRoute: ApiPublicHooksTicketsRetryRoute,
   ApiPublicJambonzCallRoute: ApiPublicJambonzCallRoute,
   ApiPublicJambonzStatusRoute: ApiPublicJambonzStatusRoute,
   ApiPublicTwilioCopilotStreamRoute: ApiPublicTwilioCopilotStreamRoute,

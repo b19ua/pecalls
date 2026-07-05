@@ -1368,9 +1368,13 @@ async function callLocalCrm2(
   const openUntil = nextFails >= 5 ? Date.now() + 60_000 : 0;
   crm2Breakers.set(bkey, { fails: nextFails, openUntil });
   if (ticketRowId) {
+    // Exponential backoff scheduling for the retry cron: 1min, 5min, 15min, 60min…
+    const nextDelayMin = Math.min(60, Math.pow(3, attempts));
+    const nextRetryAt = new Date(Date.now() + nextDelayMin * 60_000).toISOString();
     await supa.from("tickets").update({
       status: "failed", attempts, latency_ms: latencyMs,
       last_error: lastError, response: parsed,
+      next_retry_at: nextRetryAt,
     }).eq("id", ticketRowId);
   }
   await persistCrmHealth(ownerId, false, lastError);

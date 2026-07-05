@@ -961,7 +961,10 @@ async function loadTools(agentId: string, ownerId: string): Promise<ToolRow[]> {
 }
 
 function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
-  const decls = tools.map((t) => {
+  const cfg = ctx?.toolsConfig;
+  const decls = tools
+    .filter((t) => toolAllowed(cfg, t.name))
+    .map((t) => {
     const params = t.config.parameters ?? [];
     const properties: Record<string, { type: string; description?: string }> = {};
     const required: string[] = [];
@@ -976,7 +979,7 @@ function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
       parameters: { type: "object", properties, required },
     };
   });
-  if (ctx?.objectionEnabled) {
+  if (ctx?.objectionEnabled && toolAllowed(cfg, "log_objection")) {
     const cats = (ctx.objectionCategories || []).filter((k) => OBJECTION_CATEGORY_LABELS[k]);
     decls.push({
       name: "log_objection",
@@ -995,7 +998,7 @@ function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
       },
     });
   }
-  if (ctx?.crm?.enabled) {
+  if (ctx?.crm?.enabled && toolAllowed(cfg, "get_local_system_data")) {
     const c = ctx.crm;
     decls.push({
       name: "get_local_system_data",
@@ -1009,7 +1012,7 @@ function buildToolDeclarations(tools: ToolRow[], ctx?: Ctx) {
       },
     });
   }
-  if (ctx?.crm2?.enabled) {
+  if (ctx?.crm2?.enabled && toolAllowed(cfg, "create_emergency_ticket")) {
     decls.push({
       name: "create_emergency_ticket",
       description: "Создает официальную заявку об аварии, отключении электричества или обрыве линий электропередач. Перед вызовом обязательно подтвердить у клиента адрес (или NLC) и тип проблемы устным согласием.",

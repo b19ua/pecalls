@@ -235,8 +235,11 @@ function LivePage() {
         </div>
       )}
 
+      <LiveTicketsWidget />
+
       <CallDrawer item={open} onClose={() => setOpen(null)} />
       <ComplianceRulesSheet open={rulesOpen} onOpenChange={setRulesOpen} />
+
 
     </div>
   );

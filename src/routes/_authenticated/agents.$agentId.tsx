@@ -59,6 +59,7 @@ type AgentForm = {
   objection_categories: string[];
   objection_custom_responses: Record<string, string>;
   emotion_tracking_enabled: boolean;
+  tools_config: Record<string, boolean>;
 };
 
 const OBJECTION_CATEGORIES: { key: string; label: string; hint: string; placeholder: string }[] = [

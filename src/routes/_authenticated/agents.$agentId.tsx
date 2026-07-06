@@ -625,6 +625,34 @@ function AgentEditor() {
           )}
         </CollapsibleSection>
 
+        <CollapsibleSection title="🧰 Локальные инструменты (Data Residency)" defaultOpen={false}>
+          <p className="text-xs text-muted-foreground">
+            Включите инструменты, которые этот агент имеет право вызывать во время звонка.
+            Настройки самих CRM (URL, HMAC, таймауты) — в разделе <code>/data-residency</code>.
+          </p>
+          <div className="flex items-center justify-between rounded-md border border-border/50 p-3">
+            <div>
+              <Label className="text-sm">get_local_system_data (CRM #1 — чтение клиента)</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">Разрешить ИИ запрашивать данные клиента по номеру телефона из локальной CRM.</p>
+            </div>
+            <Switch
+              checked={form.tools_config.get_local_system_data !== false}
+              onCheckedChange={(v) => set("tools_config", { ...form.tools_config, get_local_system_data: v })}
+            />
+          </div>
+          <div className="flex items-center justify-between rounded-md border border-border/50 p-3">
+            <div>
+              <Label className="text-sm">create_emergency_ticket (CRM #2 — создание аварийной заявки)</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">Разрешить ИИ создавать аварийные заявки об отключении света.</p>
+            </div>
+            <Switch
+              checked={form.tools_config.create_emergency_ticket !== false}
+              onCheckedChange={(v) => set("tools_config", { ...form.tools_config, create_emergency_ticket: v })}
+            />
+          </div>
+        </CollapsibleSection>
+
+
         <CollapsibleSection title={t("agent.section.telephony")} defaultOpen>
           <Field label="Маршрут звонка" hint="Применяется ко всем звонкам — и входящим, и исходящим.">
             <Select value={form.outbound_mode} onValueChange={(v) => setOutboundMode(v as "twilio_number" | "sip_trunk")}>

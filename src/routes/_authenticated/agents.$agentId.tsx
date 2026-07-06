@@ -182,6 +182,9 @@ function AgentEditor() {
           objection_categories: (data as any).objection_categories ?? DEFAULTS.objection_categories,
           objection_custom_responses: ((data as any).objection_custom_responses as Record<string, string>) ?? {},
           emotion_tracking_enabled: (data as any).emotion_tracking_enabled ?? true,
+          tools_config: ((data as any).tools_config && typeof (data as any).tools_config === "object")
+            ? { get_local_system_data: true, create_emergency_ticket: true, ...(data as any).tools_config }
+            : DEFAULTS.tools_config,
         });
         if (data.inbound_sip_domain && data.inbound_sip_username && data.inbound_sip_password) {
           setInboundSip({

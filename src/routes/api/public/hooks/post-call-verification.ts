@@ -21,9 +21,9 @@ export const Route = createFileRoute("/api/public/hooks/post-call-verification")
 
         const flagged: Array<{ call_id: string; owner_id: string; reason: string }> = [];
         for (const c of calls ?? []) {
-          const transcript = Array.isArray(c.transcript) ? c.transcript : [];
+          const transcript = (Array.isArray(c.transcript) ? c.transcript : []) as unknown[];
           const text = transcript
-            .map((m: { text?: string; role?: string }) => (m && typeof m.text === "string" ? m.text : ""))
+            .map((m) => (m && typeof m === "object" && "text" in (m as Record<string, unknown>) && typeof (m as Record<string, unknown>).text === "string" ? String((m as Record<string, unknown>).text) : ""))
             .join(" ");
           if (!TICKET_INTENT.test(text)) continue;
 

@@ -104,6 +104,7 @@ const DEFAULTS: AgentForm = {
   objection_categories: ["price", "timing", "trust", "competitor", "stall", "emotional", "clarification"],
   objection_custom_responses: {},
   emotion_tracking_enabled: true,
+  tools_config: { get_local_system_data: true, create_emergency_ticket: true },
 };
 
 function AgentEditor() {

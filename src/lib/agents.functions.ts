@@ -57,6 +57,7 @@ const AgentSchema = z.object({
   objection_categories: z.array(z.string().max(40)).max(20).optional().default([]),
   objection_custom_responses: z.record(z.string(), z.string().max(2000)).optional().default({}),
   emotion_tracking_enabled: z.boolean().optional().default(true),
+  tools_config: z.record(z.string(), z.boolean()).optional().default({}),
 });
 
 export const saveAgent = createServerFn({ method: "POST" })

@@ -59,6 +59,7 @@ type AgentForm = {
   objection_categories: string[];
   objection_custom_responses: Record<string, string>;
   emotion_tracking_enabled: boolean;
+  tools_config: Record<string, boolean>;
 };
 
 const OBJECTION_CATEGORIES: { key: string; label: string; hint: string; placeholder: string }[] = [
@@ -103,6 +104,7 @@ const DEFAULTS: AgentForm = {
   objection_categories: ["price", "timing", "trust", "competitor", "stall", "emotional", "clarification"],
   objection_custom_responses: {},
   emotion_tracking_enabled: true,
+  tools_config: { get_local_system_data: true, create_emergency_ticket: true },
 };
 
 function AgentEditor() {
@@ -180,6 +182,9 @@ function AgentEditor() {
           objection_categories: (data as any).objection_categories ?? DEFAULTS.objection_categories,
           objection_custom_responses: ((data as any).objection_custom_responses as Record<string, string>) ?? {},
           emotion_tracking_enabled: (data as any).emotion_tracking_enabled ?? true,
+          tools_config: ((data as any).tools_config && typeof (data as any).tools_config === "object")
+            ? { get_local_system_data: true, create_emergency_ticket: true, ...(data as any).tools_config }
+            : DEFAULTS.tools_config,
         });
         if (data.inbound_sip_domain && data.inbound_sip_username && data.inbound_sip_password) {
           setInboundSip({
@@ -619,6 +624,34 @@ function AgentEditor() {
             </>
           )}
         </CollapsibleSection>
+
+        <CollapsibleSection title="🧰 Локальные инструменты (Data Residency)" defaultOpen={false}>
+          <p className="text-xs text-muted-foreground">
+            Включите инструменты, которые этот агент имеет право вызывать во время звонка.
+            Настройки самих CRM (URL, HMAC, таймауты) — в разделе <code>/data-residency</code>.
+          </p>
+          <div className="flex items-center justify-between rounded-md border border-border/50 p-3">
+            <div>
+              <Label className="text-sm">get_local_system_data (CRM #1 — чтение клиента)</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">Разрешить ИИ запрашивать данные клиента по номеру телефона из локальной CRM.</p>
+            </div>
+            <Switch
+              checked={form.tools_config.get_local_system_data !== false}
+              onCheckedChange={(v) => set("tools_config", { ...form.tools_config, get_local_system_data: v })}
+            />
+          </div>
+          <div className="flex items-center justify-between rounded-md border border-border/50 p-3">
+            <div>
+              <Label className="text-sm">create_emergency_ticket (CRM #2 — создание аварийной заявки)</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">Разрешить ИИ создавать аварийные заявки об отключении света.</p>
+            </div>
+            <Switch
+              checked={form.tools_config.create_emergency_ticket !== false}
+              onCheckedChange={(v) => set("tools_config", { ...form.tools_config, create_emergency_ticket: v })}
+            />
+          </div>
+        </CollapsibleSection>
+
 
         <CollapsibleSection title={t("agent.section.telephony")} defaultOpen>
           <Field label="Маршрут звонка" hint="Применяется ко всем звонкам — и входящим, и исходящим.">

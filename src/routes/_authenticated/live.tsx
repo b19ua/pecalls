@@ -235,10 +235,90 @@ function LivePage() {
         </div>
       )}
 
+      <LiveTicketsWidget />
+
       <CallDrawer item={open} onClose={() => setOpen(null)} />
       <ComplianceRulesSheet open={rulesOpen} onOpenChange={setRulesOpen} />
 
+
     </div>
+  );
+}
+
+type TicketRowLive = {
+  id: string; created_at: string; status: string; attempts: number;
+  emergency_type: string | null; facility_address: string | null;
+  external_ticket_id: string | null; last_error: string | null;
+  call_sid: string | null;
+};
+
+function LiveTicketsWidget() {
+  const [rows, setRows] = useState<TicketRowLive[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const { data } = await supabase
+        .from("tickets" as never)
+        .select("id, created_at, status, attempts, emergency_type, facility_address, external_ticket_id, last_error, call_sid")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (!cancelled) {
+        setRows((data ?? []) as unknown as TicketRowLive[]);
+        setLoading(false);
+      }
+    };
+    void load();
+    const ch = supabase
+      .channel("live:tickets")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tickets" }, () => void load())
+      .subscribe();
+    const poll = setInterval(load, 10_000);
+    return () => { supabase.removeChannel(ch); clearInterval(poll); };
+  }, []);
+
+  const badgeCls = (s: string) =>
+    s === "success" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+    : s === "escalated" ? "bg-red-500/15 text-red-400 border-red-500/30"
+    : s === "failed" ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+    : "bg-muted text-muted-foreground border-border";
+
+  return (
+    <Card className="mt-6 bg-gradient-card">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <h3 className="font-medium text-sm">Live tickets (CRM #2)</h3>
+          </div>
+          <Badge variant="secondary" className="text-[10px]">{rows.length}</Badge>
+        </div>
+        {loading ? (
+          <p className="text-xs text-muted-foreground">Загрузка…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Пока нет заявок из голосовых звонков.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {rows.map((t) => (
+              <div key={t.id} className="flex items-center gap-2 text-xs rounded-md border border-border/40 px-2 py-1.5">
+                <Badge className={cn("h-5 px-1.5 text-[10px] border", badgeCls(t.status))}>{t.status}</Badge>
+                <span className="tabular-nums text-muted-foreground">#{t.attempts}</span>
+                <span className="truncate flex-1">
+                  {t.emergency_type ?? "—"} · {t.facility_address ?? "—"}
+                </span>
+                {t.external_ticket_id && (
+                  <code className="font-mono text-[10px] text-muted-foreground">{t.external_ticket_id}</code>
+                )}
+                {t.last_error && t.status !== "success" && (
+                  <span className="text-red-400 truncate max-w-[200px]" title={t.last_error}>{t.last_error}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

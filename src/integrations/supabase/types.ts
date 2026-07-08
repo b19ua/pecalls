@@ -939,10 +939,13 @@ export type Database = {
           last_ping_error: string | null
           last_ping_ok: boolean | null
           mode: string
+          notify_on_escalation: boolean
           owner_id: string
           proxy_audio: boolean
           purge_twilio_after_ingest: boolean
           retention_days: number
+          supervisor_telegram_bot_token: string | null
+          supervisor_telegram_chat_id: string | null
           sync_agents: boolean
           sync_knowledge: boolean
           sync_transcripts: boolean
@@ -973,10 +976,13 @@ export type Database = {
           last_ping_error?: string | null
           last_ping_ok?: boolean | null
           mode?: string
+          notify_on_escalation?: boolean
           owner_id: string
           proxy_audio?: boolean
           purge_twilio_after_ingest?: boolean
           retention_days?: number
+          supervisor_telegram_bot_token?: string | null
+          supervisor_telegram_chat_id?: string | null
           sync_agents?: boolean
           sync_knowledge?: boolean
           sync_transcripts?: boolean
@@ -1007,10 +1013,13 @@ export type Database = {
           last_ping_error?: string | null
           last_ping_ok?: boolean | null
           mode?: string
+          notify_on_escalation?: boolean
           owner_id?: string
           proxy_audio?: boolean
           purge_twilio_after_ingest?: boolean
           retention_days?: number
+          supervisor_telegram_bot_token?: string | null
+          supervisor_telegram_chat_id?: string | null
           sync_agents?: boolean
           sync_knowledge?: boolean
           sync_transcripts?: boolean
@@ -1302,6 +1311,7 @@ export type Database = {
           max_attempts: number
           next_retry_at: string | null
           nlc_number: string | null
+          notified_at: string | null
           owner_id: string
           payload: Json
           phone_number: string | null
@@ -1330,6 +1340,7 @@ export type Database = {
           max_attempts?: number
           next_retry_at?: string | null
           nlc_number?: string | null
+          notified_at?: string | null
           owner_id: string
           payload?: Json
           phone_number?: string | null
@@ -1358,6 +1369,7 @@ export type Database = {
           max_attempts?: number
           next_retry_at?: string | null
           nlc_number?: string | null
+          notified_at?: string | null
           owner_id?: string
           payload?: Json
           phone_number?: string | null

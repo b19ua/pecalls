@@ -90,7 +90,7 @@ function TicketsPage() {
     <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
       <PageHeader
         title="Аварийные заявки"
-        subtitle="Мониторинг создания заявок во второй CRM-системе"
+        description="Мониторинг создания заявок во второй CRM-системе"
       />
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

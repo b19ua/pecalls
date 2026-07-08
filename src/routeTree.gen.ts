@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedToolsRouteImport } from './routes/_authenticated/tools'
+import { Route as AuthenticatedTicketsRouteImport } from './routes/_authenticated/tickets'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedNumbersRouteImport } from './routes/_authenticated/numbers'
 import { Route as AuthenticatedLiveRouteImport } from './routes/_authenticated/live'
@@ -84,6 +85,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuthenticatedToolsRoute = AuthenticatedToolsRouteImport.update({
   id: '/tools',
   path: '/tools',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedTicketsRoute = AuthenticatedTicketsRouteImport.update({
+  id: '/tickets',
+  path: '/tickets',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
@@ -296,6 +302,7 @@ export interface FileRoutesByFullPath {
   '/live': typeof AuthenticatedLiveRoute
   '/numbers': typeof AuthenticatedNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/tickets': typeof AuthenticatedTicketsRoute
   '/tools': typeof AuthenticatedToolsRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
@@ -337,6 +344,7 @@ export interface FileRoutesByTo {
   '/live': typeof AuthenticatedLiveRoute
   '/numbers': typeof AuthenticatedNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/tickets': typeof AuthenticatedTicketsRoute
   '/tools': typeof AuthenticatedToolsRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
@@ -382,6 +390,7 @@ export interface FileRoutesById {
   '/_authenticated/live': typeof AuthenticatedLiveRoute
   '/_authenticated/numbers': typeof AuthenticatedNumbersRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
   '/_authenticated/tools': typeof AuthenticatedToolsRoute
   '/_authenticated/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/_authenticated/calls/$callId': typeof AuthenticatedCallsCallIdRoute
@@ -427,6 +436,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/numbers'
     | '/settings'
+    | '/tickets'
     | '/tools'
     | '/agents/$agentId'
     | '/calls/$callId'
@@ -468,6 +478,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/numbers'
     | '/settings'
+    | '/tickets'
     | '/tools'
     | '/agents/$agentId'
     | '/calls/$callId'
@@ -512,6 +523,7 @@ export interface FileRouteTypes {
     | '/_authenticated/live'
     | '/_authenticated/numbers'
     | '/_authenticated/settings'
+    | '/_authenticated/tickets'
     | '/_authenticated/tools'
     | '/_authenticated/agents/$agentId'
     | '/_authenticated/calls/$callId'
@@ -612,6 +624,13 @@ declare module '@tanstack/react-router' {
       path: '/tools'
       fullPath: '/tools'
       preLoaderRoute: typeof AuthenticatedToolsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/tickets': {
+      id: '/_authenticated/tickets'
+      path: '/tickets'
+      fullPath: '/tickets'
+      preLoaderRoute: typeof AuthenticatedTicketsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/settings': {
@@ -918,6 +937,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedLiveRoute: typeof AuthenticatedLiveRoute
   AuthenticatedNumbersRoute: typeof AuthenticatedNumbersRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
   AuthenticatedToolsRoute: typeof AuthenticatedToolsRoute
 }
 
@@ -934,6 +954,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedLiveRoute: AuthenticatedLiveRoute,
   AuthenticatedNumbersRoute: AuthenticatedNumbersRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,
   AuthenticatedToolsRoute: AuthenticatedToolsRoute,
 }
 

@@ -44,19 +44,30 @@ export const Route = createFileRoute("/api/public/hooks/tickets-retry")({
 
         const results: Array<{ id: string; ok: boolean; reason?: string }> = [];
         for (const t of due ?? []) {
+          const { data: cfg } = await supabaseAdmin
+            .from("data_residency_configs")
+            .select("crm2_enabled, crm2_url, crm2_timeout_ms, hmac_secret, supervisor_telegram_bot_token, supervisor_telegram_chat_id, notify_on_escalation")
+            .eq("owner_id", t.owner_id)
+            .maybeSingle();
+          const notifyEsc = async (reason: string) => {
+            if (cfg?.notify_on_escalation && cfg.supervisor_telegram_bot_token && cfg.supervisor_telegram_chat_id) {
+              await notifySupervisor(cfg.supervisor_telegram_bot_token, cfg.supervisor_telegram_chat_id, {
+                id: t.id, phone_number: t.phone_number, nlc_number: t.nlc_number,
+                facility_address: t.facility_address, emergency_type: t.emergency_type,
+                last_error: reason, attempts: (t.attempts ?? 0),
+              });
+              await supabaseAdmin.from("tickets").update({ notified_at: new Date().toISOString() } as never).eq("id", t.id);
+            }
+          };
           if ((t.attempts ?? 0) >= (t.max_attempts ?? 5)) {
             await supabaseAdmin.from("tickets").update({
               status: "escalated", escalated_at: nowIso,
               escalation_reason: "max_attempts_reached", next_retry_at: null,
             }).eq("id", t.id);
+            await notifyEsc("max_attempts_reached");
             results.push({ id: t.id, ok: false, reason: "escalated" });
             continue;
           }
-          const { data: cfg } = await supabaseAdmin
-            .from("data_residency_configs")
-            .select("crm2_enabled, crm2_url, crm2_timeout_ms, hmac_secret")
-            .eq("owner_id", t.owner_id)
-            .maybeSingle();
           if (!cfg?.crm2_enabled || !cfg.crm2_url) {
             results.push({ id: t.id, ok: false, reason: "disabled" });
             continue;
@@ -110,6 +121,7 @@ export const Route = createFileRoute("/api/public/hooks/tickets-retry")({
               escalated_at: escalate ? nowIso : null,
               escalation_reason: escalate ? "max_attempts_reached" : null,
             }).eq("id", t.id);
+            if (escalate) await notifyEsc(err || `http_${status}`);
             results.push({ id: t.id, ok: false, reason: err || `http_${status}` });
           }
         }

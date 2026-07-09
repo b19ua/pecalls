@@ -562,6 +562,9 @@ function LocalCrmCard() {
       setCrm2Url(cfg.crm2_url ?? "http://10.8.0.2:8000/create-ticket");
       setCrm2Timeout(cfg.crm2_timeout_ms ?? 3000);
       setCrm2Prompt(cfg.crm2_system_prompt_template ?? "");
+      setTgBot(cfg.supervisor_telegram_bot_token ?? "");
+      setTgChat(cfg.supervisor_telegram_chat_id ?? "");
+      setNotifyEsc(cfg.notify_on_escalation ?? true);
       setSnapshot({
         mode: (cfg.mode as Mode) ?? "cloud",
         enabled: !!cfg.enabled,

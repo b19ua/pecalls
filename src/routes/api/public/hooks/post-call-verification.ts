@@ -44,13 +44,14 @@ export const Route = createFileRoute("/api/public/hooks/post-call-verification")
             .eq("call_sid", c.id);
           if ((already ?? 0) > 0) continue;
 
+          const { redactText, redactPhone } = await import("@/lib/pii");
           await supabaseAdmin.from("error_logs").insert({
             owner_id: c.owner_id,
             severity: "warn",
             source: "post_call_verification",
             call_sid: c.id,
             message: "Клиент упомянул аварию/заявку, но тикет не создан",
-            context: { call_id: c.id, from_number: c.from_number, transcript_excerpt: text.slice(0, 500) } as never,
+            context: { call_id: c.id, from_number: redactPhone(c.from_number), transcript_excerpt: redactText(text).slice(0, 500) } as never,
           } as never);
           flagged.push({ call_id: c.id, owner_id: c.owner_id, reason: "intent_without_ticket" });
 

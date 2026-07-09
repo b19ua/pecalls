@@ -10,15 +10,16 @@ async function sign(secret: string, ts: string, body: string): Promise<string> {
 async function notifySupervisor(
   token: string, chatId: string, ticket: { id: string; phone_number: string | null; nlc_number: string | null; facility_address: string | null; emergency_type: string | null; last_error: string | null; attempts: number },
 ): Promise<void> {
+  const { redactPhone, redactText } = await import("@/lib/pii");
   const text =
     `🚨 <b>Заявка эскалирована</b>\n` +
     `ID: <code>${ticket.id}</code>\n` +
     `Тип: ${ticket.emergency_type ?? "—"}\n` +
-    `Телефон: ${ticket.phone_number ?? "—"}\n` +
+    `Телефон: ${redactPhone(ticket.phone_number) ?? "—"}\n` +
     `NLC: ${ticket.nlc_number ?? "—"}\n` +
     `Адрес: ${ticket.facility_address ?? "—"}\n` +
     `Попыток: ${ticket.attempts}\n` +
-    `Ошибка: ${(ticket.last_error ?? "").slice(0, 200)}`;
+    `Ошибка: ${redactText(ticket.last_error ?? "").slice(0, 200)}`;
   try {
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",

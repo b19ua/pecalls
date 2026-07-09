@@ -1289,6 +1289,51 @@ export type Database = {
         }
         Relationships: []
       }
+      ticket_sla_snapshots: {
+        Row: {
+          breaker_open: boolean
+          bucket_hour: string
+          created_at: string
+          escalated: number
+          failed: number
+          id: string
+          owner_id: string
+          p95_latency_ms: number | null
+          pending: number
+          success: number
+          success_rate: number | null
+          total: number
+        }
+        Insert: {
+          breaker_open?: boolean
+          bucket_hour: string
+          created_at?: string
+          escalated?: number
+          failed?: number
+          id?: string
+          owner_id: string
+          p95_latency_ms?: number | null
+          pending?: number
+          success?: number
+          success_rate?: number | null
+          total?: number
+        }
+        Update: {
+          breaker_open?: boolean
+          bucket_hour?: string
+          created_at?: string
+          escalated?: number
+          failed?: number
+          id?: string
+          owner_id?: string
+          p95_latency_ms?: number | null
+          pending?: number
+          success?: number
+          success_rate?: number | null
+          total?: number
+        }
+        Relationships: []
+      }
       tickets: {
         Row: {
           agent_id: string | null

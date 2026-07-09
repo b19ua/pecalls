@@ -112,3 +112,33 @@ export const ticketsStatsFn = createServerFn({ method: "GET" })
       p95Latency: p95, breakerOpen, last24hTotal,
     };
   });
+
+type TrendPoint = {
+  bucket_hour: string;
+  total: number;
+  success: number;
+  failed: number;
+  escalated: number;
+  success_rate: number;
+  p95_latency_ms: number | null;
+  breaker_open: boolean;
+};
+
+export const slaTrendFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({ hours: z.number().int().min(6).max(720).default(168) }).parse(d),
+  )
+  .handler(async ({ data, context }): Promise<{ points: TrendPoint[] }> => {
+    const { supabase, userId } = context;
+    const since = new Date(Date.now() - data.hours * 60 * 60_000).toISOString();
+    const { data: rows, error } = await supabase
+      .from("ticket_sla_snapshots" as never)
+      .select("bucket_hour, total, success, failed, escalated, success_rate, p95_latency_ms, breaker_open")
+      .eq("owner_id", userId)
+      .gte("bucket_hour", since)
+      .order("bucket_hour", { ascending: true })
+      .limit(1000);
+    if (error) throw new Error(error.message);
+    return { points: (rows ?? []) as unknown as TrendPoint[] };
+  });

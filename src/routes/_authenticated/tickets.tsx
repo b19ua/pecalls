@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { listTicketsFilteredFn, retryTicketFn, ticketsStatsFn } from "@/lib/tickets.functions";
+import { listTicketsFilteredFn, retryTicketFn, ticketsStatsFn, slaTrendFn } from "@/lib/tickets.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +59,13 @@ function TicketsPage() {
     refetchInterval: 30_000,
   });
 
+  const trend = useServerFn(slaTrendFn);
+  const trendQ = useQuery({
+    queryKey: ["slaTrend", 168],
+    queryFn: () => trend({ data: { hours: 168 } }),
+    refetchInterval: 5 * 60_000,
+  });
+
   const retryMut = useMutation({
     mutationFn: (id: string) => retry({ data: { id } }),
     onSuccess: () => {
@@ -105,6 +112,8 @@ function TicketsPage() {
           icon={s?.breakerOpen ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
         />
       </div>
+
+      <SlaTrendCard points={trendQ.data?.points ?? []} />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
@@ -212,6 +221,68 @@ function StatCard({ label, value, accent, icon }: { label: string; value: string
       </CardHeader>
       <CardContent>
         <div className={`text-2xl font-bold ${accent ?? ""}`}>{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type TrendPoint = {
+  bucket_hour: string;
+  total: number;
+  success: number;
+  failed: number;
+  escalated: number;
+  success_rate: number;
+  p95_latency_ms: number | null;
+  breaker_open: boolean;
+};
+
+function SlaTrendCard({ points }: { points: TrendPoint[] }) {
+  if (!points.length) {
+    return (
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">SLA тренд (7 дней)</CardTitle></CardHeader>
+        <CardContent className="text-xs text-muted-foreground">Данных ещё нет — первый снимок формируется каждый час.</CardContent>
+      </Card>
+    );
+  }
+  const w = 900, h = 100, pad = 4;
+  const maxTotal = Math.max(1, ...points.map((p) => p.total));
+  const maxLat = Math.max(1, ...points.map((p) => p.p95_latency_ms ?? 0));
+  const x = (i: number) => pad + (i * (w - pad * 2)) / Math.max(1, points.length - 1);
+  const ySr = (v: number) => h - pad - (v / 100) * (h - pad * 2);
+  const yLat = (v: number) => h - pad - (v / maxLat) * (h - pad * 2);
+  const srPath = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${ySr(p.success_rate).toFixed(1)}`).join(" ");
+  const latPath = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${yLat(p.p95_latency_ms ?? 0).toFixed(1)}`).join(" ");
+  return (
+    <Card>
+      <CardHeader className="pb-2 flex flex-row items-center justify-between">
+        <CardTitle className="text-sm">SLA тренд (последние {points.length}ч)</CardTitle>
+        <div className="flex gap-3 text-xs">
+          <span className="flex items-center gap-1"><span className="h-2 w-3 bg-emerald-500 inline-block rounded-sm" />Успешность %</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-3 bg-blue-500 inline-block rounded-sm" />P95 ({maxLat}ms max)</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-3 bg-amber-500 inline-block rounded-sm" />Объём</span>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-24">
+          {points.map((p, i) => {
+            const barH = (p.total / maxTotal) * (h - pad * 2);
+            return (
+              <rect
+                key={i}
+                x={x(i) - 2}
+                y={h - pad - barH}
+                width={4}
+                height={barH}
+                fill="currentColor"
+                className="text-amber-500/40"
+              />
+            );
+          })}
+          <path d={srPath} fill="none" stroke="rgb(16 185 129)" strokeWidth={2} />
+          <path d={latPath} fill="none" stroke="rgb(59 130 246)" strokeWidth={2} strokeDasharray="3 2" />
+        </svg>
       </CardContent>
     </Card>
   );

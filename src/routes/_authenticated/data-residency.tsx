@@ -610,6 +610,9 @@ function LocalCrmCard() {
         crm2_url: crm2Url.trim() || null,
         crm2_timeout_ms: clampedT2,
         crm2_system_prompt_template: crm2Prompt,
+        supervisor_telegram_bot_token: tgBot.trim() || null,
+        supervisor_telegram_chat_id: tgChat.trim() || null,
+        notify_on_escalation: notifyEsc,
       } });
       toast.success("CRM integration saved");
     } catch (e) {

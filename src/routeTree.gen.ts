@@ -44,6 +44,7 @@ import { Route as ApiPublicTwilioCopilotStreamRouteImport } from './routes/api/p
 import { Route as ApiPublicJambonzStatusRouteImport } from './routes/api/public/jambonz/status'
 import { Route as ApiPublicJambonzCallRouteImport } from './routes/api/public/jambonz/call'
 import { Route as ApiPublicHooksTicketsRetryRouteImport } from './routes/api/public/hooks/tickets-retry'
+import { Route as ApiPublicHooksSlaSnapshotRouteImport } from './routes/api/public/hooks/sla-snapshot'
 import { Route as ApiPublicHooksPostCallVerificationRouteImport } from './routes/api/public/hooks/post-call-verification'
 import { Route as ApiPublicHooksCrmHealthcheckRouteImport } from './routes/api/public/hooks/crm-healthcheck'
 import { Route as ApiPublicCrmTicketUpdateRouteImport } from './routes/api/public/crm/ticket-update'
@@ -237,6 +238,12 @@ const ApiPublicHooksTicketsRetryRoute =
     path: '/api/public/hooks/tickets-retry',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksSlaSnapshotRoute =
+  ApiPublicHooksSlaSnapshotRouteImport.update({
+    id: '/api/public/hooks/sla-snapshot',
+    path: '/api/public/hooks/sla-snapshot',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksPostCallVerificationRoute =
   ApiPublicHooksPostCallVerificationRouteImport.update({
     id: '/api/public/hooks/post-call-verification',
@@ -316,6 +323,7 @@ export interface FileRoutesByFullPath {
   '/api/public/crm/ticket-update': typeof ApiPublicCrmTicketUpdateRoute
   '/api/public/hooks/crm-healthcheck': typeof ApiPublicHooksCrmHealthcheckRoute
   '/api/public/hooks/post-call-verification': typeof ApiPublicHooksPostCallVerificationRoute
+  '/api/public/hooks/sla-snapshot': typeof ApiPublicHooksSlaSnapshotRoute
   '/api/public/hooks/tickets-retry': typeof ApiPublicHooksTicketsRetryRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
   '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
@@ -358,6 +366,7 @@ export interface FileRoutesByTo {
   '/api/public/crm/ticket-update': typeof ApiPublicCrmTicketUpdateRoute
   '/api/public/hooks/crm-healthcheck': typeof ApiPublicHooksCrmHealthcheckRoute
   '/api/public/hooks/post-call-verification': typeof ApiPublicHooksPostCallVerificationRoute
+  '/api/public/hooks/sla-snapshot': typeof ApiPublicHooksSlaSnapshotRoute
   '/api/public/hooks/tickets-retry': typeof ApiPublicHooksTicketsRetryRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
   '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
@@ -404,6 +413,7 @@ export interface FileRoutesById {
   '/api/public/crm/ticket-update': typeof ApiPublicCrmTicketUpdateRoute
   '/api/public/hooks/crm-healthcheck': typeof ApiPublicHooksCrmHealthcheckRoute
   '/api/public/hooks/post-call-verification': typeof ApiPublicHooksPostCallVerificationRoute
+  '/api/public/hooks/sla-snapshot': typeof ApiPublicHooksSlaSnapshotRoute
   '/api/public/hooks/tickets-retry': typeof ApiPublicHooksTicketsRetryRoute
   '/api/public/jambonz/call': typeof ApiPublicJambonzCallRoute
   '/api/public/jambonz/status': typeof ApiPublicJambonzStatusRoute
@@ -450,6 +460,7 @@ export interface FileRouteTypes {
     | '/api/public/crm/ticket-update'
     | '/api/public/hooks/crm-healthcheck'
     | '/api/public/hooks/post-call-verification'
+    | '/api/public/hooks/sla-snapshot'
     | '/api/public/hooks/tickets-retry'
     | '/api/public/jambonz/call'
     | '/api/public/jambonz/status'
@@ -492,6 +503,7 @@ export interface FileRouteTypes {
     | '/api/public/crm/ticket-update'
     | '/api/public/hooks/crm-healthcheck'
     | '/api/public/hooks/post-call-verification'
+    | '/api/public/hooks/sla-snapshot'
     | '/api/public/hooks/tickets-retry'
     | '/api/public/jambonz/call'
     | '/api/public/jambonz/status'
@@ -537,6 +549,7 @@ export interface FileRouteTypes {
     | '/api/public/crm/ticket-update'
     | '/api/public/hooks/crm-healthcheck'
     | '/api/public/hooks/post-call-verification'
+    | '/api/public/hooks/sla-snapshot'
     | '/api/public/hooks/tickets-retry'
     | '/api/public/jambonz/call'
     | '/api/public/jambonz/status'
@@ -563,6 +576,7 @@ export interface RootRouteChildren {
   ApiPublicCrmTicketUpdateRoute: typeof ApiPublicCrmTicketUpdateRoute
   ApiPublicHooksCrmHealthcheckRoute: typeof ApiPublicHooksCrmHealthcheckRoute
   ApiPublicHooksPostCallVerificationRoute: typeof ApiPublicHooksPostCallVerificationRoute
+  ApiPublicHooksSlaSnapshotRoute: typeof ApiPublicHooksSlaSnapshotRoute
   ApiPublicHooksTicketsRetryRoute: typeof ApiPublicHooksTicketsRetryRoute
   ApiPublicJambonzCallRoute: typeof ApiPublicJambonzCallRoute
   ApiPublicJambonzStatusRoute: typeof ApiPublicJambonzStatusRoute
@@ -822,6 +836,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksTicketsRetryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/sla-snapshot': {
+      id: '/api/public/hooks/sla-snapshot'
+      path: '/api/public/hooks/sla-snapshot'
+      fullPath: '/api/public/hooks/sla-snapshot'
+      preLoaderRoute: typeof ApiPublicHooksSlaSnapshotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/post-call-verification': {
       id: '/api/public/hooks/post-call-verification'
       path: '/api/public/hooks/post-call-verification'
@@ -976,6 +997,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksCrmHealthcheckRoute: ApiPublicHooksCrmHealthcheckRoute,
   ApiPublicHooksPostCallVerificationRoute:
     ApiPublicHooksPostCallVerificationRoute,
+  ApiPublicHooksSlaSnapshotRoute: ApiPublicHooksSlaSnapshotRoute,
   ApiPublicHooksTicketsRetryRoute: ApiPublicHooksTicketsRetryRoute,
   ApiPublicJambonzCallRoute: ApiPublicJambonzCallRoute,
   ApiPublicJambonzStatusRoute: ApiPublicJambonzStatusRoute,

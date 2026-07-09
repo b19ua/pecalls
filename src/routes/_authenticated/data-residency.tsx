@@ -841,6 +841,51 @@ function LocalCrmCard() {
                 </p>
               </div>
             )}
+
+            <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-primary" /> Supervisor Telegram alerts</p>
+                  <p className="text-xs text-muted-foreground">Notify supervisor when a ticket is escalated after {`{max_attempts}`} failed retries.</p>
+                </div>
+                <Switch checked={notifyEsc} onCheckedChange={setNotifyEsc} />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="tg-bot">Bot token</Label>
+                  <Input id="tg-bot" value={tgBot} onChange={(e) => setTgBot(e.target.value)} placeholder="123456:ABC-DEF..." />
+                </div>
+                <div>
+                  <Label htmlFor="tg-chat">Chat ID</Label>
+                  <Input id="tg-chat" value={tgChat} onChange={(e) => setTgChat(e.target.value)} placeholder="-100123456 or 987654321" />
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={tgTesting || !tgBot.trim() || !tgChat.trim()}
+                onClick={async () => {
+                  setTgTesting(true);
+                  try {
+                    const r = await fetch(`https://api.telegram.org/bot${encodeURIComponent(tgBot.trim())}/sendMessage`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ chat_id: tgChat.trim(), text: "✅ Lunara: тестовое сообщение супервайзеру", parse_mode: "HTML" }),
+                    });
+                    if (r.ok) toast.success("Test message sent");
+                    else toast.error(`Telegram: ${r.status} ${(await r.text()).slice(0, 200)}`);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Telegram send failed");
+                  } finally { setTgTesting(false); }
+                }}
+              >
+                {tgTesting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="h-4 w-4 mr-2" />}
+                Send test alert
+              </Button>
+              <p className="text-[11px] text-muted-foreground">
+                Как получить: создайте бота у @BotFather → сохраните токен. Добавьте бота в группу (или отправьте ему /start), затем узнайте chat_id через @userinfobot или через API <code>getUpdates</code>. Токен хранится в вашей записи data_residency_configs и используется только серверными хуками.
+              </p>
+            </div>
           </TabsContent>
         </Tabs>
       </CardContent>

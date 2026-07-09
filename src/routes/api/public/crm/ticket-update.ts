@@ -43,11 +43,13 @@ export const Route = createFileRoute("/api/public/crm/ticket-update")({
           return new Response("bad signature", { status: 401 });
         }
 
+        const { redactPayload } = await import("@/lib/pii");
+        const safePayload = redactPayload(parsed.payload ?? {}) as Record<string, unknown>;
         const { data: id, error } = await supabaseAdmin.rpc("update_ticket_from_webhook", {
           _owner_id: parsed.owner_id,
           _external_ticket_id: parsed.external_ticket_id,
           _status: parsed.status,
-          _payload: (parsed.payload ?? {}) as never,
+          _payload: safePayload as never,
         });
         if (error) return new Response(error.message, { status: 500 });
         return Response.json({ ok: true, ticket_id: id });

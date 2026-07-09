@@ -59,6 +59,13 @@ function TicketsPage() {
     refetchInterval: 30_000,
   });
 
+  const trend = useServerFn(slaTrendFn);
+  const trendQ = useQuery({
+    queryKey: ["slaTrend", 168],
+    queryFn: () => trend({ data: { hours: 168 } }),
+    refetchInterval: 5 * 60_000,
+  });
+
   const retryMut = useMutation({
     mutationFn: (id: string) => retry({ data: { id } }),
     onSuccess: () => {

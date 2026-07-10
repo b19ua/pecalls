@@ -76,6 +76,7 @@ export const saveResidencyConfigFn = createServerFn({ method: "POST" })
       ...(typeof data.crm_object3_label === "string" ? { crm_object3_label: data.crm_object3_label } : {}),
       ...(typeof data.crm2_enabled === "boolean" ? { crm2_enabled: data.crm2_enabled } : {}),
       ...(data.crm2_url !== undefined ? { crm2_url: data.crm2_url ?? null } : {}),
+      ...(data.crm2_url_backup !== undefined ? { crm2_url_backup: data.crm2_url_backup ?? null } : {}),
       ...(typeof data.crm2_timeout_ms === "number" ? { crm2_timeout_ms: data.crm2_timeout_ms } : {}),
       ...(typeof data.crm2_system_prompt_template === "string" ? { crm2_system_prompt_template: data.crm2_system_prompt_template } : {}),
       ...(data.supervisor_telegram_bot_token !== undefined ? { supervisor_telegram_bot_token: data.supervisor_telegram_bot_token ?? null } : {}),

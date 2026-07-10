@@ -120,7 +120,17 @@ function TicketsPage() {
         />
       </div>
 
+      {ticketsQ.data?.supervisor && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+          Режим супервизора: видны только эскалированные и упавшие заявки со всех владельцев. Персональные данные замаскированы.
+        </div>
+      )}
+
       <SlaTrendCard points={trendQ.data?.points ?? []} />
+
+      <ErrorLogsCard logs={errQ.data?.logs ?? []} />
+
+
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">

@@ -26,14 +26,18 @@ const FilterSchema = z.object({
 export const listTicketsFilteredFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => FilterSchema.parse(d))
-  .handler(async ({ data, context }): Promise<{ tickets: Ticket[] }> => {
+  .handler(async ({ data, context }): Promise<{ tickets: Ticket[]; supervisor: boolean }> => {
     const { supabase, userId } = context;
+    const { data: isSupervisor } = await supabase.rpc("has_role", { _user_id: userId, _role: "supervisor" });
+    const supervisor = !!isSupervisor;
+
     let q = supabase
       .from("tickets" as never)
       .select("id, created_at, updated_at, status, attempts, max_attempts, latency_ms, emergency_type, phone_number, nlc_number, facility_address, caller_comment, external_ticket_id, external_status, last_error, call_sid, call_id, next_retry_at, escalated_at, idempotency_key")
-      .eq("owner_id", userId)
       .order("created_at", { ascending: false })
       .limit(data.limit);
+    // Owners see all their tickets; supervisors see escalated/failed across owners (RLS enforced).
+    if (!supervisor) q = q.eq("owner_id", userId);
     if (data.status?.length) q = q.in("status", data.status);
     if (data.from) q = q.gte("created_at", data.from);
     if (data.to) q = q.lte("created_at", data.to);
@@ -45,7 +49,18 @@ export const listTicketsFilteredFn = createServerFn({ method: "POST" })
     }
     const { data: rows, error } = await q;
     if (error) throw new Error(error.message);
-    return { tickets: (rows ?? []) as unknown as Ticket[] };
+    let tickets = (rows ?? []) as unknown as Ticket[];
+    if (supervisor) {
+      const { redactPhone, redactText } = await import("@/lib/pii");
+      tickets = tickets.map((t) => ({
+        ...t,
+        phone_number: redactPhone(t.phone_number),
+        nlc_number: redactPhone(t.nlc_number),
+        caller_comment: t.caller_comment ? redactText(t.caller_comment) : t.caller_comment,
+        last_error: t.last_error ? redactText(t.last_error) : t.last_error,
+      }));
+    }
+    return { tickets, supervisor };
   });
 
 export const retryTicketFn = createServerFn({ method: "POST" })

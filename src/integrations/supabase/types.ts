@@ -929,6 +929,7 @@ export type Database = {
           crm2_system_prompt_template: string | null
           crm2_timeout_ms: number
           crm2_url: string | null
+          crm2_url_backup: string | null
           enabled: boolean
           gateway_url: string | null
           gdpr_contact_email: string | null
@@ -966,6 +967,7 @@ export type Database = {
           crm2_system_prompt_template?: string | null
           crm2_timeout_ms?: number
           crm2_url?: string | null
+          crm2_url_backup?: string | null
           enabled?: boolean
           gateway_url?: string | null
           gdpr_contact_email?: string | null
@@ -1003,6 +1005,7 @@ export type Database = {
           crm2_system_prompt_template?: string | null
           crm2_timeout_ms?: number
           crm2_url?: string | null
+          crm2_url_backup?: string | null
           enabled?: boolean
           gateway_url?: string | null
           gdpr_contact_email?: string | null
@@ -1575,7 +1578,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "user"
+      app_role: "admin" | "user" | "supervisor"
       call_direction: "inbound" | "outbound"
       call_status:
         | "queued"
@@ -1722,7 +1725,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user"],
+      app_role: ["admin", "user", "supervisor"],
       call_direction: ["inbound", "outbound"],
       call_status: [
         "queued",

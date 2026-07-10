@@ -304,3 +304,50 @@ function SlaTrendCard({ points }: { points: TrendPoint[] }) {
     </Card>
   );
 }
+
+type ErrorLog = {
+  id: string; created_at: string; source: string; severity: string;
+  message: string; agent_id: string | null; call_sid: string | null;
+};
+
+function ErrorLogsCard({ logs }: { logs: ErrorLog[] }) {
+  const sevColor = (s: string) =>
+    s === "error" || s === "critical" ? "text-red-600" :
+    s === "warning" || s === "warn" ? "text-amber-600" :
+    "text-muted-foreground";
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Журнал ошибок и предупреждений</CardTitle>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        {logs.length === 0 ? (
+          <div className="text-xs text-muted-foreground py-4">Записей нет.</div>
+        ) : (
+          <table className="w-full text-xs">
+            <thead className="text-muted-foreground border-b">
+              <tr>
+                <th className="text-left py-1 px-2">Время</th>
+                <th className="text-left py-1 px-2">Источник</th>
+                <th className="text-left py-1 px-2">Уровень</th>
+                <th className="text-left py-1 px-2">Сообщение</th>
+                <th className="text-left py-1 px-2">Call SID</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((l) => (
+                <tr key={l.id} className="border-b hover:bg-muted/30">
+                  <td className="py-1 px-2 whitespace-nowrap">{new Date(l.created_at).toLocaleString()}</td>
+                  <td className="py-1 px-2 font-mono">{l.source}</td>
+                  <td className={`py-1 px-2 font-semibold ${sevColor(l.severity)}`}>{l.severity}</td>
+                  <td className="py-1 px-2 max-w-[520px] truncate" title={l.message}>{l.message}</td>
+                  <td className="py-1 px-2 font-mono">{l.call_sid ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

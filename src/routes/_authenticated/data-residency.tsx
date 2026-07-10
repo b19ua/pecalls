@@ -536,6 +536,7 @@ function LocalCrmCard() {
   // CRM #2 — Emergency Ticket Creation
   const [crm2Enabled, setCrm2Enabled] = useState(false);
   const [crm2Url, setCrm2Url] = useState("http://10.8.0.2:8000/create-ticket");
+  const [crm2UrlBackup, setCrm2UrlBackup] = useState("");
   const [crm2Timeout, setCrm2Timeout] = useState(3000);
   const [crm2Prompt, setCrm2Prompt] = useState("");
   const [testing2, setTesting2] = useState(false);

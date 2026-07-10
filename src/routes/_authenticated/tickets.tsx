@@ -66,6 +66,13 @@ function TicketsPage() {
     refetchInterval: 5 * 60_000,
   });
 
+  const errLogs = useServerFn(errorLogsFn);
+  const errQ = useQuery({
+    queryKey: ["errorLogs", "tickets"],
+    queryFn: () => errLogs({ data: { limit: 30 } }),
+    refetchInterval: 60_000,
+  });
+
   const retryMut = useMutation({
     mutationFn: (id: string) => retry({ data: { id } }),
     onSuccess: () => {

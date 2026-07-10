@@ -20,6 +20,7 @@ const ConfigInput = z.object({
   crm_object3_label: z.string().max(80).optional(),
   crm2_enabled: z.boolean().optional(),
   crm2_url: z.string().url().max(500).nullable().optional(),
+  crm2_url_backup: z.string().url().max(500).nullable().optional(),
   crm2_timeout_ms: z.number().int().min(1000).max(10000).optional(),
   crm2_system_prompt_template: z.string().max(4000).optional(),
   supervisor_telegram_bot_token: z.string().max(200).nullable().optional(),
@@ -33,7 +34,7 @@ export const getResidencyConfigFn = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const { data } = await supabase
       .from("data_residency_configs")
-      .select("mode, gateway_url, hmac_secret, enabled, purge_twilio_after_ingest, proxy_audio, last_ping_at, last_ping_ok, last_ping_error, crm_enabled, crm_url, crm_auth_header, crm_auth_value, crm_timeout_ms, crm_tool_description, crm_object1_label, crm_object2_label, crm_object3_label, crm2_enabled, crm2_url, crm2_timeout_ms, crm2_system_prompt_template, supervisor_telegram_bot_token, supervisor_telegram_chat_id, notify_on_escalation")
+      .select("mode, gateway_url, hmac_secret, enabled, purge_twilio_after_ingest, proxy_audio, last_ping_at, last_ping_ok, last_ping_error, crm_enabled, crm_url, crm_auth_header, crm_auth_value, crm_timeout_ms, crm_tool_description, crm_object1_label, crm_object2_label, crm_object3_label, crm2_enabled, crm2_url, crm2_url_backup, crm2_timeout_ms, crm2_system_prompt_template, supervisor_telegram_bot_token, supervisor_telegram_chat_id, notify_on_escalation")
       .eq("owner_id", userId)
       .maybeSingle();
     return data ?? {
@@ -44,7 +45,7 @@ export const getResidencyConfigFn = createServerFn({ method: "GET" })
       crm_timeout_ms: 2000,
       crm_tool_description: "Get caller info from local CRM by phone number. Returns three fields about the customer.",
       crm_object1_label: "object_1", crm_object2_label: "object_2", crm_object3_label: "object_3",
-      crm2_enabled: false, crm2_url: "http://10.8.0.2:8000/create-ticket", crm2_timeout_ms: 3000,
+      crm2_enabled: false, crm2_url: "http://10.8.0.2:8000/create-ticket", crm2_url_backup: null, crm2_timeout_ms: 3000,
       crm2_system_prompt_template: "",
       supervisor_telegram_bot_token: null, supervisor_telegram_chat_id: null,
       notify_on_escalation: true,
@@ -75,6 +76,7 @@ export const saveResidencyConfigFn = createServerFn({ method: "POST" })
       ...(typeof data.crm_object3_label === "string" ? { crm_object3_label: data.crm_object3_label } : {}),
       ...(typeof data.crm2_enabled === "boolean" ? { crm2_enabled: data.crm2_enabled } : {}),
       ...(data.crm2_url !== undefined ? { crm2_url: data.crm2_url ?? null } : {}),
+      ...(data.crm2_url_backup !== undefined ? { crm2_url_backup: data.crm2_url_backup ?? null } : {}),
       ...(typeof data.crm2_timeout_ms === "number" ? { crm2_timeout_ms: data.crm2_timeout_ms } : {}),
       ...(typeof data.crm2_system_prompt_template === "string" ? { crm2_system_prompt_template: data.crm2_system_prompt_template } : {}),
       ...(data.supervisor_telegram_bot_token !== undefined ? { supervisor_telegram_bot_token: data.supervisor_telegram_bot_token ?? null } : {}),

@@ -536,6 +536,7 @@ function LocalCrmCard() {
   // CRM #2 — Emergency Ticket Creation
   const [crm2Enabled, setCrm2Enabled] = useState(false);
   const [crm2Url, setCrm2Url] = useState("http://10.8.0.2:8000/create-ticket");
+  const [crm2UrlBackup, setCrm2UrlBackup] = useState("");
   const [crm2Timeout, setCrm2Timeout] = useState(3000);
   const [crm2Prompt, setCrm2Prompt] = useState("");
   const [testing2, setTesting2] = useState(false);
@@ -560,6 +561,7 @@ function LocalCrmCard() {
       setO3(cfg.crm_object3_label ?? "object_3");
       setCrm2Enabled(!!cfg.crm2_enabled);
       setCrm2Url(cfg.crm2_url ?? "http://10.8.0.2:8000/create-ticket");
+      setCrm2UrlBackup((cfg as { crm2_url_backup?: string | null }).crm2_url_backup ?? "");
       setCrm2Timeout(cfg.crm2_timeout_ms ?? 3000);
       setCrm2Prompt(cfg.crm2_system_prompt_template ?? "");
       setTgBot(cfg.supervisor_telegram_bot_token ?? "");
@@ -608,6 +610,7 @@ function LocalCrmCard() {
         crm_object3_label: o3,
         crm2_enabled: crm2Enabled,
         crm2_url: crm2Url.trim() || null,
+        crm2_url_backup: crm2UrlBackup.trim() || null,
         crm2_timeout_ms: clampedT2,
         crm2_system_prompt_template: crm2Prompt,
         supervisor_telegram_bot_token: tgBot.trim() || null,
@@ -777,6 +780,11 @@ function LocalCrmCard() {
               <div>
                 <Label htmlFor="crm2-url">Ticket connector URL (VPN)</Label>
                 <Input id="crm2-url" value={crm2Url} onChange={(e) => setCrm2Url(e.target.value)} placeholder="http://10.8.0.2:8000/create-ticket" />
+              </div>
+              <div>
+                <Label htmlFor="crm2-url-backup">Backup URL (multi-region failover)</Label>
+                <Input id="crm2-url-backup" value={crm2UrlBackup} onChange={(e) => setCrm2UrlBackup(e.target.value)} placeholder="http://10.8.0.3:8000/create-ticket" />
+                <p className="text-xs text-muted-foreground mt-1">Используется автоматически при недоступности основного URL.</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

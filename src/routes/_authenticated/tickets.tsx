@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { listTicketsFilteredFn, retryTicketFn, ticketsStatsFn, slaTrendFn } from "@/lib/tickets.functions";
+import { listTicketsFilteredFn, retryTicketFn, ticketsStatsFn, slaTrendFn, errorLogsFn } from "@/lib/tickets.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -66,6 +66,13 @@ function TicketsPage() {
     refetchInterval: 5 * 60_000,
   });
 
+  const errLogs = useServerFn(errorLogsFn);
+  const errQ = useQuery({
+    queryKey: ["errorLogs", "tickets"],
+    queryFn: () => errLogs({ data: { limit: 30 } }),
+    refetchInterval: 60_000,
+  });
+
   const retryMut = useMutation({
     mutationFn: (id: string) => retry({ data: { id } }),
     onSuccess: () => {
@@ -113,7 +120,17 @@ function TicketsPage() {
         />
       </div>
 
+      {ticketsQ.data?.supervisor && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+          Режим супервизора: видны только эскалированные и упавшие заявки со всех владельцев. Персональные данные замаскированы.
+        </div>
+      )}
+
       <SlaTrendCard points={trendQ.data?.points ?? []} />
+
+      <ErrorLogsCard logs={errQ.data?.logs ?? []} />
+
+
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
@@ -283,6 +300,53 @@ function SlaTrendCard({ points }: { points: TrendPoint[] }) {
           <path d={srPath} fill="none" stroke="rgb(16 185 129)" strokeWidth={2} />
           <path d={latPath} fill="none" stroke="rgb(59 130 246)" strokeWidth={2} strokeDasharray="3 2" />
         </svg>
+      </CardContent>
+    </Card>
+  );
+}
+
+type ErrorLog = {
+  id: string; created_at: string; source: string; severity: string;
+  message: string; agent_id: string | null; call_sid: string | null;
+};
+
+function ErrorLogsCard({ logs }: { logs: ErrorLog[] }) {
+  const sevColor = (s: string) =>
+    s === "error" || s === "critical" ? "text-red-600" :
+    s === "warning" || s === "warn" ? "text-amber-600" :
+    "text-muted-foreground";
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Журнал ошибок и предупреждений</CardTitle>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        {logs.length === 0 ? (
+          <div className="text-xs text-muted-foreground py-4">Записей нет.</div>
+        ) : (
+          <table className="w-full text-xs">
+            <thead className="text-muted-foreground border-b">
+              <tr>
+                <th className="text-left py-1 px-2">Время</th>
+                <th className="text-left py-1 px-2">Источник</th>
+                <th className="text-left py-1 px-2">Уровень</th>
+                <th className="text-left py-1 px-2">Сообщение</th>
+                <th className="text-left py-1 px-2">Call SID</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((l) => (
+                <tr key={l.id} className="border-b hover:bg-muted/30">
+                  <td className="py-1 px-2 whitespace-nowrap">{new Date(l.created_at).toLocaleString()}</td>
+                  <td className="py-1 px-2 font-mono">{l.source}</td>
+                  <td className={`py-1 px-2 font-semibold ${sevColor(l.severity)}`}>{l.severity}</td>
+                  <td className="py-1 px-2 max-w-[520px] truncate" title={l.message}>{l.message}</td>
+                  <td className="py-1 px-2 font-mono">{l.call_sid ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </CardContent>
     </Card>
   );

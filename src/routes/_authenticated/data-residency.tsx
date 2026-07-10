@@ -610,6 +610,7 @@ function LocalCrmCard() {
         crm_object3_label: o3,
         crm2_enabled: crm2Enabled,
         crm2_url: crm2Url.trim() || null,
+        crm2_url_backup: crm2UrlBackup.trim() || null,
         crm2_timeout_ms: clampedT2,
         crm2_system_prompt_template: crm2Prompt,
         supervisor_telegram_bot_token: tgBot.trim() || null,

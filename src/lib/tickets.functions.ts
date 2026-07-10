@@ -157,3 +157,32 @@ export const slaTrendFn = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { points: (rows ?? []) as unknown as TrendPoint[] };
   });
+
+type ErrorLog = {
+  id: string; created_at: string; source: string; severity: string;
+  message: string; agent_id: string | null; call_sid: string | null;
+  owner_id: string | null;
+};
+
+export const errorLogsFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({
+      limit: z.number().int().min(1).max(200).default(50),
+      severity: z.array(z.string().max(20)).optional(),
+      source: z.string().max(100).optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }): Promise<{ logs: ErrorLog[] }> => {
+    const { supabase } = context;
+    let q = supabase
+      .from("error_logs")
+      .select("id, created_at, source, severity, message, agent_id, call_sid, owner_id")
+      .order("created_at", { ascending: false })
+      .limit(data.limit);
+    if (data.severity?.length) q = q.in("severity", data.severity);
+    if (data.source) q = q.eq("source", data.source);
+    const { data: rows, error } = await q;
+    if (error) throw new Error(error.message);
+    return { logs: (rows ?? []) as unknown as ErrorLog[] };
+  });

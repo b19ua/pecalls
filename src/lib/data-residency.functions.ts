@@ -145,13 +145,33 @@ export const getCallContentFn = createServerFn({ method: "POST" })
       .eq("id", data.callId)
       .maybeSingle();
     if (error) throw new Error(error.message);
-    if (!call || call.owner_id !== userId) throw new Error("Not found");
+    if (!call) throw new Error("Not found");
+
+    // Supervisors can view calls of other owners but with PII redacted.
+    const isOwner = call.owner_id === userId;
+    let isSupervisor = false;
+    if (!isOwner) {
+      const { data: sup } = await supabase.rpc("has_role", { _user_id: userId, _role: "supervisor" });
+      isSupervisor = !!sup;
+      if (!isSupervisor) throw new Error("Not found");
+    }
+
+    const finalize = async (raw: CallContent): Promise<CallContent> => {
+      if (isOwner) return raw;
+      const { redactText, redactPayload } = await import("@/lib/pii");
+      return {
+        ...raw,
+        audioUrl: null, // supervisors don't get audio
+        transcript: redactPayload(raw.transcript),
+        summary: raw.summary ? redactText(raw.summary) : raw.summary,
+      };
+    };
 
     if (call.data_residency === "self_hosted") {
       const { getResidencyConfig, callGateway, isSelfHosted, signAudioToken } = await import("@/lib/data-residency.server");
-      const cfg = await getResidencyConfig(userId);
+      const cfg = await getResidencyConfig(call.owner_id);
       if (!isSelfHosted(cfg)) {
-        return { audioUrl: null, transcript: [], summary: null, source: "self_hosted_offline" as const };
+        return finalize({ audioUrl: null, transcript: [], summary: null, source: "self_hosted_offline" as const });
       }
       const ref = call.external_call_ref ?? call.id;
       const res = await callGateway<{
@@ -160,34 +180,32 @@ export const getCallContentFn = createServerFn({ method: "POST" })
         summary: string | null;
       }>(cfg, "GET", `/calls/${encodeURIComponent(ref)}`);
       if (!res.ok) {
-        return { audioUrl: null, transcript: [], summary: null, source: "self_hosted_error" as const, error: res.error };
+        return finalize({ audioUrl: null, transcript: [], summary: null, source: "self_hosted_error" as const, error: res.error });
       }
-      // If proxy mode is enabled (gateway not reachable from the user's browser, e.g. VPN-only),
-      // hand the browser our own proxy URL — the server streams bytes from the gateway.
       const audioUrl = cfg.proxy_audio
-        ? `/api/audio/${call.id}?o=${userId}&t=${signAudioToken(call.id, userId, 3600)}`
+        ? `/api/audio/${call.id}?o=${call.owner_id}&t=${signAudioToken(call.id, call.owner_id, 3600)}`
         : res.data.audio_url;
-      return {
+      return finalize({
         audioUrl,
         transcript: (Array.isArray(res.data.transcript) ? res.data.transcript : []) as TranscriptItem[],
         summary: res.data.summary ?? null,
         source: "self_hosted" as const,
-      };
+      });
     }
 
     let audioUrl: string | null = call.recording_url ?? null;
-    if (call.recording_path) {
+    if (call.recording_path && isOwner) {
       const { data: signed } = await supabase.storage
         .from("call-recordings")
         .createSignedUrl(call.recording_path, 60 * 60);
       audioUrl = signed?.signedUrl ?? audioUrl;
     }
-    return {
+    return finalize({
       audioUrl,
       transcript: (Array.isArray(call.transcript) ? call.transcript : []) as TranscriptItem[],
       summary: call.summary,
       source: "cloud" as const,
-    };
+    });
   });
 
 type TicketRow = {

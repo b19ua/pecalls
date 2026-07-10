@@ -778,6 +778,11 @@ function LocalCrmCard() {
                 <Label htmlFor="crm2-url">Ticket connector URL (VPN)</Label>
                 <Input id="crm2-url" value={crm2Url} onChange={(e) => setCrm2Url(e.target.value)} placeholder="http://10.8.0.2:8000/create-ticket" />
               </div>
+              <div>
+                <Label htmlFor="crm2-url-backup">Backup URL (multi-region failover)</Label>
+                <Input id="crm2-url-backup" value={crm2UrlBackup} onChange={(e) => setCrm2UrlBackup(e.target.value)} placeholder="http://10.8.0.3:8000/create-ticket" />
+                <p className="text-xs text-muted-foreground mt-1">Используется автоматически при недоступности основного URL.</p>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="crm2-to">Hard timeout (ms, 1000–10000)</Label>

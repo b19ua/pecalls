@@ -561,6 +561,7 @@ function LocalCrmCard() {
       setO3(cfg.crm_object3_label ?? "object_3");
       setCrm2Enabled(!!cfg.crm2_enabled);
       setCrm2Url(cfg.crm2_url ?? "http://10.8.0.2:8000/create-ticket");
+      setCrm2UrlBackup((cfg as { crm2_url_backup?: string | null }).crm2_url_backup ?? "");
       setCrm2Timeout(cfg.crm2_timeout_ms ?? 3000);
       setCrm2Prompt(cfg.crm2_system_prompt_template ?? "");
       setTgBot(cfg.supervisor_telegram_bot_token ?? "");

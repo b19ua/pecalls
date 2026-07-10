@@ -20,6 +20,7 @@ const ConfigInput = z.object({
   crm_object3_label: z.string().max(80).optional(),
   crm2_enabled: z.boolean().optional(),
   crm2_url: z.string().url().max(500).nullable().optional(),
+  crm2_url_backup: z.string().url().max(500).nullable().optional(),
   crm2_timeout_ms: z.number().int().min(1000).max(10000).optional(),
   crm2_system_prompt_template: z.string().max(4000).optional(),
   supervisor_telegram_bot_token: z.string().max(200).nullable().optional(),

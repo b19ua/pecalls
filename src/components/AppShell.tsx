@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Bot, PhoneCall, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench, Server, Plug, Headphones, Ticket } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { LayoutDashboard, Bot, PhoneCall, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench, Server, Plug, Headphones, Ticket, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useI18n, LANGUAGE_OPTIONS, type Lang } from "@/lib/i18n";
 import { ADMIN_SESSION_KEY } from "@/routes/login";
+import { getMyRolesFn } from "@/lib/admin-roles.functions";
 
 const NAV = [
   { to: "/dashboard",  key: "nav.dashboard",  icon: LayoutDashboard },
@@ -18,8 +21,6 @@ const NAV = [
   { to: "/copilot",    key: "nav.copilot",    icon: Headphones },
   { to: "/tickets",    key: "nav.tickets",    icon: Ticket },
   { to: "/analytics",  key: "nav.analytics",  icon: BarChart3 },
-  
-  
   { to: "/data-residency", key: "nav.residency", icon: Server },
   { to: "/crm",        key: "nav.crm",        icon: Plug },
   { to: "/settings",   key: "nav.settings",   icon: Settings },
@@ -29,6 +30,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { t, lang, setLang } = useI18n();
+  const getRoles = useServerFn(getMyRolesFn);
+  const rolesQ = useQuery({
+    queryKey: ["my-roles"],
+    queryFn: () => getRoles(),
+    staleTime: 60_000,
+  });
+  const isAdmin = (rolesQ.data?.roles ?? []).includes("admin");
 
   const signOut = async () => {
     if (typeof window !== "undefined") {
@@ -59,6 +67,20 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             </Link>
           );
         })}
+        {isAdmin && (
+          <Link
+            to="/admin/roles"
+            onClick={onNavigate}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              location.pathname.startsWith("/admin/roles")
+                ? "bg-sidebar-primary/15 text-sidebar-primary"
+                : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            }`}
+          >
+            <ShieldCheck className="h-[18px] w-[18px]" />
+            Роли
+          </Link>
+        )}
       </nav>
       <div className="p-3 border-t border-sidebar-border space-y-2">
         <div className="flex items-center gap-2 px-1">

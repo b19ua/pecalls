@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, ShieldCheck, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 
 export const Route = createFileRoute("/_authenticated/admin/roles")({
@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_authenticated/admin/roles")({
   notFoundComponent: () => <div className="p-6">Не найдено</div>,
 });
 
-const ROLES = ["admin", "supervisor", "moderator", "user"] as const;
+const ROLES = ["admin", "supervisor", "user"] as const;
 
 function AdminRolesPage() {
   const listFn = useServerFn(listUsersWithRolesFn);
@@ -74,10 +74,10 @@ function AdminRolesPage() {
   return (
     <div className="p-6 space-y-6 max-w-5xl">
       <PageHeader
-        icon={ShieldCheck}
         title="Управление ролями"
         description="Назначайте роли пользователям. admin — полный доступ; supervisor — просмотр эскалированных заявок и логов ошибок."
       />
+
 
       <div className="rounded-lg border border-border overflow-hidden">
         <table className="w-full text-sm">

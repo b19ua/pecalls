@@ -34,6 +34,7 @@ import { Route as AuthenticatedAgentsIndexRouteImport } from './routes/_authenti
 import { Route as ApiAudioCallIdRouteImport } from './routes/api/audio.$callId'
 import { Route as AuthenticatedCallsCallIdRouteImport } from './routes/_authenticated/calls.$callId'
 import { Route as AuthenticatedAgentsAgentIdRouteImport } from './routes/_authenticated/agents.$agentId'
+import { Route as AuthenticatedAdminRolesRouteImport } from './routes/_authenticated/admin.roles'
 import { Route as AuthenticatedCopilotAgentsIndexRouteImport } from './routes/_authenticated/copilot.agents.index'
 import { Route as ApiPublicTwilioVoiceRouteImport } from './routes/api/public/twilio/voice'
 import { Route as ApiPublicTwilioStatusRouteImport } from './routes/api/public/twilio/status'
@@ -183,6 +184,11 @@ const AuthenticatedAgentsAgentIdRoute =
     path: '/$agentId',
     getParentRoute: () => AuthenticatedAgentsRoute,
   } as any)
+const AuthenticatedAdminRolesRoute = AuthenticatedAdminRolesRouteImport.update({
+  id: '/admin/roles',
+  path: '/admin/roles',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedCopilotAgentsIndexRoute =
   AuthenticatedCopilotAgentsIndexRouteImport.update({
     id: '/agents/',
@@ -311,6 +317,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/tickets': typeof AuthenticatedTicketsRoute
   '/tools': typeof AuthenticatedToolsRoute
+  '/admin/roles': typeof AuthenticatedAdminRolesRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
@@ -354,6 +361,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/tickets': typeof AuthenticatedTicketsRoute
   '/tools': typeof AuthenticatedToolsRoute
+  '/admin/roles': typeof AuthenticatedAdminRolesRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
@@ -401,6 +409,7 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
   '/_authenticated/tools': typeof AuthenticatedToolsRoute
+  '/_authenticated/admin/roles': typeof AuthenticatedAdminRolesRoute
   '/_authenticated/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/_authenticated/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
@@ -448,6 +457,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tickets'
     | '/tools'
+    | '/admin/roles'
     | '/agents/$agentId'
     | '/calls/$callId'
     | '/api/audio/$callId'
@@ -491,6 +501,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tickets'
     | '/tools'
+    | '/admin/roles'
     | '/agents/$agentId'
     | '/calls/$callId'
     | '/api/audio/$callId'
@@ -537,6 +548,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/tickets'
     | '/_authenticated/tools'
+    | '/_authenticated/admin/roles'
     | '/_authenticated/agents/$agentId'
     | '/_authenticated/calls/$callId'
     | '/api/audio/$callId'
@@ -766,6 +778,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgentsAgentIdRouteImport
       parentRoute: typeof AuthenticatedAgentsRoute
     }
+    '/_authenticated/admin/roles': {
+      id: '/_authenticated/admin/roles'
+      path: '/admin/roles'
+      fullPath: '/admin/roles'
+      preLoaderRoute: typeof AuthenticatedAdminRolesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/copilot/agents/': {
       id: '/_authenticated/copilot/agents/'
       path: '/agents'
@@ -960,6 +979,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
   AuthenticatedToolsRoute: typeof AuthenticatedToolsRoute
+  AuthenticatedAdminRolesRoute: typeof AuthenticatedAdminRolesRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -977,6 +997,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,
   AuthenticatedToolsRoute: AuthenticatedToolsRoute,
+  AuthenticatedAdminRolesRoute: AuthenticatedAdminRolesRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

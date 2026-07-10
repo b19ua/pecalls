@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const ROLES = ["admin", "supervisor", "moderator", "user"] as const;
+const ROLES = ["admin", "supervisor", "user"] as const;
 type AppRole = (typeof ROLES)[number];
 
 async function assertAdmin(ctx: { supabase: ReturnType<typeof Object>; userId: string }) {

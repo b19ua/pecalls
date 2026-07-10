@@ -47,7 +47,7 @@ export const Route = createFileRoute("/api/public/hooks/tickets-retry")({
         for (const t of due ?? []) {
           const { data: cfg } = await supabaseAdmin
             .from("data_residency_configs")
-            .select("crm2_enabled, crm2_url, crm2_timeout_ms, hmac_secret, supervisor_telegram_bot_token, supervisor_telegram_chat_id, notify_on_escalation")
+            .select("crm2_enabled, crm2_url, crm2_url_backup, crm2_timeout_ms, hmac_secret, supervisor_telegram_bot_token, supervisor_telegram_chat_id, notify_on_escalation")
             .eq("owner_id", t.owner_id)
             .maybeSingle();
           const notifyEsc = async (reason: string) => {
@@ -87,17 +87,22 @@ export const Route = createFileRoute("/api/public/hooks/tickets-retry")({
           };
           if (cfg.hmac_secret) headers["X-CRM-Signature"] = await sign(cfg.hmac_secret, ts, body);
 
+          const timeout = Math.min(Math.max(cfg.crm2_timeout_ms ?? 3000, 1000), 10000);
+          const urls = [cfg.crm2_url, cfg.crm2_url_backup].filter((u): u is string => !!u);
           const t0 = Date.now();
-          const ctl = new AbortController();
-          const tid = setTimeout(() => ctl.abort(), Math.min(Math.max(cfg.crm2_timeout_ms ?? 3000, 1000), 10000));
-          let ok = false; let status = 0; let respTxt = ""; let err = "";
-          try {
-            const r = await fetch(cfg.crm2_url, { method: "POST", headers, body, signal: ctl.signal });
-            status = r.status;
-            respTxt = await r.text();
-            ok = r.ok;
-          } catch (e) { err = e instanceof Error ? e.message : String(e); }
-          clearTimeout(tid);
+          let ok = false; let status = 0; let respTxt = ""; let err = ""; let usedUrl = urls[0];
+          for (const url of urls) {
+            const ctl = new AbortController();
+            const tid = setTimeout(() => ctl.abort(), timeout);
+            try {
+              const r = await fetch(url, { method: "POST", headers, body, signal: ctl.signal });
+              status = r.status; respTxt = await r.text(); ok = r.ok; usedUrl = url;
+              if (ok) { clearTimeout(tid); break; }
+              err = `http_${status}`;
+            } catch (e) { err = e instanceof Error ? e.message : String(e); }
+            clearTimeout(tid);
+          }
+          void usedUrl;
           const latency = Date.now() - t0;
           const nextAttempts = (t.attempts ?? 0) + 1;
           let parsed: Record<string, unknown> = {};

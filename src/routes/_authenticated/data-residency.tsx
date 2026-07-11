@@ -21,6 +21,8 @@ import {
   listRecentTicketsFn,
   getCrmHealthFn,
 } from "@/lib/data-residency.functions";
+import { listCronJobsFn, listCronRunsFn, setCronActiveFn, type CronJob, type CronRun } from "@/lib/admin-cron.functions";
+import { getMyRolesFn } from "@/lib/admin-roles.functions";
 import { exportMyDataFn, eraseMyDataFn, syncToGatewayFn, listMyDsrRequestsFn } from "@/lib/gdpr.functions";
 import { useI18n } from "@/lib/i18n";
 
@@ -1001,8 +1003,96 @@ function RecentTicketsSection() {
           </tbody>
         </table>
       </div>
+      <CronJobsAdminCard />
     </CardContent>
   );
 }
+
+function CronJobsAdminCard() {
+  const rolesFn = useServerFn(getMyRolesFn);
+  const jobsFn = useServerFn(listCronJobsFn);
+  const runsFn = useServerFn(listCronRunsFn);
+  const setActive = useServerFn(setCronActiveFn);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [jobs, setJobs] = useState<CronJob[]>([]);
+  const [runs, setRuns] = useState<CronRun[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => { rolesFn().then((r) => setIsAdmin(r.roles.includes("admin"))).catch(() => setIsAdmin(false)); }, [rolesFn]);
+
+  const refresh = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const [j, r] = await Promise.all([jobsFn(), runsFn({ data: { limit: 40 } })]);
+      setJobs(j.jobs); setRuns(r.runs);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { if (isAdmin) void refresh(); /* eslint-disable-next-line */ }, [isAdmin]);
+
+  if (!isAdmin) return null;
+
+  return (
+    <div className="mt-6 border-t pt-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium">pg_cron задания (admin)</p>
+          <p className="text-xs text-muted-foreground">Управление расписанием фоновых задач и просмотр истории запусков.</p>
+        </div>
+        <Button size="sm" variant="outline" onClick={refresh} disabled={loading}>
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+      {err && <div className="text-xs text-destructive">{err}</div>}
+      <div className="rounded-md border overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-muted/50"><tr className="text-left">
+            <th className="p-2">Job</th><th className="p-2">Schedule</th><th className="p-2">Active</th><th className="p-2 w-[40%]">Command</th>
+          </tr></thead>
+          <tbody>
+            {jobs.length === 0 && <tr><td className="p-3 text-muted-foreground" colSpan={4}>Нет заданий.</td></tr>}
+            {jobs.map((j) => (
+              <tr key={j.jobid} className="border-t">
+                <td className="p-2 font-mono">{j.jobname ?? j.jobid}</td>
+                <td className="p-2 font-mono">{j.schedule}</td>
+                <td className="p-2">
+                  <Switch checked={j.active} onCheckedChange={async (v) => {
+                    try { await setActive({ data: { jobid: j.jobid, active: v } }); await refresh(); toast.success(v ? "Enabled" : "Disabled"); }
+                    catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); }
+                  }} />
+                </td>
+                <td className="p-2 font-mono truncate max-w-[380px]" title={j.command}>{j.command}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <p className="text-xs font-medium mb-1">История запусков (последние 40)</p>
+        <div className="rounded-md border overflow-x-auto max-h-[300px] overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/50 sticky top-0"><tr className="text-left">
+              <th className="p-2">Job</th><th className="p-2">Start</th><th className="p-2">Status</th><th className="p-2">Message</th>
+            </tr></thead>
+            <tbody>
+              {runs.length === 0 && <tr><td className="p-3 text-muted-foreground" colSpan={4}>Нет запусков.</td></tr>}
+              {runs.map((r) => (
+                <tr key={`${r.jobid}-${r.runid}`} className="border-t">
+                  <td className="p-2 font-mono">{r.jobid}</td>
+                  <td className="p-2 whitespace-nowrap">{new Date(r.start_time).toLocaleString()}</td>
+                  <td className="p-2"><Badge variant={r.status === "succeeded" ? "default" : r.status === "failed" ? "destructive" : "secondary"}>{r.status}</Badge></td>
+                  <td className="p-2 truncate max-w-[320px]" title={r.return_message ?? ""}>{r.return_message ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 

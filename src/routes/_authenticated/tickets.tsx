@@ -128,6 +128,8 @@ function TicketsPage() {
 
       <SlaTrendCard points={trendQ.data?.points ?? []} />
 
+      <SupervisorAlertsCard points={trendQ.data?.points ?? []} logs={errQ.data?.logs ?? []} />
+
       <ErrorLogsCard logs={errQ.data?.logs ?? []} />
 
 
@@ -315,10 +317,26 @@ function ErrorLogsCard({ logs }: { logs: ErrorLog[] }) {
     s === "error" || s === "critical" ? "text-red-600" :
     s === "warning" || s === "warn" ? "text-amber-600" :
     "text-muted-foreground";
+  const exportCsv = () => {
+    const header = ["created_at", "source", "severity", "message", "agent_id", "call_sid"];
+    const lines = [header.join(",")].concat(
+      logs.map((l) => header.map((h) => csvEscape((l as unknown as Record<string, unknown>)[h])).join(",")),
+    );
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `error-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-2 flex flex-row items-center justify-between">
         <CardTitle className="text-sm">Журнал ошибок и предупреждений</CardTitle>
+        <Button variant="outline" size="sm" onClick={exportCsv} disabled={logs.length === 0}>
+          <Download className="h-4 w-4 mr-2" /> CSV
+        </Button>
       </CardHeader>
       <CardContent className="overflow-x-auto">
         {logs.length === 0 ? (
@@ -347,6 +365,49 @@ function ErrorLogsCard({ logs }: { logs: ErrorLog[] }) {
             </tbody>
           </table>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SupervisorAlertsCard({ points, logs }: { points: TrendPoint[]; logs: ErrorLog[] }) {
+  let consecFail = 0;
+  for (let i = points.length - 1; i >= 0; i--) {
+    const p = points[i];
+    if (p.total > 0 && p.success_rate < 90) consecFail++;
+    else break;
+  }
+  const last = points[points.length - 1];
+  const prev = points.slice(-25, -1).map((p) => p.p95_latency_ms ?? 0).filter((v) => v > 0).sort((a, b) => a - b);
+  const median = prev.length ? prev[Math.floor(prev.length / 2)] : 0;
+  const lastLat = last?.p95_latency_ms ?? 0;
+  const spike = median > 0 && lastLat > median * 2;
+  const recentErrors = logs.filter((l) => l.severity === "error" || l.severity === "critical").length;
+
+  const alerts: { level: "critical" | "warning" | "ok"; text: string }[] = [];
+  if (consecFail >= 3) alerts.push({ level: "critical", text: `Успешность <90% ${consecFail}ч подряд — эскалируйте оператору.` });
+  else if (consecFail >= 1) alerts.push({ level: "warning", text: `Успешность <90% последний ${consecFail}ч.` });
+  if (spike) alerts.push({ level: "warning", text: `Latency спайк: ${lastLat}ms против медианы ${median}ms за 24ч.` });
+  if (recentErrors >= 10) alerts.push({ level: "critical", text: `${recentErrors} ошибок в последних логах.` });
+  if (alerts.length === 0) alerts.push({ level: "ok", text: "Все показатели в норме." });
+
+  return (
+    <Card>
+      <CardHeader className="pb-2"><CardTitle className="text-sm">Оповещения супервизора</CardTitle></CardHeader>
+      <CardContent className="space-y-2">
+        {alerts.map((a, i) => (
+          <div
+            key={i}
+            className={
+              "text-xs rounded-md border px-3 py-2 " +
+              (a.level === "critical" ? "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300"
+                : a.level === "warning" ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+                : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300")
+            }
+          >
+            {a.text}
+          </div>
+        ))}
       </CardContent>
     </Card>
   );

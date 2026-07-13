@@ -80,17 +80,17 @@ function TicketDetailPage() {
       </div>
       <PageHeader
         title={`Заявка ${String(t.id).slice(0, 8)}…`}
-        description={<div className="flex items-center gap-2">
-          <Badge className={STATUS[status] ?? ""} variant="outline">{status}</Badge>
-          <span className="text-sm text-muted-foreground">Попытки: {String(t.attempts ?? 0)} / {String(t.max_attempts ?? 5)}</span>
-          {q.data?.supervisor && <Badge variant="outline">Supervisor</Badge>}
-        </div>}
         actions={
           <Button size="sm" onClick={() => retryMut.mutate()} disabled={retryMut.isPending || status === "success"}>
             <RefreshCw className="h-4 w-4 mr-1" /> Повторить
           </Button>
         }
       />
+      <div className="flex items-center gap-2 -mt-3">
+        <Badge className={STATUS[status] ?? ""} variant="outline">{status}</Badge>
+        <span className="text-sm text-muted-foreground">Попытки: {String(t.attempts ?? 0)} / {String(t.max_attempts ?? 5)}</span>
+        {q.data?.supervisor && <Badge variant="outline">Supervisor</Badge>}
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>

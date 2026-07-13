@@ -9,6 +9,7 @@ const Body = z.object({
   owner_id: z.string().uuid(),
   external_ticket_id: z.string().min(1).max(200),
   status: z.string().min(1).max(50),
+  webhook_id: z.string().min(1).max(200).optional(),
   payload: z.record(z.unknown()).optional(),
 });
 

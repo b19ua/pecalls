@@ -46,6 +46,22 @@ export const Route = createFileRoute("/api/public/crm/ticket-update")({
 
         const { redactPayload } = await import("@/lib/pii");
         const safePayload = redactPayload(parsed.payload ?? {}) as Record<string, unknown>;
+
+        // Idempotency: if webhook_id already processed for this ticket, skip re-apply.
+        if (parsed.webhook_id) {
+          const { data: existing } = await supabaseAdmin
+            .from("tickets")
+            .select("id, response")
+            .eq("owner_id", parsed.owner_id)
+            .eq("external_ticket_id", parsed.external_ticket_id)
+            .maybeSingle();
+          const processed = (((existing?.response as Record<string, unknown> | null) ?? {}).processed_webhook_ids ?? []) as string[];
+          if (Array.isArray(processed) && processed.includes(parsed.webhook_id)) {
+            return Response.json({ ok: true, ticket_id: existing?.id, duplicate: true });
+          }
+          (safePayload as Record<string, unknown>).webhook_id = parsed.webhook_id;
+        }
+
         const { data: id, error } = await supabaseAdmin.rpc("update_ticket_from_webhook", {
           _owner_id: parsed.owner_id,
           _external_ticket_id: parsed.external_ticket_id,
@@ -53,6 +69,17 @@ export const Route = createFileRoute("/api/public/crm/ticket-update")({
           _payload: safePayload as never,
         });
         if (error) return new Response(error.message, { status: 500 });
+
+        // Append webhook_id to processed list.
+        if (parsed.webhook_id && id) {
+          const { data: cur } = await supabaseAdmin.from("tickets").select("response").eq("id", id).maybeSingle();
+          const resp = ((cur?.response as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+          const list = Array.isArray(resp.processed_webhook_ids) ? (resp.processed_webhook_ids as string[]) : [];
+          if (!list.includes(parsed.webhook_id)) list.push(parsed.webhook_id);
+          resp.processed_webhook_ids = list.slice(-50);
+          await supabaseAdmin.from("tickets").update({ response: resp as never }).eq("id", id);
+        }
+
         return Response.json({ ok: true, ticket_id: id });
       },
     },

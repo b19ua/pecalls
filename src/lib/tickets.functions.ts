@@ -190,7 +190,7 @@ export const errorLogsFn = createServerFn({ method: "POST" })
 export const getTicketFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
-  .handler(async ({ data, context }): Promise<{ ticket: Record<string, unknown>; supervisor: boolean }> => {
+  .handler(async ({ data, context }): Promise<{ ticketJson: string; supervisor: boolean }> => {
     const { supabase, userId } = context;
     const { data: isSup } = await supabase.rpc("has_role", { _user_id: userId, _role: "supervisor" });
     const supervisor = !!isSup;
@@ -209,5 +209,5 @@ export const getTicketFn = createServerFn({ method: "POST" })
       row.payload = redactPayload(row.payload);
       row.response = redactPayload(row.response);
     }
-    return { ticket: row as Record<string, unknown>, supervisor } as { ticket: Record<string, unknown>; supervisor: boolean };
+    return { ticketJson: JSON.stringify(row), supervisor };
   });

@@ -187,7 +187,7 @@ function TicketsPage() {
               {tickets.map((t) => (
                 <tr key={t.id} className="border-b hover:bg-muted/30">
                   <td className="py-2 px-2 whitespace-nowrap text-xs">
-                    {new Date(t.created_at).toLocaleString()}
+                    <a href={`/tickets/${t.id}`} className="hover:underline">{new Date(t.created_at).toLocaleString()}</a>
                   </td>
                   <td className="py-2 px-2">
                     <Badge variant="outline" className={STATUS_COLORS[t.status] ?? ""}>{t.status}</Badge>

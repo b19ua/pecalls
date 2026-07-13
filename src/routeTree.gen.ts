@@ -32,6 +32,7 @@ import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedCopilotIndexRouteImport } from './routes/_authenticated/copilot.index'
 import { Route as AuthenticatedAgentsIndexRouteImport } from './routes/_authenticated/agents.index'
 import { Route as ApiAudioCallIdRouteImport } from './routes/api/audio.$callId'
+import { Route as AuthenticatedTicketsTicketIdRouteImport } from './routes/_authenticated/tickets.$ticketId'
 import { Route as AuthenticatedCallsCallIdRouteImport } from './routes/_authenticated/calls.$callId'
 import { Route as AuthenticatedAgentsAgentIdRouteImport } from './routes/_authenticated/agents.$agentId'
 import { Route as AuthenticatedAdminRolesRouteImport } from './routes/_authenticated/admin.roles'
@@ -172,6 +173,12 @@ const ApiAudioCallIdRoute = ApiAudioCallIdRouteImport.update({
   path: '/api/audio/$callId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedTicketsTicketIdRoute =
+  AuthenticatedTicketsTicketIdRouteImport.update({
+    id: '/$ticketId',
+    path: '/$ticketId',
+    getParentRoute: () => AuthenticatedTicketsRoute,
+  } as any)
 const AuthenticatedCallsCallIdRoute =
   AuthenticatedCallsCallIdRouteImport.update({
     id: '/$callId',
@@ -315,11 +322,12 @@ export interface FileRoutesByFullPath {
   '/live': typeof AuthenticatedLiveRoute
   '/numbers': typeof AuthenticatedNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
-  '/tickets': typeof AuthenticatedTicketsRoute
+  '/tickets': typeof AuthenticatedTicketsRouteWithChildren
   '/tools': typeof AuthenticatedToolsRoute
   '/admin/roles': typeof AuthenticatedAdminRolesRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
+  '/tickets/$ticketId': typeof AuthenticatedTicketsTicketIdRoute
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
   '/agents/': typeof AuthenticatedAgentsIndexRoute
   '/copilot/': typeof AuthenticatedCopilotIndexRoute
@@ -359,11 +367,12 @@ export interface FileRoutesByTo {
   '/live': typeof AuthenticatedLiveRoute
   '/numbers': typeof AuthenticatedNumbersRoute
   '/settings': typeof AuthenticatedSettingsRoute
-  '/tickets': typeof AuthenticatedTicketsRoute
+  '/tickets': typeof AuthenticatedTicketsRouteWithChildren
   '/tools': typeof AuthenticatedToolsRoute
   '/admin/roles': typeof AuthenticatedAdminRolesRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
+  '/tickets/$ticketId': typeof AuthenticatedTicketsTicketIdRoute
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
   '/agents': typeof AuthenticatedAgentsIndexRoute
   '/copilot': typeof AuthenticatedCopilotIndexRoute
@@ -407,11 +416,12 @@ export interface FileRoutesById {
   '/_authenticated/live': typeof AuthenticatedLiveRoute
   '/_authenticated/numbers': typeof AuthenticatedNumbersRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
-  '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
+  '/_authenticated/tickets': typeof AuthenticatedTicketsRouteWithChildren
   '/_authenticated/tools': typeof AuthenticatedToolsRoute
   '/_authenticated/admin/roles': typeof AuthenticatedAdminRolesRoute
   '/_authenticated/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/_authenticated/calls/$callId': typeof AuthenticatedCallsCallIdRoute
+  '/_authenticated/tickets/$ticketId': typeof AuthenticatedTicketsTicketIdRoute
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
   '/_authenticated/agents/': typeof AuthenticatedAgentsIndexRoute
   '/_authenticated/copilot/': typeof AuthenticatedCopilotIndexRoute
@@ -460,6 +470,7 @@ export interface FileRouteTypes {
     | '/admin/roles'
     | '/agents/$agentId'
     | '/calls/$callId'
+    | '/tickets/$ticketId'
     | '/api/audio/$callId'
     | '/agents/'
     | '/copilot/'
@@ -504,6 +515,7 @@ export interface FileRouteTypes {
     | '/admin/roles'
     | '/agents/$agentId'
     | '/calls/$callId'
+    | '/tickets/$ticketId'
     | '/api/audio/$callId'
     | '/agents'
     | '/copilot'
@@ -551,6 +563,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/roles'
     | '/_authenticated/agents/$agentId'
     | '/_authenticated/calls/$callId'
+    | '/_authenticated/tickets/$ticketId'
     | '/api/audio/$callId'
     | '/_authenticated/agents/'
     | '/_authenticated/copilot/'
@@ -764,6 +777,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAudioCallIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/tickets/$ticketId': {
+      id: '/_authenticated/tickets/$ticketId'
+      path: '/$ticketId'
+      fullPath: '/tickets/$ticketId'
+      preLoaderRoute: typeof AuthenticatedTicketsTicketIdRouteImport
+      parentRoute: typeof AuthenticatedTicketsRoute
+    }
     '/_authenticated/calls/$callId': {
       id: '/_authenticated/calls/$callId'
       path: '/$callId'
@@ -964,6 +984,17 @@ const AuthenticatedCopilotRouteChildren: AuthenticatedCopilotRouteChildren = {
 const AuthenticatedCopilotRouteWithChildren =
   AuthenticatedCopilotRoute._addFileChildren(AuthenticatedCopilotRouteChildren)
 
+interface AuthenticatedTicketsRouteChildren {
+  AuthenticatedTicketsTicketIdRoute: typeof AuthenticatedTicketsTicketIdRoute
+}
+
+const AuthenticatedTicketsRouteChildren: AuthenticatedTicketsRouteChildren = {
+  AuthenticatedTicketsTicketIdRoute: AuthenticatedTicketsTicketIdRoute,
+}
+
+const AuthenticatedTicketsRouteWithChildren =
+  AuthenticatedTicketsRoute._addFileChildren(AuthenticatedTicketsRouteChildren)
+
 interface AuthenticatedRouteChildren {
   AuthenticatedAgentsRoute: typeof AuthenticatedAgentsRouteWithChildren
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
@@ -977,7 +1008,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedLiveRoute: typeof AuthenticatedLiveRoute
   AuthenticatedNumbersRoute: typeof AuthenticatedNumbersRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
-  AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
+  AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRouteWithChildren
   AuthenticatedToolsRoute: typeof AuthenticatedToolsRoute
   AuthenticatedAdminRolesRoute: typeof AuthenticatedAdminRolesRoute
 }
@@ -995,7 +1026,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedLiveRoute: AuthenticatedLiveRoute,
   AuthenticatedNumbersRoute: AuthenticatedNumbersRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
-  AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,
+  AuthenticatedTicketsRoute: AuthenticatedTicketsRouteWithChildren,
   AuthenticatedToolsRoute: AuthenticatedToolsRoute,
   AuthenticatedAdminRolesRoute: AuthenticatedAdminRolesRoute,
 }

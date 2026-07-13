@@ -186,3 +186,28 @@ export const errorLogsFn = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { logs: (rows ?? []) as unknown as ErrorLog[] };
   });
+
+export const getTicketFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }): Promise<{ ticketJson: string; supervisor: boolean }> => {
+    const { supabase, userId } = context;
+    const { data: isSup } = await supabase.rpc("has_role", { _user_id: userId, _role: "supervisor" });
+    const supervisor = !!isSup;
+    let q = supabase.from("tickets" as never).select("*").eq("id", data.id).limit(1);
+    if (!supervisor) q = q.eq("owner_id", userId);
+    const { data: rows, error } = await q;
+    if (error) throw new Error(error.message);
+    const row = (rows?.[0] ?? null) as Record<string, unknown> | null;
+    if (!row) throw new Error("Not found");
+    if (supervisor && row.owner_id !== userId) {
+      const { redactPhone, redactText, redactPayload } = await import("@/lib/pii");
+      row.phone_number = redactPhone(row.phone_number as string | null);
+      row.nlc_number = redactPhone(row.nlc_number as string | null);
+      row.caller_comment = row.caller_comment ? redactText(row.caller_comment as string) : row.caller_comment;
+      row.last_error = row.last_error ? redactText(row.last_error as string) : row.last_error;
+      row.payload = redactPayload(row.payload);
+      row.response = redactPayload(row.response);
+    }
+    return { ticketJson: JSON.stringify(row), supervisor };
+  });

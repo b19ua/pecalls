@@ -338,13 +338,15 @@ function AgentEditor() {
     );
   }
 
-  function setOutboundMode(m: "twilio_number" | "sip_trunk") {
+  function setOutboundMode(m: "twilio_number" | "sip_trunk" | "asterisk") {
     setForm((p) => ({
       ...p,
-      outbound_mode: m,
-      inbound_connection_type: m === "twilio_number" ? "phone" : "sip_uri",
+      telephony_provider: m === "asterisk" ? "asterisk" : "twilio",
+      outbound_mode: m === "asterisk" ? p.outbound_mode : m,
+      inbound_connection_type: m === "twilio_number" ? "phone" : m === "sip_trunk" ? "sip_uri" : p.inbound_connection_type,
     }));
   }
+
 
   async function loadTwilioNumbers() {
     setNumbersLoading(true);
@@ -687,11 +689,15 @@ function AgentEditor() {
 
         <CollapsibleSection title={t("agent.section.telephony")} defaultOpen>
           <Field label="Маршрут звонка" hint="Применяется ко всем звонкам — и входящим, и исходящим.">
-            <Select value={form.outbound_mode} onValueChange={(v) => setOutboundMode(v as "twilio_number" | "sip_trunk")}>
+            <Select
+              value={form.telephony_provider === "asterisk" ? "asterisk" : form.outbound_mode}
+              onValueChange={(v) => setOutboundMode(v as "twilio_number" | "sip_trunk" | "asterisk")}
+            >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="twilio_number">Twilio номер</SelectItem>
-                <SelectItem value="sip_trunk">Свой SIP trunk</SelectItem>
+                <SelectItem value="sip_trunk">Twilio Elastic SIP trunk</SelectItem>
+                <SelectItem value="asterisk">Локальный Asterisk (on-prem)</SelectItem>
               </SelectContent>
             </Select>
           </Field>
@@ -701,7 +707,49 @@ function AgentEditor() {
             <Switch checked={form.record_calls} onCheckedChange={(v) => set("record_calls", v)} />
           </div>
 
-          {form.outbound_mode === "twilio_number" ? (
+          {form.telephony_provider === "asterisk" ? (
+            <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+              <h4 className="font-medium text-sm">Локальный Asterisk</h4>
+              <p className="text-xs text-muted-foreground">
+                Медиа — через AudioSocket (Asterisk 18+, chan_audiosocket). Управление вызовами — ARI.
+                Разверните сервис из папки <code className="font-mono">asterisk-bridge/</code> рядом с Asterisk.
+              </p>
+              <div className="grid md:grid-cols-2 gap-4">
+                <Field label="ARI Base URL" hint="напр. http://asterisk.local:8088">
+                  <Input value={form.asterisk_ari_base_url} onChange={(e) => set("asterisk_ari_base_url", e.target.value)} placeholder="http://asterisk.local:8088" />
+                </Field>
+                <Field label="Stasis app">
+                  <Input value={form.asterisk_ari_app} onChange={(e) => set("asterisk_ari_app", e.target.value)} placeholder="lunara" />
+                </Field>
+                <Field label="ARI username">
+                  <Input value={form.asterisk_ari_username} onChange={(e) => set("asterisk_ari_username", e.target.value)} autoComplete="off" />
+                </Field>
+                <Field label="ARI password">
+                  <Input type="password" value={form.asterisk_ari_password} onChange={(e) => set("asterisk_ari_password", e.target.value)} autoComplete="new-password" />
+                </Field>
+                <Field label="AudioSocket host:port" hint="куда Asterisk шлёт медиа">
+                  <Input value={form.asterisk_audiosocket_host} onChange={(e) => set("asterisk_audiosocket_host", e.target.value)} placeholder="bridge-host:8090" />
+                </Field>
+                <Field label="PSTN trunk" hint="напр. PJSIP/provider-endpoint">
+                  <Input value={form.asterisk_trunk} onChange={(e) => set("asterisk_trunk", e.target.value)} placeholder="PJSIP/provider-endpoint" />
+                </Field>
+                <Field label="Диалплан context">
+                  <Input value={form.asterisk_context} onChange={(e) => set("asterisk_context", e.target.value)} placeholder="from-lunara" />
+                </Field>
+                <Field label="Caller ID (исходящие)">
+                  <Input value={form.asterisk_caller_id} onChange={(e) => set("asterisk_caller_id", e.target.value)} placeholder="+37360123456" />
+                </Field>
+              </div>
+              <div className="flex items-center justify-between rounded-md border border-border/50 p-3">
+                <Label className="text-sm">Запись вызовов (MixMonitor на Asterisk)</Label>
+                <Switch checked={form.asterisk_record_calls} onCheckedChange={(v) => set("asterisk_record_calls", v)} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Инструкции по <code className="font-mono">pjsip.conf</code> и <code className="font-mono">extensions.conf</code> — в <code className="font-mono">asterisk-bridge/README.md</code>.
+              </p>
+            </div>
+          ) : form.outbound_mode === "twilio_number" ? (
+
             <>
               <div className="space-y-3 rounded-lg border border-border/60 p-4">
                 <div className="flex items-center justify-between gap-2 flex-wrap">

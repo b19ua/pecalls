@@ -1,0 +1,9 @@
+version: "3.9"
+services:
+  lunara-asterisk-bridge:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${AUDIOSOCKET_PORT:-8090}:8090"
+    # network_mode: host   # раскомментируйте, если Asterisk на этом же хосте

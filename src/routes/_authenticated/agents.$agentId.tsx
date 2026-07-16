@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { saveAgent, deleteAgent } from "@/lib/agents.functions";
 import { provisionInboundSip, deleteInboundSip, syncTwilioNumbers, configureTwilioNumber, placeOutboundCall } from "@/lib/twilio.functions";
+import { placeAsteriskCall } from "@/lib/asterisk.functions";
 import { connectTelegramBot, disconnectTelegramBot } from "@/lib/telegram.functions";
 import { GEMINI_VOICES, LANGUAGES } from "@/lib/voices";
 import { PageHeader } from "@/components/PageHeader";
@@ -141,6 +142,7 @@ function AgentEditor() {
   const syncNumbersFn = useServerFn(syncTwilioNumbers);
   const configureNumberFn = useServerFn(configureTwilioNumber);
   const outboundCallFn = useServerFn(placeOutboundCall);
+  const asteriskCallFn = useServerFn(placeAsteriskCall);
   const [form, setForm] = useState<AgentForm>(DEFAULTS);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -393,8 +395,13 @@ function AgentEditor() {
     const to = testToNumber.trim();
     if (!/^\+?[0-9]{6,16}$/.test(to)) { toast.error("Введите корректный номер E.164"); return; }
     try {
-      const r = await outboundCallFn({ data: { agentId, toNumber: to } });
-      toast.success(`Тестовый звонок: ${r.sid}`);
+      if (form.telephony_provider === "asterisk") {
+        const r = await asteriskCallFn({ data: { agentId, toNumber: to } });
+        toast.success(`Тестовый звонок (Asterisk): ${r.callId}`);
+      } else {
+        const r = await outboundCallFn({ data: { agentId, toNumber: to } });
+        toast.success(`Тестовый звонок: ${r.sid}`);
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Call failed");
     }
@@ -419,8 +426,14 @@ function AgentEditor() {
     setBulkDialing(true);
     let ok = 0, fail = 0;
     for (const n of nums) {
-      try { await outboundCallFn({ data: { agentId, toNumber: n } }); ok++; }
-      catch { fail++; }
+      try {
+        if (form.telephony_provider === "asterisk") {
+          await asteriskCallFn({ data: { agentId, toNumber: n } });
+        } else {
+          await outboundCallFn({ data: { agentId, toNumber: n } });
+        }
+        ok++;
+      } catch { fail++; }
     }
     setBulkDialing(false);
     toast.success(`Запущено: ${ok}, ошибок: ${fail}`);

@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { saveAgent, deleteAgent } from "@/lib/agents.functions";
 import { provisionInboundSip, deleteInboundSip, syncTwilioNumbers, configureTwilioNumber, placeOutboundCall } from "@/lib/twilio.functions";
-import { placeAsteriskCall } from "@/lib/asterisk.functions";
+import { placeAsteriskCall, generateAsteriskWebhookSecret } from "@/lib/asterisk.functions";
 import { connectTelegramBot, disconnectTelegramBot } from "@/lib/telegram.functions";
 import { GEMINI_VOICES, LANGUAGES } from "@/lib/voices";
 import { PageHeader } from "@/components/PageHeader";

@@ -3,10 +3,18 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const ParamSchema = z.object({
+  // `name` stays a clean JS identifier: it is exposed to the LLM as the JSON
+  // schema property name AND used as the `{name}` placeholder in body_template.
   name: z.string().min(1).max(40).regex(/^[a-zA-Z][a-zA-Z0-9_]*$/),
   type: z.enum(["string", "number", "boolean"]),
   description: z.string().max(300).default(""),
   required: z.boolean().default(false),
+  // Optional override for the outbound HTTP query-string key. Lets any
+  // upstream API that requires nested/bracketed keys (Bitrix24
+  // `filter[PHONE]`, JSON:API `page[size]`, Elasticsearch `q[term]`, …)
+  // work without loosening the identifier regex above. Value is always
+  // percent-encoded via URLSearchParams, so brackets/dots/dashes are safe.
+  query_key: z.string().max(100).regex(/^[A-Za-z0-9_.\-\[\]]*$/).default(""),
 });
 
 const WebhookConfig = z.object({

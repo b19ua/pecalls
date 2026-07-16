@@ -902,11 +902,22 @@ async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promis
   let method = (cfg.method || "POST").toUpperCase();
   let body: string | undefined;
 
+  // Build "arg name → outbound query key" map from configured parameters.
+  // If a param has `query_key`, use it verbatim (e.g. "filter[PHONE]",
+  // "page[size]", "data.attributes.name"). URLSearchParams percent-encodes
+  // the value, so brackets/dots in the KEY only affect the wire format and
+  // cannot inject additional query pairs.
+  const paramMap: Record<string, string> = {};
+  for (const p of (cfg.parameters ?? [])) {
+    if (p && p.name) paramMap[p.name] = (p.query_key && p.query_key.length > 0) ? p.query_key : p.name;
+  }
+  const outKey = (k: string) => paramMap[k] ?? k;
+
   if (tool.type === "webhook") {
     url = cfg.url || "";
     if (method === "GET") {
       const u = new URL(url);
-      for (const [k, v] of Object.entries(args)) u.searchParams.set(k, String(v));
+      for (const [k, v] of Object.entries(args)) u.searchParams.append(outKey(k), String(v));
       url = u.toString();
     } else {
       body = JSON.stringify(args);
@@ -917,9 +928,7 @@ async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promis
     url = `${base}${path.startsWith("/") ? path : "/" + path}`;
     if (method === "GET") {
       const u = new URL(url);
-      for (const [k, v] of Object.entries(args)) {
-        if (!u.searchParams.has(k)) u.searchParams.set(k, String(v));
-      }
+      for (const [k, v] of Object.entries(args)) u.searchParams.append(outKey(k), String(v));
       url = u.toString();
     } else if (cfg.body_template) {
       body = fillTemplate(cfg.body_template, args);

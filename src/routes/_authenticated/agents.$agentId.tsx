@@ -142,6 +142,7 @@ function AgentEditor() {
   const syncNumbersFn = useServerFn(syncTwilioNumbers);
   const configureNumberFn = useServerFn(configureTwilioNumber);
   const outboundCallFn = useServerFn(placeOutboundCall);
+  const asteriskCallFn = useServerFn(placeAsteriskCall);
   const [form, setForm] = useState<AgentForm>(DEFAULTS);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);

@@ -233,16 +233,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (!greetingRequested) {
             greetingRequested = true;
             const c = ctx!;
-            // Lunara-style greeting trigger via client_content turn.
-            gemini!.send(JSON.stringify({
-              client_content: {
-                turns: [{
-                  role: "user",
-                  parts: [{ text: `Greet the caller now. Say: "${String(c.greeting).slice(0, 200)}"` }],
-                }],
-                turn_complete: true,
-              },
-            }));
+            // Lunara-style greeting trigger via shared client_content turn.
+            gemini!.send(JSON.stringify(buildGreetingTurn(String(c.greeting))));
           }
           for (const b64 of pendingAudioToGemini) sendAudioToGemini(b64);
           pendingAudioToGemini = [];

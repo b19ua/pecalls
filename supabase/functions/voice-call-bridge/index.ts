@@ -8,6 +8,7 @@ import {
   getModelCandidates,
   sanitizeSystemPrompt,
 } from "../_shared/live-config.ts";
+import { buildGeminiSetupPayload, buildGreetingTurn, buildToolResponse } from "../_shared/live-session.ts";
 import { scanCustomerText, applyFastRed } from "../_shared/risk-keywords.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;

@@ -117,9 +117,21 @@ exten => _X.,1,Answer()
 2. **Входящий**: провайдер шлёт вызов в `from-provider` → тот же диалплан.
 3. **Медиа**: мост принимает slin16 20ms кадры (заголовок 1+2 байта),
    ресемплит 8k→16k → Gemini Live; ответ 24k → 8k → назад в AudioSocket.
-4. **Запись**: `MixMonitor` пишет `.wav` локально на хосте Asterisk.
-5. **Hand-off**: DTMF-фрейм (тип 0x03) из AudioSocket триггерит ARI
-   `POST /ari/channels/{id}/redirect` на оператора (TODO — расширение).
+4. **Запись**: `MixMonitor` пишет `.wav` локально; post-hook загружает файл в
+   Lunara через:
+
+   ```bash
+   curl -sSf -X POST \
+     -H "X-Asterisk-Secret: $ASTERISK_WEBHOOK_SECRET" \
+     -F "call_uuid=${LUNARA_UUID}" \
+     -F "file=@/var/spool/asterisk/monitor/${LUNARA_UUID}.wav" \
+     https://pecalls.lovable.app/api/public/asterisk/recording
+   ```
+
+   Настройте это в `MixMonitor(..., ab, /usr/local/bin/lunara-upload.sh ^{LUNARA_UUID})`.
+5. **Hand-off**: DTMF-фрейм (тип 0x03), совпадающий с `handoff_dtmf_digit`
+   агента, триггерит ARI-originate на первый номер из `handoff_numbers` в тот
+   же Stasis-app; поля `calls.handoff_at` / `handoff_to` обновляются.
 
 ## Проверка
 

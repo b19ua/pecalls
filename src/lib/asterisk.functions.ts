@@ -4,8 +4,10 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 /**
  * placeAsteriskCall — исходящий звонок через локальный Asterisk (ARI).
- * Диалплан клиента должен направить канал в Stasis(app) и передать
- * переменную канала LUNARA_UUID как UUID для AudioSocket.
+ * ARI-originate помещает канал напрямую в контекст диалплана
+ * [from-lunara] (см. asterisk-bridge/README.md), extension = набираемый
+ * номер, priority = 1. Никакого Stasis: диалплан сам вызывает AudioSocket()
+ * и читает channel-var LUNARA_UUID.
  */
 export const placeAsteriskCall = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -22,7 +24,7 @@ export const placeAsteriskCall = createServerFn({ method: "POST" })
     const { data: agent, error } = await supabase
       .from("agents")
       .select(
-        "id, telephony_provider, asterisk_ari_base_url, asterisk_ari_username, asterisk_ari_password, asterisk_ari_app, asterisk_trunk, asterisk_caller_id, asterisk_audiosocket_host",
+        "id, telephony_provider, asterisk_ari_base_url, asterisk_ari_username, asterisk_ari_password, asterisk_trunk, asterisk_caller_id, asterisk_audiosocket_host",
       )
       .eq("id", data.agentId)
       .eq("owner_id", userId)
@@ -36,7 +38,6 @@ export const placeAsteriskCall = createServerFn({ method: "POST" })
       throw new Error("ARI не настроен (base URL / user / password)");
     }
     if (!agent.asterisk_trunk) throw new Error("Не задан PSTN trunk");
-    if (!agent.asterisk_ari_app) throw new Error("Не задан Stasis app");
 
     const callUuid = crypto.randomUUID();
     // pre-insert call row (provider-agnostic sid)
@@ -53,8 +54,9 @@ export const placeAsteriskCall = createServerFn({ method: "POST" })
     const endpoint = `${agent.asterisk_trunk}/${data.toNumber}`;
     const body = {
       endpoint,
-      app: agent.asterisk_ari_app,
-      appArgs: callUuid,
+      context: "from-lunara",
+      extension: data.toNumber,
+      priority: 1,
       callerId: agent.asterisk_caller_id || undefined,
       variables: {
         LUNARA_UUID: callUuid,

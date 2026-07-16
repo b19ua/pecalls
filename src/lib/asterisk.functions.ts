@@ -24,7 +24,7 @@ export const placeAsteriskCall = createServerFn({ method: "POST" })
     const { data: agent, error } = await supabase
       .from("agents")
       .select(
-        "id, telephony_provider, asterisk_ari_base_url, asterisk_ari_username, asterisk_ari_password, asterisk_ari_app, asterisk_trunk, asterisk_caller_id, asterisk_audiosocket_host",
+        "id, telephony_provider, asterisk_ari_base_url, asterisk_ari_username, asterisk_ari_password, asterisk_trunk, asterisk_caller_id, asterisk_audiosocket_host",
       )
       .eq("id", data.agentId)
       .eq("owner_id", userId)

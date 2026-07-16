@@ -296,7 +296,9 @@ async function handleConn(conn: Deno.Conn) {
           transcript.push({ role: "dtmf", text: digit, at: Date.now() });
           if (agent?.handoff_enabled && String(agent.handoff_dtmf_digit || "") === digit) {
             const ok = await ariRedirect(agent, callUuid, digit);
-            await updateCall(callUuid, { handoff_triggered: ok, handoff_reason: "dtmf" });
+            if (ok) {
+              await updateCall(callUuid, { handoff_at: new Date().toISOString(), handoff_to: (agent.handoff_numbers || [])[0] || null });
+            }
           }
         } else if (type === T_ERROR) {
           console.error(`[audiosocket] error frame on ${callUuid}: ${payload[0]?.toString(16)}`);

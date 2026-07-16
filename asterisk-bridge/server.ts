@@ -289,15 +289,24 @@ async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>):
   let url = "";
   let method = (cfg.method || "POST").toUpperCase();
   let body: string | undefined;
+  // Outbound query-key map: honour optional `query_key` override on each
+  // configured parameter so APIs with nested/bracketed keys (Bitrix24
+  // `filter[PHONE]`, JSON:API `page[size]`, …) work without exposing weird
+  // identifiers to the LLM.
+  const paramMap: Record<string, string> = {};
+  for (const p of (cfg.parameters ?? [])) {
+    if (p && p.name) paramMap[p.name] = (p.query_key && p.query_key.length > 0) ? p.query_key : p.name;
+  }
+  const outKey = (k: string) => paramMap[k] ?? k;
   if (tool.type === "webhook") {
     url = cfg.url || "";
-    if (method === "GET") { const u = new URL(url); for (const [k, v] of Object.entries(args)) u.searchParams.set(k, String(v)); url = u.toString(); }
+    if (method === "GET") { const u = new URL(url); for (const [k, v] of Object.entries(args)) u.searchParams.append(outKey(k), String(v)); url = u.toString(); }
     else body = JSON.stringify(args);
   } else {
     const base = (cfg.base_url || "").replace(/\/+$/, "");
     const path = fillTemplate(cfg.path || "", args);
     url = `${base}${path.startsWith("/") ? path : "/" + path}`;
-    if (method === "GET") { const u = new URL(url); for (const [k, v] of Object.entries(args)) if (!u.searchParams.has(k)) u.searchParams.set(k, String(v)); url = u.toString(); }
+    if (method === "GET") { const u = new URL(url); for (const [k, v] of Object.entries(args)) u.searchParams.append(outKey(k), String(v)); url = u.toString(); }
     else if (cfg.body_template) body = fillTemplate(cfg.body_template, args);
     else body = JSON.stringify(args);
   }

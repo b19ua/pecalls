@@ -426,8 +426,14 @@ function AgentEditor() {
     setBulkDialing(true);
     let ok = 0, fail = 0;
     for (const n of nums) {
-      try { await outboundCallFn({ data: { agentId, toNumber: n } }); ok++; }
-      catch { fail++; }
+      try {
+        if (form.telephony_provider === "asterisk") {
+          await asteriskCallFn({ data: { agentId, toNumber: n } });
+        } else {
+          await outboundCallFn({ data: { agentId, toNumber: n } });
+        }
+        ok++;
+      } catch { fail++; }
     }
     setBulkDialing(false);
     toast.success(`Запущено: ${ok}, ошибок: ${fail}`);

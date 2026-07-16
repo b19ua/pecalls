@@ -734,8 +734,8 @@ function AgentEditor() {
                 <Field label="ARI Base URL" hint="напр. http://asterisk.local:8088">
                   <Input value={form.asterisk_ari_base_url} onChange={(e) => set("asterisk_ari_base_url", e.target.value)} placeholder="http://asterisk.local:8088" />
                 </Field>
-                <Field label="Stasis app">
-                  <Input value={form.asterisk_ari_app} onChange={(e) => set("asterisk_ari_app", e.target.value)} placeholder="lunara" />
+                <Field label="Stasis app (не используется)" hint="Опционально. Originate идёт напрямую в контекст [from-lunara], Stasis не задействован.">
+                  <Input value={form.asterisk_ari_app} onChange={(e) => set("asterisk_ari_app", e.target.value)} placeholder="lunara (legacy)" />
                 </Field>
                 <Field label="ARI username">
                   <Input value={form.asterisk_ari_username} onChange={(e) => set("asterisk_ari_username", e.target.value)} autoComplete="off" />

@@ -395,8 +395,13 @@ function AgentEditor() {
     const to = testToNumber.trim();
     if (!/^\+?[0-9]{6,16}$/.test(to)) { toast.error("Введите корректный номер E.164"); return; }
     try {
-      const r = await outboundCallFn({ data: { agentId, toNumber: to } });
-      toast.success(`Тестовый звонок: ${r.sid}`);
+      if (form.telephony_provider === "asterisk") {
+        const r = await asteriskCallFn({ data: { agentId, toNumber: to } });
+        toast.success(`Тестовый звонок (Asterisk): ${r.callId}`);
+      } else {
+        const r = await outboundCallFn({ data: { agentId, toNumber: to } });
+        toast.success(`Тестовый звонок: ${r.sid}`);
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Call failed");
     }

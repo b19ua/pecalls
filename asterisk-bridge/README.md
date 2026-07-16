@@ -68,6 +68,11 @@ match=sip.provider.example
 
 ### `extensions.conf` (диалплан)
 
+Единственный поддерживаемый способ — прямой `AudioSocket()` без Stasis.
+ARI используется только для placement исходящего канала; медиа всегда идёт
+через `AudioSocket()` в этот сервис. Оба контекста (входящие от провайдера и
+исходящие, доставленные ARI) используют идентичный паттерн.
+
 ```ini
 [globals]
 LUNARA_BRIDGE=bridge-host:8090   ; host:port сервиса asterisk-bridge
@@ -78,34 +83,18 @@ exten => _X.,1,NoOp(Incoming ${EXTEN} from ${CALLERID(num)})
  same => n,Answer()
  same => n,Set(LUNARA_UUID=${UNIQUEID})
  same => n,MixMonitor(/var/spool/asterisk/monitor/${LUNARA_UUID}.wav,ab)
- same => n,Stasis(lunara,${LUNARA_UUID})
- same => n,Hangup()
+ same => n,AudioSocket(${LUNARA_UUID},${LUNARA_BRIDGE})
+ same => n,Goto(lunara-outcome,s,1)
 
 ;--- контекст, куда ARI кидает исходящий канал ---
+;    LUNARA_UUID приходит из ARI variables, задавать заново не нужно
 [from-lunara]
-exten => _X.,1,NoOp(Lunara outbound to ${EXTEN})
+exten => _X.,1,NoOp(Lunara outbound to ${EXTEN} uuid=${LUNARA_UUID})
  same => n,Answer()
  same => n,MixMonitor(/var/spool/asterisk/monitor/${LUNARA_UUID}.wav,ab)
- same => n,Stasis(lunara,${LUNARA_UUID})
- same => n,Hangup()
-```
-
-Stasis-приложение `lunara` — это наш bridge (запущен как ARI-клиент? нет: в этой
-схеме ARI используется только для placement, а медиа мы получаем через
-`AudioSocket()`). Простейший вариант диалплана без ARI-Stasis:
-
-```ini
-[from-lunara]
-exten => _X.,1,Answer()
- same => n,Set(LUNARA_UUID=${LUNARA_UUID})
- same => n,MixMonitor(/var/spool/asterisk/monitor/${LUNARA_UUID}.wav,ab)
  same => n,AudioSocket(${LUNARA_UUID},${LUNARA_BRIDGE})
- same => n,Hangup()
+ same => n,Goto(lunara-outcome,s,1)
 ```
-
-Тогда в UI Lunara вместо Stasis app просто оставьте `lunara` (значение не
-используется) и убедитесь, что `LUNARA_BRIDGE` в globals указывает на этот
-сервис.
 
 ### Диалплан для hand-off (обязателен, если включён перевод на оператора)
 
@@ -115,18 +104,10 @@ exten => _X.,1,Answer()
 1. Находит канал в ARI по channel-var `LUNARA_UUID`.
 2. Устанавливает канал-переменную `LUNARA_HANDOFF_TARGET=<номер оператора>`.
 3. Закрывает AudioSocket (0x00 TERM) — `AudioSocket()` в диалплане
-   возвращается. Дальше решает **диалплан клиента**.
-
-Добавьте контекст `lunara-outcome` и перенаправьте туда после `AudioSocket()`:
+   возвращается. Дальше решает **диалплан клиента** через `lunara-outcome`,
+   куда оба контекста выше уже делают `Goto`:
 
 ```ini
-[from-lunara]
-exten => _X.,1,Answer()
- same => n,Set(LUNARA_UUID=${LUNARA_UUID})
- same => n,MixMonitor(/var/spool/asterisk/monitor/${LUNARA_UUID}.wav,ab)
- same => n,AudioSocket(${LUNARA_UUID},${LUNARA_BRIDGE})
- same => n,Goto(lunara-outcome,s,1)
-
 [lunara-outcome]
 exten => s,1,NoOp(Lunara outcome target='${LUNARA_HANDOFF_TARGET}')
  same => n,GotoIf($["${LUNARA_HANDOFF_TARGET}" = ""]?end)

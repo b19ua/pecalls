@@ -48,12 +48,23 @@ type AgentForm = {
   handoff_trigger_phrases: string[];
   handoff_numbers: string[];
   outbound_mode: "twilio_number" | "sip_trunk";
+  telephony_provider: "twilio" | "asterisk";
+  asterisk_ari_base_url: string;
+  asterisk_ari_username: string;
+  asterisk_ari_password: string;
+  asterisk_ari_app: string;
+  asterisk_audiosocket_host: string;
+  asterisk_context: string;
+  asterisk_caller_id: string;
+  asterisk_trunk: string;
+  asterisk_record_calls: boolean;
   sip_domain: string;
   sip_username: string;
   sip_password: string;
   sip_transport: "tls" | "tcp" | "udp";
   sip_from_number: string;
   sip_route_prefix: string;
+
   objection_handling_enabled: boolean;
   objection_aaa_enabled: boolean;
   objection_categories: string[];
@@ -93,12 +104,23 @@ const DEFAULTS: AgentForm = {
   handoff_trigger_phrases: ["соедини с менеджером", "оператор", "human", "manager"],
   handoff_numbers: [],
   outbound_mode: "twilio_number",
+  telephony_provider: "twilio",
+  asterisk_ari_base_url: "",
+  asterisk_ari_username: "",
+  asterisk_ari_password: "",
+  asterisk_ari_app: "lunara",
+  asterisk_audiosocket_host: "",
+  asterisk_context: "from-lunara",
+  asterisk_caller_id: "",
+  asterisk_trunk: "",
+  asterisk_record_calls: true,
   sip_domain: "",
   sip_username: "",
   sip_password: "",
   sip_transport: "tls",
   sip_from_number: "",
   sip_route_prefix: "",
+
   objection_handling_enabled: false,
   objection_aaa_enabled: true,
   objection_categories: ["price", "timing", "trust", "competitor", "stall", "emotional", "clarification"],

@@ -12,7 +12,7 @@
 // Runtime-specific helpers (fetch-to-supabase, Gemini WS lifecycle, media codecs,
 // reportError) live in each bridge.
 
-export type ToolParam = { name: string; type: "string" | "number" | "boolean"; description?: string; required?: boolean };
+export type ToolParam = { name: string; type: "string" | "number" | "boolean"; description?: string; required?: boolean; query_key?: string };
 export type ToolRow = {
   id: string;
   type: "webhook" | "crm_lookup" | "crm_write";

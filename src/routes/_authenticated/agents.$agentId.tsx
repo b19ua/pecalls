@@ -158,6 +158,9 @@ function AgentEditor() {
   const [telegramUsername, setTelegramUsername] = useState<string | null>(null);
   const [tgToken, setTgToken] = useState("");
   const [tgBusy, setTgBusy] = useState(false);
+  const [newAsteriskSecret, setNewAsteriskSecret] = useState<string | null>(null);
+  const [rotatingAsteriskSecret, setRotatingAsteriskSecret] = useState(false);
+  const generateAsteriskSecretFn = useServerFn(generateAsteriskWebhookSecret);
   const connectTelegramFn = useServerFn(connectTelegramBot);
   const disconnectTelegramFn = useServerFn(disconnectTelegramBot);
 
@@ -756,6 +759,56 @@ function AgentEditor() {
               <div className="flex items-center justify-between rounded-md border border-border/50 p-3">
                 <Label className="text-sm">Запись вызовов (MixMonitor на Asterisk)</Label>
                 <Switch checked={form.asterisk_record_calls} onCheckedChange={(v) => set("asterisk_record_calls", v)} />
+              </div>
+              <div className="space-y-2 rounded-md border border-border/50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <Label className="text-sm">Webhook-секрет для загрузки записей</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Уникальный секрет ЭТОГО агента. Его Asterisk-post-hook должен передавать в заголовке
+                      <code className="font-mono mx-1">X-Asterisk-Secret</code> при <code className="font-mono">POST /api/public/asterisk/recording</code>.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={rotatingAsteriskSecret || isNew}
+                    onClick={async () => {
+                      if (!confirm("Сгенерировать новый секрет? Старое значение перестанет работать сразу.")) return;
+                      setRotatingAsteriskSecret(true);
+                      try {
+                        const res = await generateAsteriskSecretFn({ data: { agentId } });
+                        setNewAsteriskSecret(res.secret);
+                        toast.success("Новый секрет создан. Скопируйте — он больше не будет показан.");
+                      } catch (e) {
+                        toast.error((e as Error).message);
+                      } finally {
+                        setRotatingAsteriskSecret(false);
+                      }
+                    }}
+                  >
+                    {rotatingAsteriskSecret ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
+                    {newAsteriskSecret ? "Перегенерировать" : "Сгенерировать"}
+                  </Button>
+                </div>
+                {newAsteriskSecret && (
+                  <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 space-y-1">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                      Показывается один раз. Впишите это значение в конфиг вашего Asterisk-сервера.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 font-mono text-xs break-all bg-background rounded px-2 py-1 border border-border/60">
+                        {newAsteriskSecret}
+                      </code>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => {
+                        navigator.clipboard.writeText(newAsteriskSecret).then(() => toast.success("Скопировано"));
+                      }}>
+                        Копировать
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
                 Инструкции по <code className="font-mono">pjsip.conf</code> и <code className="font-mono">extensions.conf</code> — в <code className="font-mono">asterisk-bridge/README.md</code>.

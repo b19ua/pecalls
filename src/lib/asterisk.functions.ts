@@ -38,7 +38,6 @@ export const placeAsteriskCall = createServerFn({ method: "POST" })
       throw new Error("ARI не настроен (base URL / user / password)");
     }
     if (!agent.asterisk_trunk) throw new Error("Не задан PSTN trunk");
-    if (!agent.asterisk_ari_app) throw new Error("Не задан Stasis app");
 
     const callUuid = crypto.randomUUID();
     // pre-insert call row (provider-agnostic sid)
@@ -55,8 +54,9 @@ export const placeAsteriskCall = createServerFn({ method: "POST" })
     const endpoint = `${agent.asterisk_trunk}/${data.toNumber}`;
     const body = {
       endpoint,
-      app: agent.asterisk_ari_app,
-      appArgs: callUuid,
+      context: "from-lunara",
+      extension: data.toNumber,
+      priority: 1,
       callerId: agent.asterisk_caller_id || undefined,
       variables: {
         LUNARA_UUID: callUuid,

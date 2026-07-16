@@ -64,6 +64,7 @@ export type Database = {
           asterisk_context: string | null
           asterisk_record_calls: boolean | null
           asterisk_trunk: string | null
+          asterisk_webhook_secret: string | null
           created_at: string
           description: string | null
           emotion_tracking_enabled: boolean
@@ -121,6 +122,7 @@ export type Database = {
           asterisk_context?: string | null
           asterisk_record_calls?: boolean | null
           asterisk_trunk?: string | null
+          asterisk_webhook_secret?: string | null
           created_at?: string
           description?: string | null
           emotion_tracking_enabled?: boolean
@@ -178,6 +180,7 @@ export type Database = {
           asterisk_context?: string | null
           asterisk_record_calls?: boolean | null
           asterisk_trunk?: string | null
+          asterisk_webhook_secret?: string | null
           created_at?: string
           description?: string | null
           emotion_tracking_enabled?: boolean

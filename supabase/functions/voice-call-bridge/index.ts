@@ -214,37 +214,13 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         .join("\n\n");
       // Lunara-proven payload shape (snake_case, NO languageCode lock).
       const toolDecls = buildToolDeclarations(c.tools, c);
-      const setupMsg: Record<string, unknown> = {
-        setup: {
-          model,
-          generation_config: {
-            response_modalities: ["AUDIO"],
-            temperature: Number.isFinite(c.temperature) ? c.temperature : 0.6,
-            max_output_tokens: 2048,
-            candidate_count: 1,
-            speech_config: {
-              voice_config: { prebuilt_voice_config: { voice_name: c.voice || "Aoede" } },
-            },
-          },
-          system_instruction: { parts: [{ text: sysText }] },
-          input_audio_transcription: {},
-          output_audio_transcription: {},
-          realtime_input_config: {
-            automatic_activity_detection: {
-              disabled: false,
-              // HIGH start sensitivity → detect even soft / overlapping caller speech
-              // so an interjection while AI is talking still gets transcribed.
-              start_of_speech_sensitivity: "START_SENSITIVITY_HIGH",
-              // LOW end sensitivity → don't cut caller off mid-sentence.
-              end_of_speech_sensitivity: "END_SENSITIVITY_LOW",
-              prefix_padding_ms: 300,
-              silence_duration_ms: 800,
-            },
-            activity_handling: "NO_INTERRUPTION",
-          },
-          ...(toolDecls.length ? { tools: [{ function_declarations: toolDecls }] } : {}),
-        },
-      };
+      const setupMsg = buildGeminiSetupPayload({
+        model,
+        voice: c.voice || "Aoede",
+        temperature: c.temperature,
+        systemText: sysText,
+        tools: toolDecls,
+      });
       gemini!.send(JSON.stringify(setupMsg));
     };
 

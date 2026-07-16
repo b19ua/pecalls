@@ -1,0 +1,2 @@
+ALTER TABLE public.agents ADD COLUMN IF NOT EXISTS asterisk_webhook_secret text;
+COMMENT ON COLUMN public.agents.asterisk_webhook_secret IS 'Per-agent shared secret for the on-prem Asterisk bridge to authenticate recording uploads (X-Asterisk-Secret header). Rotated by the owner from the agent editor UI.';

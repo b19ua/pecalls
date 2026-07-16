@@ -80,3 +80,28 @@ export const placeAsteriskCall = createServerFn({ method: "POST" })
     }
     return { callId: callUuid };
   });
+
+/**
+ * generateAsteriskWebhookSecret — крипто-случайный секрет per-agent для аутентификации
+ * загрузок записи с локального Asterisk. Возвращается ОДИН раз (сразу же обновляется в БД);
+ * клиент показывает пользователю значение с кнопкой "скопировать" и просит вписать в
+ * post-hook скрипт (X-Asterisk-Secret). Регенерация инвалидирует старое значение.
+ */
+export const generateAsteriskWebhookSecret = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) => z.object({ agentId: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    // 32 байта -> 64 hex-символа. crypto.getRandomValues доступен в edge runtime.
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const secret = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const { error } = await supabase
+      .from("agents")
+      .update({ asterisk_webhook_secret: secret } as never)
+      .eq("id", data.agentId)
+      .eq("owner_id", userId);
+    if (error) throw new Error(error.message);
+    return { secret };
+  });
+

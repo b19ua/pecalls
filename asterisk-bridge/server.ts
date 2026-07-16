@@ -124,8 +124,10 @@ type GeminiHandle = {
   onTranscript: (cb: (role: "user" | "model", text: string) => void) => void;
 };
 
+import { buildGeminiSetupPayload, buildRealtimeAudio } from "./shared/live-session.ts";
+
 function openGemini(agent: any): Promise<GeminiHandle> {
-  const model = agent.model || "gemini-3.1-flash-live-preview";
+  const model = `models/${(agent.model || "gemini-3.1-flash-live-preview").replace(/^models\//, "")}`;
   const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_KEY}`;
   const ws = new WebSocket(url);
   const audioCbs: ((b: Uint8Array) => void)[] = [];
@@ -134,27 +136,23 @@ function openGemini(agent: any): Promise<GeminiHandle> {
   return new Promise((resolve, reject) => {
     ws.binaryType = "arraybuffer";
     ws.onopen = () => {
-      const setup = {
-        setup: {
-          model: `models/${model}`,
-          generationConfig: {
-            responseModalities: ["AUDIO"],
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: agent.voice || "Puck" } } },
-            temperature: agent.temperature ?? 0.8,
-          },
-          systemInstruction: { parts: [{ text: (agent.system_prompt || "") + "\n\n" + (agent.greeting ? `Начни с: "${agent.greeting}"` : "") }] },
-          realtimeInputConfig: { automaticActivityDetection: { disabled: false } },
-          outputAudioTranscription: {},
-          inputAudioTranscription: {},
-        },
-      };
+      const systemText = [
+        (agent.system_prompt || "").trim(),
+        agent.greeting ? `Start the conversation by greeting the caller: "${agent.greeting}"` : "",
+        "Keep replies short, conversational, 1–2 sentences max. Do not read URLs or long lists.",
+      ].filter(Boolean).join("\n\n");
+      const setup = buildGeminiSetupPayload({
+        model,
+        voice: agent.voice || "Aoede",
+        temperature: agent.temperature,
+        systemText,
+      });
       ws.send(JSON.stringify(setup));
       resolve({
         ws,
         sendUserAudio: (pcm16k: Uint8Array) => {
           if (ws.readyState !== WebSocket.OPEN) return;
-          const b64 = base64Encode(pcm16k);
-          ws.send(JSON.stringify({ realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: b64 } } }));
+          ws.send(JSON.stringify(buildRealtimeAudio(base64Encode(pcm16k))));
         },
         close: () => { try { ws.close(); } catch { /* */ } },
         onAudio: (cb) => audioCbs.push(cb),
@@ -162,7 +160,7 @@ function openGemini(agent: any): Promise<GeminiHandle> {
       });
     };
     ws.onerror = (e) => reject(e);
-    ws.onmessage = async (ev) => {
+    ws.onmessage = (ev) => {
       const raw = typeof ev.data === "string" ? ev.data : new TextDecoder().decode(ev.data as ArrayBuffer);
       let msg: any;
       try { msg = JSON.parse(raw); } catch { return; }

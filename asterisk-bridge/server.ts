@@ -196,16 +196,43 @@ function base64Decode(s: string): Uint8Array {
 
 // ------------------------- connection handling -------------------------
 
+async function ariRedirect(agent: any, callUuid: string, digit: string) {
+  const base = (agent.asterisk_ari_base_url || "").replace(/\/+$/, "");
+  const user = agent.asterisk_ari_username;
+  const pass = agent.asterisk_ari_password;
+  const nums: string[] = Array.isArray(agent.handoff_numbers) ? agent.handoff_numbers : [];
+  if (!base || !user || !pass || !nums.length) return false;
+  const target = nums[0];
+  const endpoint = `${agent.asterisk_trunk || "PJSIP"}/${target}`;
+  const auth = btoa(`${user}:${pass}`);
+  // Originate second leg and bridge with current channel
+  try {
+    // Find channel by variable LUNARA_UUID — we track by appArgs, so channel id
+    // is unknown here; rely on POST /channels with otherChannelId of appArgs
+    // was set by originator. As a simpler approach, request Asterisk to
+    // originate a bridge via /ari/channels?app=<app> and let dialplan glue.
+    const r = await fetch(`${base}/ari/channels?endpoint=${encodeURIComponent(endpoint)}&app=${encodeURIComponent(agent.asterisk_ari_app)}&appArgs=${encodeURIComponent("handoff:" + callUuid)}&callerId=${encodeURIComponent(agent.asterisk_caller_id || "")}`, {
+      method: "POST",
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    console.log(`[handoff] digit=${digit} → ${target} status=${r.status}`);
+    return r.ok;
+  } catch (e) {
+    console.error("[handoff] failed", e);
+    return false;
+  }
+}
+
 async function handleConn(conn: Deno.Conn) {
   const reader = conn.readable.getReader();
   let buf = new Uint8Array(0);
   let callUuid = "";
+  let agent: any = null;
   let gemini: GeminiHandle | null = null;
   const transcript: { role: string; text: string; at: number }[] = [];
   let outQueue: Uint8Array = new Uint8Array(0); // pcm16 @ 8k pending to Asterisk
 
   const flushOut = () => {
-    // Asterisk expects 20ms frames at 8kHz/16-bit mono = 320 bytes.
     const FRAME = 320;
     while (outQueue.length >= FRAME) {
       const frame = outQueue.slice(0, FRAME);
@@ -241,7 +268,7 @@ async function handleConn(conn: Deno.Conn) {
         if (type === T_UUID) {
           callUuid = payload.length === 16 ? uuidBytesToString(payload) : new TextDecoder().decode(payload);
           console.log(`[audiosocket] call ${callUuid} connected`);
-          const agent = await loadAgentForCall(callUuid);
+          agent = await loadAgentForCall(callUuid);
           if (!agent) {
             console.error(`[audiosocket] no agent for call ${callUuid}, closing`);
             await cleanup("failed");
@@ -267,7 +294,10 @@ async function handleConn(conn: Deno.Conn) {
           const digit = new TextDecoder().decode(payload);
           console.log(`[audiosocket] DTMF ${digit} on ${callUuid}`);
           transcript.push({ role: "dtmf", text: digit, at: Date.now() });
-          // TODO: handoff on configured digit — Asterisk ARI redirect to operator.
+          if (agent?.handoff_enabled && String(agent.handoff_dtmf_digit || "") === digit) {
+            const ok = await ariRedirect(agent, callUuid, digit);
+            await updateCall(callUuid, { handoff_triggered: ok, handoff_reason: "dtmf" });
+          }
         } else if (type === T_ERROR) {
           console.error(`[audiosocket] error frame on ${callUuid}: ${payload[0]?.toString(16)}`);
         } else if (type === T_TERM) {

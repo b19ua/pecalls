@@ -4,8 +4,10 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 /**
  * placeAsteriskCall — исходящий звонок через локальный Asterisk (ARI).
- * Диалплан клиента должен направить канал в Stasis(app) и передать
- * переменную канала LUNARA_UUID как UUID для AudioSocket.
+ * ARI-originate помещает канал напрямую в контекст диалплана
+ * [from-lunara] (см. asterisk-bridge/README.md), extension = набираемый
+ * номер, priority = 1. Никакого Stasis: диалплан сам вызывает AudioSocket()
+ * и читает channel-var LUNARA_UUID.
  */
 export const placeAsteriskCall = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

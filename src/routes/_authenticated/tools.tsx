@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_authenticated/tools")({
 });
 
 type ToolType = "webhook" | "crm_lookup" | "crm_write";
-type Param = { name: string; type: "string" | "number" | "boolean"; description: string; required: boolean };
+type Param = { name: string; type: "string" | "number" | "boolean"; description: string; required: boolean; query_key?: string };
 
 type ToolRow = {
   id: string;
@@ -408,7 +408,7 @@ function ToolEditor({
               <Label>{t("tools.params_label")}</Label>
               <Button
                 type="button" size="sm" variant="outline"
-                onClick={() => setParams([...params, { name: "", type: "string", description: "", required: true }])}
+                onClick={() => setParams([...params, { name: "", type: "string", description: "", required: true, query_key: "" }])}
               >
                 <Plus className="h-3.5 w-3.5 mr-1" /> {t("tools.add_param")}
               </Button>
@@ -433,6 +433,17 @@ function ToolEditor({
                     value={p.description}
                     onChange={(e) => {
                       const np = [...params]; np[i] = { ...p, description: e.target.value }; setParams(np);
+                    }}
+                  />
+                  <Input
+                    placeholder='query key override (optional, e.g. "filter[PHONE]")'
+                    value={p.query_key ?? ""}
+                    onChange={(e) => {
+                      const np = [...params];
+                      // Allow letters, digits, _.-[] (URLSearchParams will percent-encode the VALUE;
+                      // the key format above is enough for Bitrix24 / JSON:API / dotted paths).
+                      np[i] = { ...p, query_key: e.target.value.replace(/[^A-Za-z0-9_.\-\[\]]/g, "") };
+                      setParams(np);
                     }}
                   />
                 </div>

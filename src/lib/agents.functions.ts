@@ -52,12 +52,23 @@ const AgentSchema = z.object({
   sip_transport: z.enum(["tls", "tcp", "udp"]).default("tls"),
   sip_from_number: z.string().max(50).nullable().optional(),
   sip_route_prefix: z.string().max(20).nullable().optional(),
+  telephony_provider: z.enum(["twilio", "asterisk"]).default("twilio"),
+  asterisk_ari_base_url: z.string().max(500).nullable().optional(),
+  asterisk_ari_username: z.string().max(200).nullable().optional(),
+  asterisk_ari_password: z.string().max(500).nullable().optional(),
+  asterisk_ari_app: z.string().max(100).nullable().optional(),
+  asterisk_audiosocket_host: z.string().max(255).nullable().optional(),
+  asterisk_context: z.string().max(100).nullable().optional(),
+  asterisk_caller_id: z.string().max(50).nullable().optional(),
+  asterisk_trunk: z.string().max(200).nullable().optional(),
+  asterisk_record_calls: z.boolean().optional().default(true),
   objection_handling_enabled: z.boolean().optional().default(false),
   objection_aaa_enabled: z.boolean().optional().default(true),
   objection_categories: z.array(z.string().max(40)).max(20).optional().default([]),
   objection_custom_responses: z.record(z.string(), z.string().max(2000)).optional().default({}),
   emotion_tracking_enabled: z.boolean().optional().default(true),
   tools_config: z.record(z.string(), z.boolean()).optional().default({}),
+
 });
 
 export const saveAgent = createServerFn({ method: "POST" })

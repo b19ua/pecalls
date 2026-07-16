@@ -304,11 +304,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
                 : { error: `unknown tool ${fc.name}` };
             }
             try {
-              gemini!.send(JSON.stringify({
-                tool_response: {
-                  function_responses: [{ id: fc.id, name: fc.name, response: { result } }],
-                },
-              }));
+              gemini!.send(JSON.stringify(buildToolResponse(fc.id, fc.name, result)));
             } catch (e) { console.error("tool resp", e); }
           }
         }

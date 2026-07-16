@@ -1,0 +1,23 @@
+services:
+  bridge:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      AUDIOSOCKET_PORT: "8090"
+    expose:
+      - "8090"
+
+  asterisk:
+    image: mlan/asterisk:20
+    depends_on: [bridge]
+    ports:
+      - "5060:5060/udp"
+    volumes:
+      - ./conf/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./conf/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./conf/modules.conf:/etc/asterisk/modules.conf:ro
+      - ./conf/manager.conf:/etc/asterisk/manager.conf:ro

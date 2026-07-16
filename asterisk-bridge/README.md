@@ -123,10 +123,11 @@ exten => s,1,NoOp(Lunara outcome target='${LUNARA_HANDOFF_TARGET}')
 ## Как это работает
 
 1. **Исходящий**: Lunara вызывает ARI `POST /ari/channels` с endpoint
-   `PJSIP/provider-endpoint/+373...`, `app=lunara`, каналу задаётся переменная
-   `LUNARA_UUID` (наш call id). Asterisk дозванивается → канал попадает в
-   `from-lunara` → `AudioSocket()` открывает TCP-соединение к нашему мосту и
-   шлёт PCM 8kHz.
+   `PJSIP/provider-endpoint/+373...` и параметрами `context="from-lunara"`,
+   `extension=<набираемый номер>`, `priority=1`; каналу задаётся переменная
+   `LUNARA_UUID` (наш call id). Никакого Stasis — Asterisk дозванивается и
+   сразу исполняет диалплан `[from-lunara]`, где `AudioSocket()` открывает
+   TCP-соединение к нашему мосту и шлёт PCM 8kHz.
 2. **Входящий**: провайдер шлёт вызов в `from-provider` → тот же диалплан.
 3. **Медиа**: мост принимает slin16 20ms кадры (заголовок 1+2 байта),
    ресемплит 8k→16k → Gemini Live; ответ 24k → 8k → назад в AudioSocket.

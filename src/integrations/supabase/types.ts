@@ -55,6 +55,15 @@ export type Database = {
       }
       agents: {
         Row: {
+          asterisk_ari_app: string | null
+          asterisk_ari_base_url: string | null
+          asterisk_ari_password: string | null
+          asterisk_ari_username: string | null
+          asterisk_audiosocket_host: string | null
+          asterisk_caller_id: string | null
+          asterisk_context: string | null
+          asterisk_record_calls: boolean | null
+          asterisk_trunk: string | null
           created_at: string
           description: string | null
           emotion_tracking_enabled: boolean
@@ -95,6 +104,7 @@ export type Database = {
           telegram_bot_id: number | null
           telegram_bot_token: string | null
           telegram_bot_username: string | null
+          telephony_provider: string
           temperature: number
           tools_config: Json
           twilio_number_e164: string | null
@@ -102,6 +112,15 @@ export type Database = {
           voice: string
         }
         Insert: {
+          asterisk_ari_app?: string | null
+          asterisk_ari_base_url?: string | null
+          asterisk_ari_password?: string | null
+          asterisk_ari_username?: string | null
+          asterisk_audiosocket_host?: string | null
+          asterisk_caller_id?: string | null
+          asterisk_context?: string | null
+          asterisk_record_calls?: boolean | null
+          asterisk_trunk?: string | null
           created_at?: string
           description?: string | null
           emotion_tracking_enabled?: boolean
@@ -142,6 +161,7 @@ export type Database = {
           telegram_bot_id?: number | null
           telegram_bot_token?: string | null
           telegram_bot_username?: string | null
+          telephony_provider?: string
           temperature?: number
           tools_config?: Json
           twilio_number_e164?: string | null
@@ -149,6 +169,15 @@ export type Database = {
           voice?: string
         }
         Update: {
+          asterisk_ari_app?: string | null
+          asterisk_ari_base_url?: string | null
+          asterisk_ari_password?: string | null
+          asterisk_ari_username?: string | null
+          asterisk_audiosocket_host?: string | null
+          asterisk_caller_id?: string | null
+          asterisk_context?: string | null
+          asterisk_record_calls?: boolean | null
+          asterisk_trunk?: string | null
           created_at?: string
           description?: string | null
           emotion_tracking_enabled?: boolean
@@ -189,6 +218,7 @@ export type Database = {
           telegram_bot_id?: number | null
           telegram_bot_token?: string | null
           telegram_bot_username?: string | null
+          telephony_provider?: string
           temperature?: number
           tools_config?: Json
           twilio_number_e164?: string | null

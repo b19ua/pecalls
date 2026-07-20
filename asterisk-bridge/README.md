@@ -148,7 +148,7 @@ exten => s,1,NoOp(Lunara outcome target='${LUNARA_HANDOFF_TARGET}')
      -H "X-Asterisk-Secret: $(cat /etc/lunara/webhook-secret)" \
      -F "call_uuid=${LUNARA_UUID}" \
      -F "file=@/var/spool/asterisk/monitor/${LUNARA_UUID}.wav" \
-     https://pecalls.lovable.app/api/public/asterisk/recording
+     https://lunara.now/api/public/asterisk/recording
    ```
 
    Настройте это в `MixMonitor(..., ab, /usr/local/bin/lunara-upload.sh ^{LUNARA_UUID})`.

@@ -67,7 +67,7 @@ set -a; source "$ENV_FILE"; set +a
 : "${GEMINI_API_KEY:?GEMINI_API_KEY пуст в setup.env}"
 : "${LOVABLE_AGENT_ID:?LOVABLE_AGENT_ID пуст в setup.env (UUID агента из UI Lovable)}"
 : "${LOVABLE_WEBHOOK_SECRET:?LOVABLE_WEBHOOK_SECRET пуст в setup.env (сгенерируйте в UI редактора агента)}"
-LOVABLE_BASE_URL="${LOVABLE_BASE_URL:-https://pecalls.lovable.app}"
+LOVABLE_BASE_URL="${LOVABLE_BASE_URL:-https://lunara.now}"
 ARI_USERNAME="${ARI_USERNAME:-lunara}"
 AUDIOSOCKET_PORT="${AUDIOSOCKET_PORT:-8090}"
 

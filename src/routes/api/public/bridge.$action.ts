@@ -157,13 +157,33 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
             .select("id, agent_id, owner_id")
             .eq("twilio_call_sid", callSid)
             .maybeSingle();
-          if (!call || call.agent_id !== auth.agentId || call.owner_id !== auth.ownerId) return unauthorized();
-          await supabaseAdmin
-            .from("calls")
-            .update({ status: "in_progress", started_at: new Date().toISOString() } as never)
-            .eq("twilio_call_sid", callSid);
-          return ok({ agent_id: call.agent_id, owner_id: call.owner_id });
+          if (call) {
+            // existing row (outbound flow — pre-inserted by placeAsteriskCall):
+            // enforce strict ownership to prevent agent spoofing.
+            if (call.agent_id !== auth.agentId || call.owner_id !== auth.ownerId) return unauthorized();
+            await supabaseAdmin
+              .from("calls")
+              .update({ status: "in_progress", started_at: new Date().toISOString() } as never)
+              .eq("twilio_call_sid", callSid);
+          } else {
+            // inbound flow: no row exists yet — create on the fly.
+            // verifyAgent() already proved the caller owns this agent's webhook secret,
+            // so it's safe to bind the new row to auth.agentId / auth.ownerId.
+            const { error: insErr } = await supabaseAdmin
+              .from("calls")
+              .insert({
+                owner_id: auth.ownerId,
+                agent_id: auth.agentId,
+                twilio_call_sid: callSid,
+                status: "in_progress",
+                direction: "inbound",
+                started_at: new Date().toISOString(),
+              } as never);
+            if (insErr) return new Response(insErr.message, { status: 500 });
+          }
+          return ok({ agent_id: auth.agentId, owner_id: auth.ownerId });
         }
+
 
         // ---------------- call-transcript ----------------
         if (action === "call-transcript") {

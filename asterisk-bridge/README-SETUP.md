@@ -5,20 +5,32 @@
 не будут затронуты — скрипт делает backup и APPEND-ит блоки с маркером
 `# --- Lunara AI managed block ---`.
 
+**Никаких «секретных» ключей от платформы вам НЕ нужно.** Всё, что требуется —
+это ваш `GEMINI_API_KEY` и пара значений из UI Lovable (UUID агента + его
+webhook secret, который вы генерируете сами кнопкой в интерфейсе).
+
+## Шаг 0 — подготовьте значения в Lovable (2 минуты)
+
+1. Откройте Lovable, зайдите в нужного агента.
+2. Скопируйте **Agent ID** из адресной строки: `…/agents/<UUID>` — это и есть
+   `LOVABLE_AGENT_ID`.
+3. В карточке агента найдите секцию **Asterisk / Webhook secret** и нажмите
+   **«Сгенерировать»**. Скопируйте показанное значение — это
+   `LOVABLE_WEBHOOK_SECRET`. Этим же секретом мост будет писать в БД и
+   загружать записи разговоров через `/api/public/asterisk/recording`.
+4. Заведите `GEMINI_API_KEY` в [Google AI Studio](https://aistudio.google.com/apikey),
+   если ещё не заводили.
+
 ## Шаг 1 — скопировать папку `asterisk-bridge/` на сервер
 
 ```bash
-# любым способом: git clone / scp / rsync
 scp -r asterisk-bridge/ root@your-asterisk-server:/opt/lunara-bridge/
 ssh root@your-asterisk-server
 cd /opt/lunara-bridge
 
 cp setup.env.example setup.env
-nano setup.env    # заполните GEMINI_API_KEY и SUPABASE_SERVICE_ROLE_KEY
+nano setup.env    # вставьте GEMINI_API_KEY, LOVABLE_AGENT_ID, LOVABLE_WEBHOOK_SECRET
 ```
-
-`SUPABASE_SERVICE_ROLE_KEY` спросите у администратора платформы Lunara — этот
-ключ не хранится в репозитории и не подставляется автоматически.
 
 ## Шаг 2 — запустить установщик
 
@@ -47,8 +59,7 @@ sudo bash setup.sh
 (например, тестовый сервер) — запустите `sudo bash setup.sh --restart`.
 
 В конце скрипт распечатает блок **«СКОПИРУЙ ЭТО В LOVABLE»** с готовыми
-значениями: ARI base URL, ARI username/password, AudioSocket host:port,
-webhook secret (для post-recording скрипта).
+значениями: ARI base URL, ARI username/password, AudioSocket host:port.
 
 ## Шаг 3 — добавить SIP-транк и вписать значения в Lovable
 
@@ -99,7 +110,7 @@ Lunara подставит номер: `PJSIP/provider-endpoint/+373...`.
 
 ### 3b. UI Lovable → агент → режим Asterisk
 
-Откройте агента в Lovable, выберите **Telephony provider = Asterisk** и
+Откройте того же агента в Lovable, выберите **Telephony provider = Asterisk** и
 вставьте значения, распечатанные `setup.sh`:
 
 - **ARI base URL** — например `http://10.0.0.5:8088`
@@ -107,9 +118,21 @@ Lunara подставит номер: `PJSIP/provider-endpoint/+373...`.
 - **AudioSocket host:port** — например `10.0.0.5:8090`
 - **Trunk** — `PJSIP/provider-endpoint` (из шага 3a)
 - **Caller ID** — ваш выходной номер
-- **Webhook secret** — сгенерируйте кнопкой «Сгенерировать» и вставьте в
-  `/etc/lunara/webhook-secret` на сервере (используется post-hook скриптом
-  загрузки MixMonitor-записей).
+- **Webhook secret** — тот же, что вы вставили в `setup.env` на шаге 0
 
 После этого шага звонок должен проходить сквозно — **сделайте тестовый звонок
-и проверьте таблицу `calls` в Supabase** (или страницу `/calls` в Lunara).
+и проверьте страницу `/calls` в Lunara**.
+
+## Что и куда идёт
+
+- Мост (Docker на вашем сервере) ↔ Gemini Live: прямой WebSocket, ходит только
+  через ваш `GEMINI_API_KEY`.
+- Мост ↔ Lovable REST (`/api/public/bridge/<action>`): чтения контекста агента,
+  запись транскрипта/статуса звонка/эскалаций. Аутентификация — HTTPS +
+  ваш `LOVABLE_WEBHOOK_SECRET` (per-agent).
+- MixMonitor-записи → Lovable Storage через `/api/public/asterisk/recording`
+  с тем же `LOVABLE_WEBHOOK_SECRET`.
+- CRM клиента: мост дергает **напрямую** ваш on-prem URL, никаких прокси.
+
+Никаких ключей уровня платформы (типа Supabase service-role) на сервере
+клиента не хранится.

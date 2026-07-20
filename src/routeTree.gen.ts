@@ -52,6 +52,7 @@ import { Route as ApiPublicHooksCrmHealthcheckRouteImport } from './routes/api/p
 import { Route as ApiPublicCrmTicketUpdateRouteImport } from './routes/api/public/crm/ticket-update'
 import { Route as ApiPublicCrmSandboxRouteImport } from './routes/api/public/crm/sandbox'
 import { Route as ApiPublicCrmCallsRouteImport } from './routes/api/public/crm/calls'
+import { Route as ApiPublicBridgeActionRouteImport } from './routes/api/public/bridge.$action'
 import { Route as ApiPublicAsteriskRecordingRouteImport } from './routes/api/public/asterisk/recording'
 import { Route as AuthenticatedCopilotSessionsSessionIdRouteImport } from './routes/_authenticated/copilot.sessions.$sessionId'
 import { Route as AuthenticatedCopilotAgentsAgentIdRouteImport } from './routes/_authenticated/copilot.agents.$agentId'
@@ -286,6 +287,11 @@ const ApiPublicCrmCallsRoute = ApiPublicCrmCallsRouteImport.update({
   path: '/api/public/crm/calls',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicBridgeActionRoute = ApiPublicBridgeActionRouteImport.update({
+  id: '/api/public/bridge/$action',
+  path: '/api/public/bridge/$action',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicAsteriskRecordingRoute =
   ApiPublicAsteriskRecordingRouteImport.update({
     id: '/api/public/asterisk/recording',
@@ -341,6 +347,7 @@ export interface FileRoutesByFullPath {
   '/copilot/agents/$agentId': typeof AuthenticatedCopilotAgentsAgentIdRoute
   '/copilot/sessions/$sessionId': typeof AuthenticatedCopilotSessionsSessionIdRoute
   '/api/public/asterisk/recording': typeof ApiPublicAsteriskRecordingRoute
+  '/api/public/bridge/$action': typeof ApiPublicBridgeActionRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/crm/sandbox': typeof ApiPublicCrmSandboxRoute
   '/api/public/crm/ticket-update': typeof ApiPublicCrmTicketUpdateRoute
@@ -387,6 +394,7 @@ export interface FileRoutesByTo {
   '/copilot/agents/$agentId': typeof AuthenticatedCopilotAgentsAgentIdRoute
   '/copilot/sessions/$sessionId': typeof AuthenticatedCopilotSessionsSessionIdRoute
   '/api/public/asterisk/recording': typeof ApiPublicAsteriskRecordingRoute
+  '/api/public/bridge/$action': typeof ApiPublicBridgeActionRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/crm/sandbox': typeof ApiPublicCrmSandboxRoute
   '/api/public/crm/ticket-update': typeof ApiPublicCrmTicketUpdateRoute
@@ -437,6 +445,7 @@ export interface FileRoutesById {
   '/_authenticated/copilot/agents/$agentId': typeof AuthenticatedCopilotAgentsAgentIdRoute
   '/_authenticated/copilot/sessions/$sessionId': typeof AuthenticatedCopilotSessionsSessionIdRoute
   '/api/public/asterisk/recording': typeof ApiPublicAsteriskRecordingRoute
+  '/api/public/bridge/$action': typeof ApiPublicBridgeActionRoute
   '/api/public/crm/calls': typeof ApiPublicCrmCallsRoute
   '/api/public/crm/sandbox': typeof ApiPublicCrmSandboxRoute
   '/api/public/crm/ticket-update': typeof ApiPublicCrmTicketUpdateRoute
@@ -487,6 +496,7 @@ export interface FileRouteTypes {
     | '/copilot/agents/$agentId'
     | '/copilot/sessions/$sessionId'
     | '/api/public/asterisk/recording'
+    | '/api/public/bridge/$action'
     | '/api/public/crm/calls'
     | '/api/public/crm/sandbox'
     | '/api/public/crm/ticket-update'
@@ -533,6 +543,7 @@ export interface FileRouteTypes {
     | '/copilot/agents/$agentId'
     | '/copilot/sessions/$sessionId'
     | '/api/public/asterisk/recording'
+    | '/api/public/bridge/$action'
     | '/api/public/crm/calls'
     | '/api/public/crm/sandbox'
     | '/api/public/crm/ticket-update'
@@ -582,6 +593,7 @@ export interface FileRouteTypes {
     | '/_authenticated/copilot/agents/$agentId'
     | '/_authenticated/copilot/sessions/$sessionId'
     | '/api/public/asterisk/recording'
+    | '/api/public/bridge/$action'
     | '/api/public/crm/calls'
     | '/api/public/crm/sandbox'
     | '/api/public/crm/ticket-update'
@@ -610,6 +622,7 @@ export interface RootRouteChildren {
   SnRoute: typeof SnRoute
   ApiAudioCallIdRoute: typeof ApiAudioCallIdRoute
   ApiPublicAsteriskRecordingRoute: typeof ApiPublicAsteriskRecordingRoute
+  ApiPublicBridgeActionRoute: typeof ApiPublicBridgeActionRoute
   ApiPublicCrmCallsRoute: typeof ApiPublicCrmCallsRoute
   ApiPublicCrmSandboxRoute: typeof ApiPublicCrmSandboxRoute
   ApiPublicCrmTicketUpdateRoute: typeof ApiPublicCrmTicketUpdateRoute
@@ -931,6 +944,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicCrmCallsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/bridge/$action': {
+      id: '/api/public/bridge/$action'
+      path: '/api/public/bridge/$action'
+      fullPath: '/api/public/bridge/$action'
+      preLoaderRoute: typeof ApiPublicBridgeActionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/asterisk/recording': {
       id: '/api/public/asterisk/recording'
       path: '/api/public/asterisk/recording'
@@ -1065,6 +1085,7 @@ const rootRouteChildren: RootRouteChildren = {
   SnRoute: SnRoute,
   ApiAudioCallIdRoute: ApiAudioCallIdRoute,
   ApiPublicAsteriskRecordingRoute: ApiPublicAsteriskRecordingRoute,
+  ApiPublicBridgeActionRoute: ApiPublicBridgeActionRoute,
   ApiPublicCrmCallsRoute: ApiPublicCrmCallsRoute,
   ApiPublicCrmSandboxRoute: ApiPublicCrmSandboxRoute,
   ApiPublicCrmTicketUpdateRoute: ApiPublicCrmTicketUpdateRoute,
@@ -1086,13 +1107,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

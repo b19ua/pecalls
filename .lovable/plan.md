@@ -1,90 +1,92 @@
-This is a very large change (multi-tenant rebuild + new telephony stack). I'll do it in ordered phases. After each phase I'll tell you exactly what to configure on your VPS. Confirm the plan and I'll start with Phase 0 + 1.
+## Проблема
 
-## Phase 0 — Fix human handoff (Twilio, current stack)
+`asterisk-bridge/server.ts` ходит напрямую в Supabase REST под `SERVICE_ROLE_KEY`, поэтому `setup.sh` требует его в `setup.env`. На Lovable Cloud этот ключ клиенту недоступен в принципе — платформа его не выдаёт. Значит `setup.sh` нельзя выполнить, и Asterisk не подключается.
 
-Problem: trigger phrases don't fire, "handoff numbers" field saves but call never transfers.
+## Решение
 
-Fix in `supabase/functions/voice-call-bridge/index.ts`:
-- Normalize transcript: lowercase, strip diacritics + punctuation, collapse whitespace — match against same-normalized phrase list (current code only partially does this).
-- On match: pick first valid `handoff_numbers[]` entry, issue Twilio `<Dial>` TwiML update via REST `POST /Calls/{sid}.json` with `Twiml=<Response><Dial>+E164</Dial></Response>`, then mark call `status='transferred'`.
-- DTMF digit handoff: same path on matching digit.
-- Add structured log lines (`[handoff] match phrase=… number=…`) so we can verify in edge function logs.
+Мост больше не обращается к Supabase напрямую. Все чтения/записи идут через **новый публичный REST на Lovable** (`/api/public/bridge/*`), аутентификация — HMAC-подписью **per-agent webhook secret**'ом (`agents.asterisk_webhook_secret`, поле уже есть). Клиенту нужны только: `GEMINI_API_KEY` и этот webhook-secret (он уже показывается в UI агента). `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` из установки исчезают.
 
-Fix in `src/routes/_authenticated/agents.$agentId.tsx`:
-- Tag-input for `handoff_numbers` with E.164 validation, "Add" button, can't save empty triggers when handoff enabled.
-- Persist via existing `saveAgent` (schema already accepts arrays).
+## Что делаем
 
-Verification: I'll deploy and curl-trigger `report-call` simulating a transcript chunk containing a trigger phrase; confirm Twilio REST update fires (logged) and DB row goes to `transferred`.
+### 1. Новые публичные роуты (все под `/api/public/bridge/*`, HMAC-Auth)
 
-## Phase 1 — Database schema (multi-tenant)
+Общая схема аутентификации: заголовки `X-Bridge-Agent: <agentId>`, `X-Bridge-Timestamp: <unix>`, `X-Bridge-Signature: hex(HMAC_SHA256(secret, ts + "." + rawBody))`. `secret` = `agents.asterisk_webhook_secret`. `ts` не старше 5 минут. `timingSafeEqual`. При неуспехе — 401.
 
-New tables with RLS + GRANTs in a single migration:
-`operators`, `sip_trunks`, `dispatch_rules`, `clients`, `usage_daily`.
-Extend existing tables:
-- `profiles`: add `role` enum (`super_admin|operator_admin|client_user`), `operator_id`.
-- `agents`: add `operator_id`, `client_id`, `gemini_voice`, `transfer_number`, `knowledge_base` (text — separate from existing RAG), `tools_config jsonb`, `max_call_duration_sec`.
-- `calls`: add `operator_id`, `room_name`, `sip_call_id`, `trunk_id`.
+Роуты (все делают чистые операции через `supabaseAdmin`, загружаемый динамически внутри хендлера):
 
-Security-definer fn `current_operator_id()` + `has_role()` (already exists) drive RLS. First registered user → `super_admin` (update existing `handle_new_user` trigger).
+- `POST /api/public/bridge/context` — вход `{ agentId }`. Загружает `agents`, `data_residency_configs`, `agent_tools`, knowledge chunks (та же логика, что была в `loadContext`). Возвращает весь `ExtCtx`, кроме секретов CRM2 hmac (нельзя светить наружу): вместо `crm2Full.hmacSecret` возвращаем `crm2_hmac_configured: true`, а сам HMAC-запрос идёт через отдельный роут (см. ниже) — CRM2 secret никогда не покидает Lovable.
+- `POST /api/public/bridge/call/init` — `{ callSid }` → `{ agentId }` из `calls`, апдейт `status=in_progress`, `started_at`.
+- `POST /api/public/bridge/call/transcript` — `{ callSid, transcript, status? }` → PATCH `calls`.
+- `POST /api/public/bridge/call/finalize` — `{ callSid, status, transcript, summary?, tokens? }` → закрывает звонок.
+- `POST /api/public/bridge/call/handoff` — `{ callSid, handoffTo }` → PATCH `handoff_at/handoff_to/status`.
+- `POST /api/public/bridge/objection` — вставка `objection_events`.
+- `POST /api/public/bridge/crm2` — прокси на CRM2 URL owner-а: сервер сам собирает HMAC-подпись (owner-у не отправляем секрет), делает запрос к клиентскому CRM2 URL, применяет тот же circuit breaker и rate-limit "1 тикет / звонок" (состояние в памяти воркера — best-effort). Возвращает результат.
+- `POST /api/public/bridge/summary` — `{ callSid, transcript }` → генерит summary через Lovable AI (Gemini) и пишет в `calls`. Убирает необходимость держать generateSummary в мосте, но оставим fallback в мосте если этот роут не ответит.
 
-## Phase 2 — LiveKit edge functions
+CRM1 (`get_local_system_data`) и обычные `webhook`-tools мост **вызывает сам** — это уже клиентские URL, никаких секретов Lovable не требуется. CRM2 — единственный, где HMAC-secret хранится на Lovable, поэтому именно этот вызов проксируется.
 
-New Supabase edge functions (Deno, `verify_jwt=false` only where needed):
-- `livekit-token-helper` (shared module): HS256 JWT signing via `jose` for Twirp + room tokens.
-- `create-sip-trunk`, `update-sip-trunk`, `delete-sip-trunk`
-- `create-dispatch-rule`, `delete-dispatch-rule`
-- `get-agent-config` (bearer = `AGENT_WORKER_TOKEN`)
-- `report-call` (bearer = `AGENT_WORKER_TOKEN`) — upserts `calls` by `room_name`, increments `usage_daily`, handles `transferred` event
-- `livekit-webhook` (public, signature-verified) — fallback close
-- `create-test-token` (auth'd user) — returns `{token, livekit_url}` for browser test
+### 2. Рефактор `asterisk-bridge/server.ts`
 
-All operator-scoped endpoints check caller JWT role + `operator_id` matches.
-Secrets needed (I'll request via `add_secret`):
-`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_SIP_HOST`, `AGENT_NAME`, `AGENT_WORKER_TOKEN`.
+- Удаляем `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `sb()` / `sbRpc()`.
+- Новая env: `LOVABLE_BASE_URL` (default `https://pecalls.lovable.app`), `LOVABLE_AGENT_ID`, `LOVABLE_WEBHOOK_SECRET`, `GEMINI_API_KEY`, `AUDIOSOCKET_PORT`.
+- Helper `bridgeCall(path, body)` — подписывает HMAC, POST-ит на `LOVABLE_BASE_URL/api/public/bridge/<path>`.
+- `loadContext` → один запрос `bridge/context`.
+- `persistTranscript` → `bridge/call/transcript`.
+- `cleanup` → `bridge/call/finalize` (+ отдельный `bridge/summary`).
+- `logObjection` / `callCrm2` → соответствующие роуты. `callCrm1` и `executeWebhookTool` — как есть (прямой fetch к клиентским URL).
+- Один мост = один агент (проще HMAC). Если у клиента несколько агентов на одном Asterisk — поднимает несколько инстансов моста с разными env. Это упрощение оправдано: клиент почти всегда работает с одним AI-агентом.
 
-## Phase 3 — Super-admin area (`/admin`)
+### 3. `setup.env.example`
 
-Role-aware sidebar. Pages:
-- Operators list + create/edit/suspend, `max_concurrent_calls`.
-- Global dashboard: active calls (5s poll), 30d minutes chart, top operators.
-- Global call log.
-- Worker integration docs page with copyable snippets + `AGENT_WORKER_TOKEN` reveal/regenerate.
+Оставляем только:
+```
+GEMINI_API_KEY=
+LOVABLE_BASE_URL=https://pecalls.lovable.app
+LOVABLE_AGENT_ID=            # UUID агента, скопировать из Lovable
+LOVABLE_WEBHOOK_SECRET=      # из UI агента (кнопка «Сгенерировать секрет»)
+ARI_USERNAME=lunara
+ARI_PASSWORD=
+AUDIOSOCKET_PORT=8090
+```
 
-## Phase 4 — Operator area (`/dashboard`)
+### 4. `setup.sh`
 
-- Overview (active calls, today, monthly minutes vs plan).
-- **SIP Trunks** 3-step wizard: name+auth → review → success card with one-time password, copy buttons, dynamic Asterisk/FreeSWITCH/generic SBC config snippets.
-- **Agents** CRUD with all new fields (Gemini voice select, transfer_number, KB textarea, max duration). "Test in browser" modal using `livekit-client` SDK (`bun add livekit-client`) → mic, mute, hangup, live state. "Routing" tab → pick trunk → `create-dispatch-rule`.
-- **Clients** CRUD.
-- **Call log** drawer with chat-style transcript + summary.
-- **Settings** + team invites.
+Убираем проверку `SUPABASE_SERVICE_ROLE_KEY` и `SUPABASE_URL`. Добавляем проверку `LOVABLE_AGENT_ID` / `LOVABLE_WEBHOOK_SECRET`. `.env` для docker-compose пишем с новыми ключами. Финальный блок «СКОПИРУЙ В LOVABLE» — тот же список ARI/AudioSocket, но убираем упоминание service-role.
 
-## Phase 5 — Polish
+### 5. `README-SETUP.md`
 
-- i18n strings for new screens (ru default, en).
-- Mobile responsive checks.
-- Empty states with "what is this" copy.
-- Local-tz timestamps, `mm:ss` durations.
-- Concurrency soft-limit banner.
+Шаг 1 переписываем: клиент открывает в Lovable нужного агента, копирует `Agent ID` и генерирует Webhook secret, вставляет в `setup.env`. Никаких «спросите админа платформы» — секретов, которых у клиента нет, больше не требуется.
 
-## VPS configuration steps (I'll repeat after each phase)
+### 6. Проверка
 
-After Phase 2: set in `livekit.yaml` →
-`webhook.urls: [https://<project>.supabase.co/functions/v1/livekit-webhook]`
-`webhook.api_key: <LIVEKIT_API_KEY>`
-On agent-worker env: `SUPABASE_FUNCTIONS_URL`, `AGENT_WORKER_TOKEN`, register with `agent_name="ai-support"`, read `room.metadata.agent_id`, GET `/get-agent-config`, POST lifecycle to `/report-call`.
+- `bunx tsgo` — типы TanStack Start routes.
+- Playwright headless: залогиниться под тестовым юзером (через `LOVABLE_BROWSER_SUPABASE_*`), открыть страницу агента, скопировать webhook secret из DOM, дернуть `curl` на `/api/public/bridge/context` с валидной HMAC — ожидаем 200 и полезный JSON. Дернуть с испорченной подписью — ожидаем 401.
+- Локальный запуск `asterisk-bridge/server.ts` в Deno с dummy env против preview-URL: убеждаемся, что `bridge/context` возвращает контекст (без прямого доступа к БД).
 
-## Technical notes
+## Технические детали / инварианты
 
-- LiveKit Twirp: `POST {LIVEKIT_URL https}/twirp/livekit.SIP/CreateSIPInboundTrunk` etc, Authorization Bearer = HS256 JWT with `{video:{roomCreate,roomAdmin:true}, sip:{admin:true}}`.
-- Trunk passwords: store `auth_password_encrypted` (pgcrypto `pgp_sym_encrypt` with `ENCRYPTION_KEY` secret), return plaintext only from `create-sip-trunk` response.
-- Webhook verify: LiveKit sends Authorization JWT with `sha256` claim = base64(sha256(body)) — verify with HS256 against `LIVEKIT_API_SECRET`.
-- Keep existing Twilio + Gemini-Live stack untouched; LiveKit becomes a parallel inbound/outbound path. Agents get `channel` field (`twilio|livekit|both`) so existing single-tenant flow keeps working.
+- `agents.asterisk_webhook_secret` уже существует и уже используется в `/api/public/asterisk/recording`. Переиспользуем его.
+- `supabaseAdmin` импортируем **динамически внутри хендлера** каждого нового роута (правило проекта: файлы `src/routes/**` — client-reachable).
+- Circuit breaker CRM2 в новом роуте — Map в памяти воркера, ключ `owner_id`. При рестарте сбрасывается — приемлемо.
+- CRM2 rate-limit «1 тикет на звонок» переносим в БД: уникальный индекс по `(call_sid, ticket_kind='emergency')` в таблице `tickets` уже есть — используем его как источник истины вместо in-memory Map.
+- Никаких изменений схемы БД не требуется.
 
-## What I need from you to start
+## Файлы
 
-1. Approve this plan.
-2. Confirm the brand name (`PLATFORM_NAME`) and `AGENT_NAME` (default `ai-support`).
-3. Have your LiveKit `API_KEY` / `API_SECRET` / `wss URL` / `SIP host` ready — I'll request them via the secrets form right before Phase 2 (not now).
+Новые:
+- `src/routes/api/public/bridge/_shared.ts` — HMAC verify helper
+- `src/routes/api/public/bridge/context.ts`
+- `src/routes/api/public/bridge/call.init.ts`
+- `src/routes/api/public/bridge/call.transcript.ts`
+- `src/routes/api/public/bridge/call.finalize.ts`
+- `src/routes/api/public/bridge/call.handoff.ts`
+- `src/routes/api/public/bridge/objection.ts`
+- `src/routes/api/public/bridge/crm2.ts`
+- `src/routes/api/public/bridge/summary.ts`
 
-Once approved I'll start with Phase 0 (handoff fix) + Phase 1 (schema migration) in the same turn.
+Правим:
+- `asterisk-bridge/server.ts` — убираем прямой Supabase, всё через HMAC-прокси
+- `asterisk-bridge/setup.env.example`
+- `asterisk-bridge/setup.sh`
+- `asterisk-bridge/README-SETUP.md`
+- `asterisk-bridge/README.md` (env-таблица)

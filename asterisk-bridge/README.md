@@ -1,9 +1,14 @@
 # Lunara Asterisk Bridge
 
-On-premise мост между локальным Asterisk (chan_audiosocket) и Gemini Live через
-Supabase. Функциональный паритет с Twilio-режимом Lunara: приём/исходящие звонки,
+On-premise мост между локальным Asterisk (chan_audiosocket) и Gemini Live.
+Функциональный паритет с Twilio-режимом Lunara: приём/исходящие звонки,
 запись, транскрипция, hand-off — всё через ваш Asterisk, без Twilio и без
 jambonz.
+
+Мост НЕ ходит напрямую в БД платформы. Все чтения/записи идут через
+публичный REST на Lovable (`/api/public/bridge/*`), аутентификация — per-agent
+webhook secret, сгенерированный в UI редактора агента. Никаких ключей уровня
+платформы (типа Supabase service-role) на сервере клиента не хранится.
 
 ## Требования
 
@@ -13,11 +18,13 @@ jambonz.
   хосте, доступном Asterisk по TCP).
 * Открытый порт (по умолчанию `8090/tcp`) от Asterisk до этого сервиса.
 
-## Быстрый старт
+## Быстрый старт (ручной, для одного мостa)
+
+Проще всего использовать `setup.sh` — см. `README-SETUP.md`. Для ручного запуска:
 
 ```bash
 cp .env.example .env
-# заполните SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY
+# заполните GEMINI_API_KEY, LOVABLE_AGENT_ID, LOVABLE_WEBHOOK_SECRET
 docker compose up -d --build
 docker compose logs -f
 ```

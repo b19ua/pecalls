@@ -13,7 +13,7 @@
 //
 // Env:
 //   GEMINI_API_KEY          — ключ Google AI Studio
-//   LOVABLE_BASE_URL        — https://pecalls.lovable.app (по умолчанию)
+//   LOVABLE_BASE_URL        — https://lunara.now (по умолчанию)
 //   LOVABLE_AGENT_ID        — UUID агента из UI Lovable
 //   LOVABLE_WEBHOOK_SECRET  — per-agent секрет из UI редактора агента
 //   AUDIOSOCKET_PORT        — 8090 по умолчанию
@@ -25,7 +25,7 @@ import { buildSystemText, buildToolDeclarations, type AiCoreCtx, type ToolRow } 
 import { buildKnowledgePreamble, buildPhoneInstructions, getModelCandidates, sanitizeSystemPrompt } from "./shared/live-config.ts";
 
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const LOVABLE_BASE = (Deno.env.get("LOVABLE_BASE_URL") ?? "https://pecalls.lovable.app").replace(/\/+$/, "");
+const LOVABLE_BASE = (Deno.env.get("LOVABLE_BASE_URL") ?? "https://lunara.now").replace(/\/+$/, "");
 const AGENT_ID = Deno.env.get("LOVABLE_AGENT_ID") ?? "";
 const WEBHOOK_SECRET = Deno.env.get("LOVABLE_WEBHOOK_SECRET") ?? "";
 const PORT = Number(Deno.env.get("AUDIOSOCKET_PORT") ?? 8090);

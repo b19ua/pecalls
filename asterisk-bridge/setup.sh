@@ -297,9 +297,10 @@ systemctl enable --now docker >/dev/null 2>&1 || true
 # 8. .env для моста + docker compose up
 # ---------------------------------------------------------------------------
 cat > "$BRIDGE_ENV" <<EOF
-SUPABASE_URL=${SUPABASE_URL}
-SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
 GEMINI_API_KEY=${GEMINI_API_KEY}
+LOVABLE_BASE_URL=${LOVABLE_BASE_URL}
+LOVABLE_AGENT_ID=${LOVABLE_AGENT_ID}
+LOVABLE_WEBHOOK_SECRET=${LOVABLE_WEBHOOK_SECRET}
 AUDIOSOCKET_PORT=${AUDIOSOCKET_PORT}
 EOF
 chmod 600 "$BRIDGE_ENV"
@@ -361,9 +362,9 @@ cat <<EOF
 
   AudioSocket host:port : ${HOST_IP}:${AUDIOSOCKET_PORT}
 
-  Webhook secret        : ${WEBHOOK_SECRET}
-   (сохраните на сервере в /etc/lunara/webhook-secret и
-    используйте в post-hook загрузки MixMonitor-записей)
+  Webhook secret        : (уже настроен, тот же LOVABLE_WEBHOOK_SECRET)
+   Используется и мостом (→ Lovable REST), и post-hook загрузки
+   MixMonitor-записей на /api/public/asterisk/recording.
 
   Trunk (пример)        : PJSIP/provider-endpoint
    (добавьте endpoint SIP-провайдера в pjsip.conf вручную —
@@ -380,11 +381,11 @@ cat <<EOF
   asterisk -rx "dialplan show from-lunara"
 
 После добавления SIP-транка провайдера сделайте тестовый звонок и
-проверьте таблицу calls в Supabase (или страницу /calls в Lunara).
+проверьте страницу /calls в Lunara.
 EOF
 
-# Сохраним webhook secret для удобства (root-only)
+# Сохраним webhook secret на диск (root-only) для post-recording hook.
 mkdir -p /etc/lunara
-echo "$WEBHOOK_SECRET" > /etc/lunara/webhook-secret
+echo "$LOVABLE_WEBHOOK_SECRET" > /etc/lunara/webhook-secret
 chmod 600 /etc/lunara/webhook-secret
 log "Webhook secret также сохранён в /etc/lunara/webhook-secret (chmod 600)"

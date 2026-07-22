@@ -405,14 +405,29 @@ function ToolEditor({
                   </SelectContent>
                 </Select>
               </div>
+              {provider === "bitrix24" && (
+                <Alert className="border-primary/30 bg-primary/5">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription className="text-xs leading-relaxed">
+                    <b>Bitrix24 REST:</b> метод API идёт в пути (например <code>/crm.contact.list.json</code>).
+                    Для фильтров вида <code>filter[PHONE]</code> используйте поле <b>query key override</b>
+                    в параметре ниже — оно передаст ключ как есть в query-строку без экранирования скобок.
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="space-y-1.5">
                 <Label>Base URL</Label>
-                <Input value={String(cfg.base_url ?? "")} onChange={(e) => setCfg({ base_url: e.target.value })} placeholder="https://api.hubapi.com" />
+                <Input value={String(cfg.base_url ?? "")} onChange={(e) => setCfg({ base_url: e.target.value })} placeholder={presets.baseUrl} />
               </div>
               <div className="grid grid-cols-[1fr_120px] gap-3">
                 <div className="space-y-1.5">
                   <Label>{t("tools.path_label")}</Label>
-                  <Input value={String(cfg.path ?? "")} onChange={(e) => setCfg({ path: e.target.value })} placeholder="/crm/v3/objects/contacts/search" />
+                  <Input
+                    value={String(cfg.path ?? "")}
+                    onChange={(e) => setCfg({ path: e.target.value })}
+                    placeholder={row.type === "crm_write" ? presets.writePath : presets.lookupPath}
+                  />
+                  {presets.pathHint && <p className="text-[11px] text-muted-foreground">{presets.pathHint}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <Label>{t("tools.method")}</Label>
@@ -432,10 +447,11 @@ function ToolEditor({
                     className="font-mono text-xs"
                     value={String(cfg.body_template ?? "")}
                     onChange={(e) => setCfg({ body_template: e.target.value })}
-                    placeholder={`{\n  "properties": { "phone": "{phone}", "firstname": "{name}" }\n}`}
+                    placeholder={presets.bodyTemplate}
                   />
                 </div>
               )}
+
             </>
           )}
 

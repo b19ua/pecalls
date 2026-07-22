@@ -191,10 +191,12 @@ export function buildSystemText(
   const crm2Instr = ctx.crm2?.enabled && ctx.crm2.systemPromptTemplate.trim()
     ? `\n\n=== EMERGENCY TICKET CREATION (create_emergency_ticket) ===\n${ctx.crm2.systemPromptTemplate.trim()}\n=== END EMERGENCY TICKET ===`
     : "";
+  const callerCtxBlock = buildCallerContextBlock(ctx.callerPhone);
   return [
     builders.sanitizeSystemPrompt(ctx.systemPrompt || ""),
     knowledgePreamble,
     phoneInstr,
+    callerCtxBlock,
     handoffInstr,
     objectionInstr,
     crm2Instr,

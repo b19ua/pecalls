@@ -254,14 +254,61 @@ function ToolEditor({
   const { t } = useI18n();
   const [row, setRow] = useState<ToolRow | null>(tool);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testArgs, setTestArgs] = useState<Record<string, string>>({});
+  const [testResult, setTestResult] = useState<null | {
+    ok: boolean;
+    status?: number;
+    latency_ms?: number;
+    stage: string;
+    preview?: string;
+    error?: string;
+    hint?: string;
+    request?: { url: string; method: string; has_body: boolean };
+    full_bytes?: number;
+  }>(null);
+  const testFn = useServerFn(testTool);
 
-  useEffect(() => { setRow(tool); }, [tool]);
+  useEffect(() => { setRow(tool); setTestResult(null); setTestArgs({}); }, [tool]);
 
   if (!row) return null;
   const cfg = row.config as Record<string, unknown>;
   const setCfg = (patch: Record<string, unknown>) => setRow({ ...row, config: { ...cfg, ...patch } });
   const params = (cfg.parameters as Param[]) ?? [];
   const setParams = (p: Param[]) => setCfg({ parameters: p });
+  const provider = String(cfg.provider ?? "custom");
+
+  const presets = (() => {
+    if (provider === "bitrix24") {
+      return {
+        baseUrl: "https://ваш-портал.bitrix24.ru/rest/1/xxxxxxxxxxxx",
+        lookupPath: "/crm.contact.list.json",
+        writePath: "/crm.lead.add.json",
+        bodyTemplate: '{"fields":{"TITLE":"{call_summary}","PHONE":[{"VALUE":"{phone_number}","VALUE_TYPE":"WORK"}]}}',
+        pathHint: "Bitrix24 требует метод в пути запроса, не в теле (например /crm.contact.list.json).",
+      };
+    }
+    if (provider === "hubspot") {
+      return {
+        baseUrl: "https://api.hubapi.com",
+        lookupPath: "/crm/v3/objects/contacts/search",
+        writePath: "/crm/v3/objects/contacts",
+        bodyTemplate: '{\n  "properties": { "phone": "{phone_number}", "firstname": "{name}" }\n}',
+        pathHint: "",
+      };
+    }
+    if (provider === "salesforce") {
+      return {
+        baseUrl: "https://your-instance.my.salesforce.com",
+        lookupPath: "/services/data/v60.0/query/?q=SELECT+Id,Name,Phone+FROM+Contact",
+        writePath: "/services/data/v60.0/sobjects/Lead",
+        bodyTemplate: '{\n  "LastName": "{name}",\n  "Company": "{company}",\n  "Phone": "{phone_number}"\n}',
+        pathHint: "",
+      };
+    }
+    return { baseUrl: "https://api.example.com", lookupPath: "/lookup", writePath: "/create", bodyTemplate: '{\n  "phone": "{phone_number}"\n}', pathHint: "" };
+  })();
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

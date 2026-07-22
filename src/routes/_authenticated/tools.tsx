@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { listTools, saveTool, deleteTool, listAgentsForTools } from "@/lib/tools.functions";
+import { listTools, saveTool, deleteTool, listAgentsForTools, testTool } from "@/lib/tools.functions";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,9 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Pencil, Loader2, Wrench, Webhook, Database } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Plus, Trash2, Pencil, Loader2, Wrench, Webhook, Database, Info, Zap, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
+
 
 export const Route = createFileRoute("/_authenticated/tools")({
   component: ToolsPage,

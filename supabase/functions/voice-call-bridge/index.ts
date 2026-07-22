@@ -167,7 +167,14 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const crm2Instr = c.crm2?.enabled && c.crm2.systemPromptTemplate.trim()
         ? `\n\n=== EMERGENCY TICKET CREATION (create_emergency_ticket) ===\n${c.crm2.systemPromptTemplate.trim()}\n=== END EMERGENCY TICKET ===`
         : "";
-      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, handoffInstr, objectionInstr, crm2Instr]
+      const callerPhone = String(c.callerPhone ?? callerPhoneKnown ?? "").trim();
+      const callerCtxBlock = callerPhone
+        ? `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known: ${callerPhone}.\nIf you need CRM/customer data, IMMEDIATELY call \`get_local_system_data\` with phone_number="${callerPhone}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\n=== END CALLER CONTEXT ===`
+        : "";
+      // Make sure buildToolDeclarations sees the caller phone so its get_local_system_data
+      // description also reinforces "use the number from CALLER CONTEXT above".
+      if (callerPhone && !c.callerPhone) c.callerPhone = callerPhone;
+      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, callerCtxBlock, handoffInstr, objectionInstr, crm2Instr]
         .filter(Boolean)
         .join("\n\n");
       // Lunara-proven payload shape (snake_case, NO languageCode lock).

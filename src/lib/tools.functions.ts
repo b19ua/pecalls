@@ -126,3 +126,76 @@ export const listAgentsForTools = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return { agents: data ?? [] };
   });
+
+// Test-connection: builds the outbound request with the SAME logic used by
+// executeTool in the voice/asterisk bridges (via shared buildToolRequest),
+// fires it server-side (avoids CORS + never exposes auth_header_value to the
+// browser), and returns a compact result. Never persists the tool.
+export const testTool = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i) =>
+    z.object({
+      type: z.enum(["webhook", "crm_lookup", "crm_write"]),
+      config: z.unknown(),
+      args: z.record(z.string(), z.unknown()).default({}),
+    }).parse(i),
+  )
+  .handler(async ({ data }) => {
+    const config = validateConfig(data.type, data.config);
+    const tool: ToolLite = { type: data.type, config: config as ToolLite["config"] };
+    let built;
+    try {
+      built = buildToolRequest(tool, data.args ?? {});
+    } catch (e) {
+      return {
+        ok: false,
+        stage: "build" as const,
+        error: e instanceof Error ? e.message : String(e),
+        hint: "Проверьте Base URL / URL — он должен быть валидным абсолютным адресом.",
+      };
+    }
+    const t0 = Date.now();
+    try {
+      const ctl = new AbortController();
+      const tid = setTimeout(() => ctl.abort(), built.timeout_ms);
+      const r = await fetch(built.url, {
+        method: built.method,
+        headers: built.headers,
+        body: built.body,
+        signal: ctl.signal,
+      });
+      clearTimeout(tid);
+      let txt = await r.text();
+      const full_bytes = txt.length;
+      if (txt.length > 500) txt = txt.slice(0, 500) + "\n…[обрезано]";
+      let hint = "";
+      if (r.status === 401 || r.status === 403) hint = "Проверьте авторизацию (auth_header_name / auth_header_value).";
+      else if (r.status === 404) hint = "Проверьте путь запроса (path) и Base URL.";
+      else if (r.status === 400 || r.status === 422) hint = "Сервер отклонил тело/параметры — проверьте body_template и типы параметров.";
+      else if (r.status >= 500) hint = "Ошибка на стороне сервера (5xx). Повторите позже.";
+      return {
+        ok: r.ok,
+        stage: "response" as const,
+        status: r.status,
+        latency_ms: Date.now() - t0,
+        request: { url: built.url, method: built.method, has_body: !!built.body },
+        preview: txt,
+        full_bytes,
+        hint,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const isAbort = msg.toLowerCase().includes("abort");
+      return {
+        ok: false,
+        stage: "network" as const,
+        latency_ms: Date.now() - t0,
+        request: { url: built.url, method: built.method, has_body: !!built.body },
+        error: msg,
+        hint: isAbort
+          ? `Сервер не отвечает в течение ${built.timeout_ms} мс — таймаут.`
+          : "Сетевая ошибка — проверьте, что URL доступен из внешнего интернета.",
+      };
+    }
+  });
+

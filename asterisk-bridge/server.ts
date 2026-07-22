@@ -477,6 +477,10 @@ async function handleConn(conn: Deno.Conn) {
           if (fromNumber) initBody.from_number = fromNumber;
           const init = await bridgeCall("call-init", initBody).catch(() => null);
           if (!init?.agent_id) { log("no agent"); await cleanup("failed"); return; }
+          // Backend resolves the remote-party phone (inbound → from_number, outbound → to_number).
+          // Expose it via ctx.callerPhone so buildSystemText injects CALLER CONTEXT.
+          const callerPhoneFromInit = typeof init.caller_phone === "string" ? init.caller_phone.trim() : "";
+          ctx.callerPhone = callerPhoneFromInit || fromNumber || null;
           const candidates = getModelCandidates(ctx.model);
           gemini = await openGemini(ctx, candidates[modelIdx]);
           setupHandlers(gemini);

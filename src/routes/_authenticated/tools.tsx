@@ -551,7 +551,118 @@ function ToolEditor({
               placeholder={t("tools.response_hint_placeholder")}
             />
           </div>
+
+          <Separator />
+
+          {/* Test connection panel — uses the shared buildToolRequest (same as bridges). */}
+          <div className="space-y-2 rounded-md border border-dashed p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-primary" />
+                <Label className="text-sm">Test connection</Label>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={testing}
+                onClick={async () => {
+                  setTesting(true);
+                  setTestResult(null);
+                  try {
+                    // Coerce test inputs to declared types.
+                    const args: Record<string, unknown> = {};
+                    for (const p of params) {
+                      if (!p.name) continue;
+                      const raw = testArgs[p.name] ?? "";
+                      if (raw === "" && !p.required) continue;
+                      if (p.type === "number") args[p.name] = Number(raw);
+                      else if (p.type === "boolean") args[p.name] = raw === "true" || raw === "1";
+                      else args[p.name] = raw;
+                    }
+                    const res = await testFn({
+                      data: { type: row.type, config: row.config, args },
+                    });
+                    setTestResult(res as typeof testResult);
+                  } catch (e) {
+                    setTestResult({
+                      ok: false, stage: "client",
+                      error: e instanceof Error ? e.message : String(e),
+                      hint: "Не удалось выполнить тест — проверьте, что конфигурация валидна.",
+                    });
+                  } finally {
+                    setTesting(false);
+                  }
+                }}
+              >
+                {testing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
+                Проверить
+              </Button>
+            </div>
+            {params.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[11px] text-muted-foreground">
+                  Тестовые значения параметров (используются только для проверки, не сохраняются):
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {params.filter((p) => p.name).map((p) => (
+                    <div key={p.name} className="space-y-1">
+                      <Label className="text-[11px] font-mono">
+                        {p.name}{p.required && <span className="text-destructive"> *</span>}
+                        <span className="ml-1 text-muted-foreground">({p.type})</span>
+                      </Label>
+                      <Input
+                        className="h-8 text-xs"
+                        placeholder={p.description || `тестовое значение ${p.name}`}
+                        value={testArgs[p.name] ?? ""}
+                        onChange={(e) => setTestArgs({ ...testArgs, [p.name]: e.target.value })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {testResult && (
+              <div className="rounded-md bg-muted/40 p-2 text-xs space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {testResult.ok
+                    ? <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    : <XCircle className="h-4 w-4 text-destructive" />}
+                  <span className="font-medium">
+                    {testResult.ok ? "Успешно" : "Ошибка"}
+                  </span>
+                  {typeof testResult.status === "number" && (
+                    <Badge variant={testResult.ok ? "secondary" : "destructive"}>HTTP {testResult.status}</Badge>
+                  )}
+                  {typeof testResult.latency_ms === "number" && (
+                    <Badge variant="outline">{testResult.latency_ms} мс</Badge>
+                  )}
+                  <Badge variant="outline">stage: {testResult.stage}</Badge>
+                </div>
+                {testResult.request && (
+                  <p className="font-mono text-[10px] text-muted-foreground break-all">
+                    {testResult.request.method} {testResult.request.url}
+                  </p>
+                )}
+                {testResult.hint && (
+                  <p className="text-[11px] text-primary">{testResult.hint}</p>
+                )}
+                {testResult.error && (
+                  <p className="text-[11px] text-destructive break-all">{testResult.error}</p>
+                )}
+                {testResult.preview && (
+                  <pre className="whitespace-pre-wrap break-all font-mono text-[10px] leading-snug max-h-40 overflow-auto">
+                    {testResult.preview}
+                    {typeof testResult.full_bytes === "number" && testResult.full_bytes > 500 && (
+                      <span className="text-muted-foreground">{"\n"}(показаны первые 500 из {testResult.full_bytes} байт)</span>
+                    )}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{t("tools.cancel")}</Button>

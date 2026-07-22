@@ -123,6 +123,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let transcriptSaveTimer: number | null = null;
   let lastSavedLen = 0;
   let userPhraseBuffer = ""; // rolling buffer of user speech for phrase matching
+  // Caller CLI resolved from the calls row (populated by src/routes/api/public/twilio/voice.ts
+  // from Twilio's From param). Injected into ctx.callerPhone so buildSystemText adds CALLER CONTEXT.
+  let callerPhoneKnown: string | null = null;
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;

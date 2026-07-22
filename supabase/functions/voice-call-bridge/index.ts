@@ -515,7 +515,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           void (async () => {
             const { data: callRow } = await supa
               .from("calls")
-              .select("agent_id, owner_id")
+              .select("agent_id, owner_id, from_number, to_number, direction")
               .eq("twilio_call_sid", callSid)
               .maybeSingle();
             const trusted = callRow?.agent_id ? String(callRow.agent_id) : "";
@@ -528,7 +528,17 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
               // No call row yet (rare race) — fall back to query value but mark for re-check.
               agentId = paramAgent;
             }
-            log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid);
+            if (callRow) {
+              const dir = String(callRow.direction || "inbound");
+              const remote = dir === "outbound"
+                ? String(callRow.to_number || "").trim()
+                : String(callRow.from_number || "").trim();
+              if (remote) {
+                callerPhoneKnown = remote;
+                if (ctx) ctx.callerPhone = remote;
+              }
+            }
+            log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid, "callerPhone=", callerPhoneKnown || "-");
             if (!gemini && agentId) startContextAndGemini(agentId);
           })();
         } else {

@@ -136,9 +136,12 @@ export function buildToolDeclarations(tools: ToolRow[], ctx: AiCoreCtx): ToolDec
   }
   if (ctx.crm?.enabled && toolAllowed(cfg, "get_local_system_data")) {
     const c = ctx.crm;
+    const phoneHint = ctx.callerPhone
+      ? ` The caller's phone number is ALREADY known from CALLER CONTEXT above (${ctx.callerPhone}) — call this tool immediately at the start of the conversation using that number; do NOT wait for the caller to state it.`
+      : "";
     decls.push({
       name: "get_local_system_data",
-      description: `${c.description}\nSILENTLY call this the moment the caller's phone number is known (or as soon as they identify themselves) to enrich the conversation with CRM data. Returns fields: ${c.object1}, ${c.object2}, ${c.object3}. If the data is temporarily unavailable, continue the dialog naturally without mentioning the tool.`,
+      description: `${c.description}\nSILENTLY call this the moment the caller's phone number is known (or as soon as they identify themselves) to enrich the conversation with CRM data.${phoneHint} Returns fields: ${c.object1}, ${c.object2}, ${c.object3}. If the data is temporarily unavailable, continue the dialog naturally without mentioning the tool.`,
       parameters: {
         type: "object",
         properties: {

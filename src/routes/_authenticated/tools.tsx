@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { listTools, saveTool, deleteTool, listAgentsForTools } from "@/lib/tools.functions";
+import { listTools, saveTool, deleteTool, listAgentsForTools, testTool } from "@/lib/tools.functions";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,9 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Pencil, Loader2, Wrench, Webhook, Database } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Plus, Trash2, Pencil, Loader2, Wrench, Webhook, Database, Info, Zap, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
+
 
 export const Route = createFileRoute("/_authenticated/tools")({
   component: ToolsPage,
@@ -252,14 +254,61 @@ function ToolEditor({
   const { t } = useI18n();
   const [row, setRow] = useState<ToolRow | null>(tool);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testArgs, setTestArgs] = useState<Record<string, string>>({});
+  const [testResult, setTestResult] = useState<null | {
+    ok: boolean;
+    status?: number;
+    latency_ms?: number;
+    stage: string;
+    preview?: string;
+    error?: string;
+    hint?: string;
+    request?: { url: string; method: string; has_body: boolean };
+    full_bytes?: number;
+  }>(null);
+  const testFn = useServerFn(testTool);
 
-  useEffect(() => { setRow(tool); }, [tool]);
+  useEffect(() => { setRow(tool); setTestResult(null); setTestArgs({}); }, [tool]);
 
   if (!row) return null;
   const cfg = row.config as Record<string, unknown>;
   const setCfg = (patch: Record<string, unknown>) => setRow({ ...row, config: { ...cfg, ...patch } });
   const params = (cfg.parameters as Param[]) ?? [];
   const setParams = (p: Param[]) => setCfg({ parameters: p });
+  const provider = String(cfg.provider ?? "custom");
+
+  const presets = (() => {
+    if (provider === "bitrix24") {
+      return {
+        baseUrl: "https://ваш-портал.bitrix24.ru/rest/1/xxxxxxxxxxxx",
+        lookupPath: "/crm.contact.list.json",
+        writePath: "/crm.lead.add.json",
+        bodyTemplate: '{"fields":{"TITLE":"{call_summary}","PHONE":[{"VALUE":"{phone_number}","VALUE_TYPE":"WORK"}]}}',
+        pathHint: "Bitrix24 требует метод в пути запроса, не в теле (например /crm.contact.list.json).",
+      };
+    }
+    if (provider === "hubspot") {
+      return {
+        baseUrl: "https://api.hubapi.com",
+        lookupPath: "/crm/v3/objects/contacts/search",
+        writePath: "/crm/v3/objects/contacts",
+        bodyTemplate: '{\n  "properties": { "phone": "{phone_number}", "firstname": "{name}" }\n}',
+        pathHint: "",
+      };
+    }
+    if (provider === "salesforce") {
+      return {
+        baseUrl: "https://your-instance.my.salesforce.com",
+        lookupPath: "/services/data/v60.0/query/?q=SELECT+Id,Name,Phone+FROM+Contact",
+        writePath: "/services/data/v60.0/sobjects/Lead",
+        bodyTemplate: '{\n  "LastName": "{name}",\n  "Company": "{company}",\n  "Phone": "{phone_number}"\n}',
+        pathHint: "",
+      };
+    }
+    return { baseUrl: "https://api.example.com", lookupPath: "/lookup", writePath: "/create", bodyTemplate: '{\n  "phone": "{phone_number}"\n}', pathHint: "" };
+  })();
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -356,14 +405,29 @@ function ToolEditor({
                   </SelectContent>
                 </Select>
               </div>
+              {provider === "bitrix24" && (
+                <Alert className="border-primary/30 bg-primary/5">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription className="text-xs leading-relaxed">
+                    <b>Bitrix24 REST:</b> метод API идёт в пути (например <code>/crm.contact.list.json</code>).
+                    Для фильтров вида <code>filter[PHONE]</code> используйте поле <b>query key override</b>
+                    в параметре ниже — оно передаст ключ как есть в query-строку без экранирования скобок.
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="space-y-1.5">
                 <Label>Base URL</Label>
-                <Input value={String(cfg.base_url ?? "")} onChange={(e) => setCfg({ base_url: e.target.value })} placeholder="https://api.hubapi.com" />
+                <Input value={String(cfg.base_url ?? "")} onChange={(e) => setCfg({ base_url: e.target.value })} placeholder={presets.baseUrl} />
               </div>
               <div className="grid grid-cols-[1fr_120px] gap-3">
                 <div className="space-y-1.5">
                   <Label>{t("tools.path_label")}</Label>
-                  <Input value={String(cfg.path ?? "")} onChange={(e) => setCfg({ path: e.target.value })} placeholder="/crm/v3/objects/contacts/search" />
+                  <Input
+                    value={String(cfg.path ?? "")}
+                    onChange={(e) => setCfg({ path: e.target.value })}
+                    placeholder={row.type === "crm_write" ? presets.writePath : presets.lookupPath}
+                  />
+                  {presets.pathHint && <p className="text-[11px] text-muted-foreground">{presets.pathHint}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <Label>{t("tools.method")}</Label>
@@ -383,10 +447,11 @@ function ToolEditor({
                     className="font-mono text-xs"
                     value={String(cfg.body_template ?? "")}
                     onChange={(e) => setCfg({ body_template: e.target.value })}
-                    placeholder={`{\n  "properties": { "phone": "{phone}", "firstname": "{name}" }\n}`}
+                    placeholder={presets.bodyTemplate}
                   />
                 </div>
               )}
+
             </>
           )}
 
@@ -486,7 +551,118 @@ function ToolEditor({
               placeholder={t("tools.response_hint_placeholder")}
             />
           </div>
+
+          <Separator />
+
+          {/* Test connection panel — uses the shared buildToolRequest (same as bridges). */}
+          <div className="space-y-2 rounded-md border border-dashed p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-primary" />
+                <Label className="text-sm">Test connection</Label>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={testing}
+                onClick={async () => {
+                  setTesting(true);
+                  setTestResult(null);
+                  try {
+                    // Coerce test inputs to declared types.
+                    const args: Record<string, unknown> = {};
+                    for (const p of params) {
+                      if (!p.name) continue;
+                      const raw = testArgs[p.name] ?? "";
+                      if (raw === "" && !p.required) continue;
+                      if (p.type === "number") args[p.name] = Number(raw);
+                      else if (p.type === "boolean") args[p.name] = raw === "true" || raw === "1";
+                      else args[p.name] = raw;
+                    }
+                    const res = await testFn({
+                      data: { type: row.type, config: row.config, args },
+                    });
+                    setTestResult(res as typeof testResult);
+                  } catch (e) {
+                    setTestResult({
+                      ok: false, stage: "client",
+                      error: e instanceof Error ? e.message : String(e),
+                      hint: "Не удалось выполнить тест — проверьте, что конфигурация валидна.",
+                    });
+                  } finally {
+                    setTesting(false);
+                  }
+                }}
+              >
+                {testing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
+                Проверить
+              </Button>
+            </div>
+            {params.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[11px] text-muted-foreground">
+                  Тестовые значения параметров (используются только для проверки, не сохраняются):
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {params.filter((p) => p.name).map((p) => (
+                    <div key={p.name} className="space-y-1">
+                      <Label className="text-[11px] font-mono">
+                        {p.name}{p.required && <span className="text-destructive"> *</span>}
+                        <span className="ml-1 text-muted-foreground">({p.type})</span>
+                      </Label>
+                      <Input
+                        className="h-8 text-xs"
+                        placeholder={p.description || `тестовое значение ${p.name}`}
+                        value={testArgs[p.name] ?? ""}
+                        onChange={(e) => setTestArgs({ ...testArgs, [p.name]: e.target.value })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {testResult && (
+              <div className="rounded-md bg-muted/40 p-2 text-xs space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {testResult.ok
+                    ? <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    : <XCircle className="h-4 w-4 text-destructive" />}
+                  <span className="font-medium">
+                    {testResult.ok ? "Успешно" : "Ошибка"}
+                  </span>
+                  {typeof testResult.status === "number" && (
+                    <Badge variant={testResult.ok ? "secondary" : "destructive"}>HTTP {testResult.status}</Badge>
+                  )}
+                  {typeof testResult.latency_ms === "number" && (
+                    <Badge variant="outline">{testResult.latency_ms} мс</Badge>
+                  )}
+                  <Badge variant="outline">stage: {testResult.stage}</Badge>
+                </div>
+                {testResult.request && (
+                  <p className="font-mono text-[10px] text-muted-foreground break-all">
+                    {testResult.request.method} {testResult.request.url}
+                  </p>
+                )}
+                {testResult.hint && (
+                  <p className="text-[11px] text-primary">{testResult.hint}</p>
+                )}
+                {testResult.error && (
+                  <p className="text-[11px] text-destructive break-all">{testResult.error}</p>
+                )}
+                {testResult.preview && (
+                  <pre className="whitespace-pre-wrap break-all font-mono text-[10px] leading-snug max-h-40 overflow-auto">
+                    {testResult.preview}
+                    {typeof testResult.full_bytes === "number" && testResult.full_bytes > 500 && (
+                      <span className="text-muted-foreground">{"\n"}(показаны первые 500 из {testResult.full_bytes} байт)</span>
+                    )}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{t("tools.cancel")}</Button>

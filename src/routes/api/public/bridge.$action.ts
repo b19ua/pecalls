@@ -152,6 +152,9 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
         if (action === "call-init") {
           const callSid = String(body.call_sid || "").trim();
           if (!callSid) return badRequest("call_sid required");
+          const fromNumber = String(body.from_number ?? body.caller_id ?? body.caller_number ?? "").trim() || null;
+          const toNumber = String(body.to_number ?? body.called_number ?? "").trim() || null;
+          const direction = body.direction === "outbound" ? "outbound" : "inbound";
           const { data: call } = await supabaseAdmin
             .from("calls")
             .select("id, agent_id, owner_id")
@@ -161,9 +164,12 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
             // existing row (outbound flow — pre-inserted by placeAsteriskCall):
             // enforce strict ownership to prevent agent spoofing.
             if (call.agent_id !== auth.agentId || call.owner_id !== auth.ownerId) return unauthorized();
+            const patch: Record<string, unknown> = { status: "in_progress", started_at: new Date().toISOString() };
+            if (fromNumber) patch.from_number = fromNumber;
+            if (toNumber) patch.to_number = toNumber;
             await supabaseAdmin
               .from("calls")
-              .update({ status: "in_progress", started_at: new Date().toISOString() } as never)
+              .update(patch as never)
               .eq("twilio_call_sid", callSid);
           } else {
             // inbound flow: no row exists yet — create on the fly.
@@ -176,7 +182,9 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
                 agent_id: auth.agentId,
                 twilio_call_sid: callSid,
                 status: "in_progress",
-                direction: "inbound",
+                direction,
+                from_number: fromNumber,
+                to_number: toNumber,
                 started_at: new Date().toISOString(),
               } as never);
             if (insErr) return new Response(insErr.message, { status: 500 });

@@ -100,6 +100,10 @@ type Ctx = {
     hmacSecret: string;
   } | null;
   toolsConfig: Record<string, boolean>;
+  // Remote party phone (inbound → From, outbound → To). Populated from the calls
+  // row on Twilio START; consumed by buildToolDeclarations/buildSystemText via
+  // the CALLER CONTEXT block so the agent doesn't ask the caller to say it.
+  callerPhone?: string | null;
 };
 
 // toolAllowed, OBJECTION_CATEGORY_LABELS, buildObjectionInstructions — moved to _shared/ai-core.ts

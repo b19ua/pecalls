@@ -157,9 +157,12 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
           const direction = body.direction === "outbound" ? "outbound" : "inbound";
           const { data: call } = await supabaseAdmin
             .from("calls")
-            .select("id, agent_id, owner_id")
+            .select("id, agent_id, owner_id, from_number, to_number, direction")
             .eq("twilio_call_sid", callSid)
             .maybeSingle();
+          let finalFrom: string | null = fromNumber;
+          let finalTo: string | null = toNumber;
+          let finalDirection: string = direction;
           if (call) {
             // existing row (outbound flow — pre-inserted by placeAsteriskCall):
             // enforce strict ownership to prevent agent spoofing.
@@ -171,6 +174,9 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
               .from("calls")
               .update(patch as never)
               .eq("twilio_call_sid", callSid);
+            finalFrom = fromNumber || (call.from_number as string | null) || null;
+            finalTo = toNumber || (call.to_number as string | null) || null;
+            finalDirection = (call.direction as string | null) || direction;
           } else {
             // inbound flow: no row exists yet — create on the fly.
             // verifyAgent() already proved the caller owns this agent's webhook secret,
@@ -189,7 +195,10 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
               } as never);
             if (insErr) return new Response(insErr.message, { status: 500 });
           }
-          return ok({ agent_id: auth.agentId, owner_id: auth.ownerId });
+          // caller_phone = the remote party (customer) we're talking to.
+          // Outbound: number we dialed (to_number). Inbound: caller CLI (from_number).
+          const callerPhone = finalDirection === "outbound" ? finalTo : finalFrom;
+          return ok({ agent_id: auth.agentId, owner_id: auth.ownerId, caller_phone: callerPhone || null });
         }
 
 

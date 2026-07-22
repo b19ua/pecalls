@@ -46,7 +46,18 @@ export type AiCoreCtx = {
   crm: { enabled: boolean; description: string; object1: string; object2: string; object3: string } | null;
   crm2: { enabled: boolean; systemPromptTemplate: string } | null;
   toolsConfig: Record<string, boolean>;
+  // Phone number of the remote party (customer) for THIS call.
+  // Inbound: caller's CLI; Outbound: number we dialed. When present, buildSystemText
+  // injects a CALLER CONTEXT block so the agent can call get_local_system_data
+  // without asking the caller to say the number.
+  callerPhone?: string | null;
 };
+
+export function buildCallerContextBlock(phone?: string | null): string {
+  const p = String(phone ?? "").trim();
+  if (!p) return "";
+  return `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known: ${p}.\nIf you need CRM/customer data, IMMEDIATELY call \`get_local_system_data\` with phone_number="${p}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\n=== END CALLER CONTEXT ===`;
+}
 
 export const OBJECTION_CATEGORY_LABELS: Record<string, string> = {
   price: "💰 Price / Budget — клиент говорит «дорого», «нет бюджета», «дешевле есть»",
@@ -125,9 +136,12 @@ export function buildToolDeclarations(tools: ToolRow[], ctx: AiCoreCtx): ToolDec
   }
   if (ctx.crm?.enabled && toolAllowed(cfg, "get_local_system_data")) {
     const c = ctx.crm;
+    const phoneHint = ctx.callerPhone
+      ? ` The caller's phone number is ALREADY known from CALLER CONTEXT above (${ctx.callerPhone}) — call this tool immediately at the start of the conversation using that number; do NOT wait for the caller to state it.`
+      : "";
     decls.push({
       name: "get_local_system_data",
-      description: `${c.description}\nSILENTLY call this the moment the caller's phone number is known (or as soon as they identify themselves) to enrich the conversation with CRM data. Returns fields: ${c.object1}, ${c.object2}, ${c.object3}. If the data is temporarily unavailable, continue the dialog naturally without mentioning the tool.`,
+      description: `${c.description}\nSILENTLY call this the moment the caller's phone number is known (or as soon as they identify themselves) to enrich the conversation with CRM data.${phoneHint} Returns fields: ${c.object1}, ${c.object2}, ${c.object3}. If the data is temporarily unavailable, continue the dialog naturally without mentioning the tool.`,
       parameters: {
         type: "object",
         properties: {
@@ -177,10 +191,12 @@ export function buildSystemText(
   const crm2Instr = ctx.crm2?.enabled && ctx.crm2.systemPromptTemplate.trim()
     ? `\n\n=== EMERGENCY TICKET CREATION (create_emergency_ticket) ===\n${ctx.crm2.systemPromptTemplate.trim()}\n=== END EMERGENCY TICKET ===`
     : "";
+  const callerCtxBlock = buildCallerContextBlock(ctx.callerPhone);
   return [
     builders.sanitizeSystemPrompt(ctx.systemPrompt || ""),
     knowledgePreamble,
     phoneInstr,
+    callerCtxBlock,
     handoffInstr,
     objectionInstr,
     crm2Instr,

@@ -100,6 +100,10 @@ type Ctx = {
     hmacSecret: string;
   } | null;
   toolsConfig: Record<string, boolean>;
+  // Remote party phone (inbound → From, outbound → To). Populated from the calls
+  // row on Twilio START; consumed by buildToolDeclarations/buildSystemText via
+  // the CALLER CONTEXT block so the agent doesn't ask the caller to say it.
+  callerPhone?: string | null;
 };
 
 // toolAllowed, OBJECTION_CATEGORY_LABELS, buildObjectionInstructions — moved to _shared/ai-core.ts
@@ -123,6 +127,9 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let transcriptSaveTimer: number | null = null;
   let lastSavedLen = 0;
   let userPhraseBuffer = ""; // rolling buffer of user speech for phrase matching
+  // Caller CLI resolved from the calls row (populated by src/routes/api/public/twilio/voice.ts
+  // from Twilio's From param). Injected into ctx.callerPhone so buildSystemText adds CALLER CONTEXT.
+  let callerPhoneKnown: string | null = null;
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;
@@ -167,7 +174,14 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       const crm2Instr = c.crm2?.enabled && c.crm2.systemPromptTemplate.trim()
         ? `\n\n=== EMERGENCY TICKET CREATION (create_emergency_ticket) ===\n${c.crm2.systemPromptTemplate.trim()}\n=== END EMERGENCY TICKET ===`
         : "";
-      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, handoffInstr, objectionInstr, crm2Instr]
+      const callerPhone = String(c.callerPhone ?? callerPhoneKnown ?? "").trim();
+      const callerCtxBlock = callerPhone
+        ? `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known: ${callerPhone}.\nIf you need CRM/customer data, IMMEDIATELY call \`get_local_system_data\` with phone_number="${callerPhone}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\n=== END CALLER CONTEXT ===`
+        : "";
+      // Make sure buildToolDeclarations sees the caller phone so its get_local_system_data
+      // description also reinforces "use the number from CALLER CONTEXT above".
+      if (callerPhone && !c.callerPhone) c.callerPhone = callerPhone;
+      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, callerCtxBlock, handoffInstr, objectionInstr, crm2Instr]
         .filter(Boolean)
         .join("\n\n");
       // Lunara-proven payload shape (snake_case, NO languageCode lock).
@@ -505,7 +519,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           void (async () => {
             const { data: callRow } = await supa
               .from("calls")
-              .select("agent_id, owner_id")
+              .select("agent_id, owner_id, from_number, to_number, direction")
               .eq("twilio_call_sid", callSid)
               .maybeSingle();
             const trusted = callRow?.agent_id ? String(callRow.agent_id) : "";
@@ -518,7 +532,17 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
               // No call row yet (rare race) — fall back to query value but mark for re-check.
               agentId = paramAgent;
             }
-            log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid);
+            if (callRow) {
+              const dir = String(callRow.direction || "inbound");
+              const remote = dir === "outbound"
+                ? String(callRow.to_number || "").trim()
+                : String(callRow.from_number || "").trim();
+              if (remote) {
+                callerPhoneKnown = remote;
+                if (ctx) ctx.callerPhone = remote;
+              }
+            }
+            log("twilio START sid=", streamSid, "agent=", agentId, "call=", callSid, "callerPhone=", callerPhoneKnown || "-");
             if (!gemini && agentId) startContextAndGemini(agentId);
           })();
         } else {

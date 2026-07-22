@@ -436,10 +436,47 @@ async function handleConn(conn: Deno.Conn) {
         if (type === T_UUID) {
           callUuid = payload.length === 16 ? uuidBytesToString(payload) : new TextDecoder().decode(payload);
           log("call", callUuid, "connected");
-          const init = await bridgeCall("call-init", { call_sid: callUuid }).catch(() => null);
-          if (!init?.agent_id) { log("no agent"); await cleanup("failed"); return; }
+          // Load context first — we need handoffAriBase/handoffAriAuth to fetch caller id.
           ctx = await loadContext();
           if (!ctx) { log("ctx load failed"); await cleanup("failed"); return; }
+          // Определяем direction: исходящие звонки инициируются placeAsteriskCall,
+          // который генерирует callUuid через crypto.randomUUID() → строгий формат
+          // 8-4-4-4-12. Входящие используют ${UNIQUEID} Asterisk (например
+          // "1699999999.42") — не UUID. Для исходящих номер уже сохранён в БД
+          // через placeAsteriskCall, ARI round-trip не нужен.
+          const isUuidFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(callUuid);
+          const direction: "inbound" | "outbound" = isUuidFormat ? "outbound" : "inbound";
+          let fromNumber: string | null = null;
+          if (direction === "inbound" && ctx.handoffAriBase && ctx.handoffAriAuth) {
+            try {
+              // Точечный GET канал-переменной LUNARA_CALLERID через ARI.
+              // Тот же паттерн аутентификации, что использует ariSetHandoff.
+              const chList = await fetch(`${ctx.handoffAriBase}/ari/channels`, { headers: { Authorization: ctx.handoffAriAuth } });
+              if (chList.ok) {
+                const chans: any[] = await chList.json();
+                for (const ch of chans) {
+                  const v = await fetch(`${ctx.handoffAriBase}/ari/channels/${ch.id}/variable?variable=LUNARA_UUID`, { headers: { Authorization: ctx.handoffAriAuth } });
+                  if (!v.ok) continue;
+                  const jv = await v.json();
+                  if (String(jv?.value || "") !== callUuid) continue;
+                  const cv = await fetch(`${ctx.handoffAriBase}/ari/channels/${ch.id}/variable?variable=LUNARA_CALLERID`, { headers: { Authorization: ctx.handoffAriAuth } });
+                  if (cv.ok) {
+                    const cvj = await cv.json();
+                    const val = String(cvj?.value || "").trim();
+                    if (val) fromNumber = val;
+                  }
+                  break;
+                }
+              }
+              if (!fromNumber) log("[caller-id] not resolved for", callUuid, "— continuing without from_number");
+            } catch (e) {
+              log("[caller-id] ARI lookup failed, continuing without from_number:", e);
+            }
+          }
+          const initBody: Record<string, unknown> = { call_sid: callUuid, direction };
+          if (fromNumber) initBody.from_number = fromNumber;
+          const init = await bridgeCall("call-init", initBody).catch(() => null);
+          if (!init?.agent_id) { log("no agent"); await cleanup("failed"); return; }
           const candidates = getModelCandidates(ctx.model);
           gemini = await openGemini(ctx, candidates[modelIdx]);
           setupHandlers(gemini);

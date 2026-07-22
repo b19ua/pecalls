@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { buildToolRequest, type ToolLite } from "@/lib/tool-request-builder";
+
 
 const ParamSchema = z.object({
   // `name` stays a clean JS identifier: it is exposed to the LLM as the JSON

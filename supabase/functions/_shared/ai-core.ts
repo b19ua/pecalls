@@ -46,7 +46,18 @@ export type AiCoreCtx = {
   crm: { enabled: boolean; description: string; object1: string; object2: string; object3: string } | null;
   crm2: { enabled: boolean; systemPromptTemplate: string } | null;
   toolsConfig: Record<string, boolean>;
+  // Phone number of the remote party (customer) for THIS call.
+  // Inbound: caller's CLI; Outbound: number we dialed. When present, buildSystemText
+  // injects a CALLER CONTEXT block so the agent can call get_local_system_data
+  // without asking the caller to say the number.
+  callerPhone?: string | null;
 };
+
+export function buildCallerContextBlock(phone?: string | null): string {
+  const p = String(phone ?? "").trim();
+  if (!p) return "";
+  return `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known: ${p}.\nIf you need CRM/customer data, IMMEDIATELY call \`get_local_system_data\` with phone_number="${p}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\n=== END CALLER CONTEXT ===`;
+}
 
 export const OBJECTION_CATEGORY_LABELS: Record<string, string> = {
   price: "💰 Price / Budget — клиент говорит «дорого», «нет бюджета», «дешевле есть»",

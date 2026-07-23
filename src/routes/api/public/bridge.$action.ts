@@ -39,6 +39,7 @@ type Breaker = { fails: number; openUntil: number };
 const crm2Breakers = new Map<string, Breaker>();
 const PHONE_RE = /^\+?[0-9]{7,15}$/;
 const NLC_RE = /^[0-9]{6,12}$/;
+type BridgeActiveCall = { direction: string | null; from_number: string | null; to_number: string | null; started_at: string | null };
 
 async function verifyAgent(request: Request): Promise<{ agentId: string; ownerId: string; secret: string } | null> {
   const supplied = (request.headers.get("x-asterisk-secret") || "").trim();
@@ -124,7 +125,7 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
           // current call here and inject the caller phone into fields every bridge
           // version already consumes (`systemPrompt` and CRM tool description).
           const contextCallSid = String(body.call_sid || "").trim();
-          let activeCall: { direction: string | null; from_number: string | null; to_number: string | null; started_at: string | null } | null = null;
+          let activeCall: BridgeActiveCall | null = null;
           if (contextCallSid) {
             const { data } = await supabaseAdmin
               .from("calls")
@@ -133,7 +134,7 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
               .eq("owner_id", auth.ownerId)
               .eq("twilio_call_sid", contextCallSid)
               .maybeSingle();
-            activeCall = data as typeof activeCall;
+            activeCall = data as BridgeActiveCall | null;
           }
           if (!activeCall) {
             const recentCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -147,10 +148,11 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
               .order("started_at", { ascending: false })
               .limit(1)
               .maybeSingle();
-            activeCall = data as typeof activeCall;
+            activeCall = data as BridgeActiveCall | null;
           }
-          const inferredCallerPhone = activeCall
-            ? String(activeCall.direction === "outbound" ? activeCall.to_number || "" : activeCall.from_number || "").trim()
+          const callForInference: BridgeActiveCall | null = activeCall;
+          const inferredCallerPhone = callForInference
+            ? String(callForInference.direction === "outbound" ? callForInference.to_number || "" : callForInference.from_number || "").trim()
             : "";
           const callerContextText = inferredCallerPhone ? buildCallerContextText(inferredCallerPhone) : "";
           const systemPrompt = [agent.system_prompt || "", callerContextText].filter(Boolean).join("\n\n");

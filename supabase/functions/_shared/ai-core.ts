@@ -53,10 +53,17 @@ export type AiCoreCtx = {
   callerPhone?: string | null;
 };
 
-export function buildCallerContextBlock(phone?: string | null): string {
+export function pickCrmLookupToolName(ctx: Pick<AiCoreCtx, "crm" | "tools" | "toolsConfig">): string | null {
+  if (ctx.crm?.enabled && toolAllowed(ctx.toolsConfig, "get_local_system_data")) return "get_local_system_data";
+  const t = (ctx.tools || []).find((x) => x.enabled !== false && x.type === "crm_lookup" && toolAllowed(ctx.toolsConfig, x.name));
+  return t ? t.name : null;
+}
+
+export function buildCallerContextBlock(phone?: string | null, crmToolName?: string | null): string {
   const p = String(phone ?? "").trim();
   if (!p) return "";
-  return `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known by the telephony system: ${p}. This is the authoritative identifier for CRM lookup.\nIf you need CRM/customer data, IMMEDIATELY call \`get_local_system_data\` with phone_number="${p}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\nIf any CRM/tool call needs a phone/caller/customer identifier, use exactly this number.\n=== END CALLER CONTEXT ===`;
+  const tool = String(crmToolName ?? "").trim() || "get_local_system_data";
+  return `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known by the telephony system: ${p}. This is the authoritative identifier for CRM lookup.\nIf you need CRM/customer data, IMMEDIATELY call \`${tool}\` with phone_number="${p}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\nIf any CRM/tool call needs a phone/caller/customer identifier, use exactly this number.\n\nMANDATORY CRM RULE: For ANY customer-specific question (задолженность / долг / баланс / сумма к оплате / имя / адрес / статус заявки / договор / счёт), if you have NOT yet called \`${tool}\` in this conversation for phone_number="${p}", you MUST call it FIRST and wait for the response before answering. It is FORBIDDEN to reply "информация недоступна", "данных нет", "не могу найти", "система недоступна" or anything similar without first attempting a \`${tool}\` call for this phone number in this conversation. If the call fails or returns no result, only THEN you may say the data is unavailable.\n=== END CALLER CONTEXT ===`;
 }
 
 export const OBJECTION_CATEGORY_LABELS: Record<string, string> = {
@@ -383,7 +390,7 @@ export function buildSystemText(
   const crm2Instr = ctx.crm2?.enabled && ctx.crm2.systemPromptTemplate.trim()
     ? `\n\n=== EMERGENCY TICKET CREATION (create_emergency_ticket) ===\n${ctx.crm2.systemPromptTemplate.trim()}\n=== END EMERGENCY TICKET ===`
     : "";
-  const callerCtxBlock = buildCallerContextBlock(ctx.callerPhone);
+  const callerCtxBlock = buildCallerContextBlock(ctx.callerPhone, pickCrmLookupToolName(ctx));
   return [
     builders.sanitizeSystemPrompt(ctx.systemPrompt || ""),
     knowledgePreamble,

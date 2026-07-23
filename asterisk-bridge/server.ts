@@ -21,7 +21,7 @@
 // deno-lint-ignore-file no-explicit-any
 
 import { buildGeminiSetupPayload, buildRealtimeAudio, buildToolResponse } from "./shared/live-session.ts";
-import { buildSystemText, buildToolDeclarations, normalizeCrmToolResult, type AiCoreCtx, type ToolRow } from "./shared/ai-core.ts";
+import { buildSystemText, buildToolDeclarations, normalizeCrmToolResult, pickCrmLookupToolName, type AiCoreCtx, type ToolRow } from "./shared/ai-core.ts";
 import { buildKnowledgePreamble, buildPhoneInstructions, getModelCandidates, sanitizeSystemPrompt } from "./shared/live-config.ts";
 
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
@@ -164,8 +164,9 @@ function withCallerPhone(args: Record<string, unknown>, callerPhone?: string | n
 
 function crmFirstTurnText(ctx: ExtCtx): string {
   const phone = String(ctx.callerPhone ?? "").trim();
-  if (ctx.crm?.enabled && phone) {
-    return `Before greeting, silently call get_local_system_data with phone_number="${phone}" to identify the caller by phone. If CRM returns a name or customer data, greet the caller using that data. Then say: "${String(ctx.greeting).slice(0, 200)}"`;
+  const toolName = pickCrmLookupToolName(ctx);
+  if (toolName && phone) {
+    return `Before greeting, silently call \`${toolName}\` with phone_number="${phone}" to identify the caller by phone. Wait for the tool response. If it returns a name or customer data, greet the caller using that data. Then say: "${String(ctx.greeting).slice(0, 200)}". Remember the tool result — reuse it for any later question about this caller (debt, balance, address, status) instead of saying data is unavailable.`;
   }
   return `Greet the caller now. Say: "${String(ctx.greeting).slice(0, 200)}"`;
 }

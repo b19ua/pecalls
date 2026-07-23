@@ -144,6 +144,17 @@ function fillTemplate(t: string, args: Record<string, unknown>): string {
   return t.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => args[k] !== undefined ? String(args[k]) : "");
 }
 
+function withCallerPhone(args: Record<string, unknown>, callerPhone?: string | null): Record<string, unknown> {
+  const phone = String(callerPhone ?? "").trim();
+  if (!phone) return args;
+  return {
+    ...args,
+    phone_number: phone,
+    caller_phone: phone,
+    caller_id: phone,
+  };
+}
+
 async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>): Promise<unknown> {
   const cfg = tool.config;
   const timeout = Math.min(Math.max(cfg.timeout_ms ?? 8000, 500), 20000);
@@ -200,7 +211,7 @@ async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>):
 async function callCrm1(ctx: ExtCtx, args: Record<string, unknown>): Promise<unknown> {
   const c = ctx.crmFull;
   if (!c) return { ok: false, error: "Данные временно недоступны", reason: "integration_disabled" };
-  const phone = String(args.phone_number ?? "").trim();
+  const phone = String(args.phone_number ?? ctx.callerPhone ?? "").trim();
   if (!phone) return { ok: false, error: "Данные временно недоступны", reason: "missing_phone_number" };
   const t0 = Date.now();
   try {
@@ -208,7 +219,7 @@ async function callCrm1(ctx: ExtCtx, args: Record<string, unknown>): Promise<unk
     setTimeout(() => ctl.abort(), Math.min(Math.max(c.timeoutMs, 500), 10000));
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (c.authHeader && c.authValue) headers[c.authHeader] = c.authValue;
-    const r = await fetch(c.url, { method: "POST", headers, body: JSON.stringify({ phone_number: phone }), signal: ctl.signal });
+    const r = await fetch(c.url, { method: "POST", headers, body: JSON.stringify({ phone_number: phone, caller_phone: phone, caller_id: phone }), signal: ctl.signal });
     const txt = (await r.text()).slice(0, 30000);
     let parsed: Record<string, unknown> = {};
     try { parsed = JSON.parse(txt); } catch { /* text */ }
@@ -399,13 +410,14 @@ async function handleConn(conn: Deno.Conn) {
     });
     h.onToolCall(async (id, name, args) => {
       if (!ctx) return;
+      const effectiveArgs = withCallerPhone(args, ctx.callerPhone);
       let result: unknown;
       if (name === "log_objection") result = await logObjection(callUuid, args);
-      else if (name === "get_local_system_data") result = await callCrm1(ctx, args);
-      else if (name === "create_emergency_ticket") result = await callCrm2(callUuid, args);
+      else if (name === "get_local_system_data") result = await callCrm1(ctx, effectiveArgs);
+      else if (name === "create_emergency_ticket") result = await callCrm2(callUuid, effectiveArgs);
       else {
         const tool = ctx.tools.find((t) => t.name === name);
-        result = tool ? await executeWebhookTool(tool, args) : { error: `unknown tool ${name}` };
+        result = tool ? await executeWebhookTool(tool, effectiveArgs) : { error: `unknown tool ${name}` };
       }
       h.send(buildToolResponse(id, name, result));
     });

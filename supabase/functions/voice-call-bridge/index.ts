@@ -13,6 +13,7 @@ import {
   OBJECTION_CATEGORY_LABELS,
   buildObjectionInstructions,
   buildToolDeclarations,
+  normalizeCrmToolResult,
   toolAllowed as _toolAllowed,
   type ToolRow as SharedToolRow,
   type ToolParam as SharedToolParam,
@@ -973,13 +974,19 @@ async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promis
     let parsed: unknown = txt;
     try { parsed = JSON.parse(txt); } catch { /* keep as text */ }
     log("tool", tool.name, "→", r.status, "bytes:", txt.length);
+    const normalized = normalizeCrmToolResult(parsed, cfg.response_hint || "");
     return {
       status: r.status,
       ok: r.ok,
       data: parsed,
+      ...normalized,
       instructions:
-        (cfg.response_hint || "").trim() ||
-        "Use ALL relevant fields from `data` to answer the caller. If `data` contains a nested array like data.result[0] or data.items[0], look INSIDE that nested object for the specific field you need — do not assume fields are at the top level.",
+        [
+          normalized.crm_instructions,
+          (cfg.response_hint || "").trim() ||
+            "Use ALL relevant fields from `data` to answer the caller. If `data` contains a nested array like data.result[0] or data.items[0], look INSIDE that nested object for the specific field you need — do not assume fields are at the top level.",
+          normalized.crm_answer_context,
+        ].filter(Boolean).join("\n\n"),
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
@@ -1035,6 +1042,7 @@ async function callLocalCrm(
       return { ok: false, error: "Данные временно недоступны", reason: `http_${r.status}` };
     }
     // Map provider fields to caller-configured labels so the model gets stable keys.
+    const normalized = normalizeCrmToolResult(parsed, `${c.object1}\n${c.object2}\n${c.object3}`);
     const out: Record<string, unknown> = {
       ok: true,
       latency_ms: ms,
@@ -1042,7 +1050,12 @@ async function callLocalCrm(
       [c.object2]: parsed.object_2 ?? parsed[c.object2] ?? null,
       [c.object3]: parsed.object_3 ?? parsed[c.object3] ?? null,
       raw: parsed,
-      instructions: "Use ALL three returned fields naturally in the conversation; do not read the field names out loud.",
+      ...normalized,
+      instructions: [
+        normalized.crm_instructions,
+        "Use the normalized CRM facts first. Use ALL three returned fields naturally in the conversation; do not read the field names out loud.",
+        normalized.crm_answer_context,
+      ].join("\n\n"),
     };
     log("crm", "← VPN ok in", ms, "ms keys=", Object.keys(parsed).join(","));
     return out;

@@ -21,7 +21,7 @@
 // deno-lint-ignore-file no-explicit-any
 
 import { buildGeminiSetupPayload, buildRealtimeAudio, buildToolResponse } from "./shared/live-session.ts";
-import { buildSystemText, buildToolDeclarations, type AiCoreCtx, type ToolRow } from "./shared/ai-core.ts";
+import { buildSystemText, buildToolDeclarations, normalizeCrmToolResult, type AiCoreCtx, type ToolRow } from "./shared/ai-core.ts";
 import { buildKnowledgePreamble, buildPhoneInstructions, getModelCandidates, sanitizeSystemPrompt } from "./shared/live-config.ts";
 
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
@@ -178,10 +178,18 @@ async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>):
     if (txt.length > 60000) txt = txt.slice(0, 60000) + "\n…[truncated]";
     let parsed: unknown = txt;
     try { parsed = JSON.parse(txt); } catch { /* keep text */ }
-    // TEMP DEBUG, remove after diagnosis
-    log("[tool-debug]", tool.name, "RAW:", txt.slice(0, 2000));
-    log("[tool-debug]", tool.name, "PARSED:", JSON.stringify(parsed).slice(0, 2000));
-    return { status: r.status, ok: r.ok, data: parsed, instructions: (cfg.response_hint || "").trim() || "Use ALL relevant fields from `data` to answer the caller. If `data` contains a nested array like data.result[0] or data.items[0], look INSIDE that nested object for the specific field you need — do not assume fields are at the top level." };
+    const normalized = normalizeCrmToolResult(parsed, cfg.response_hint || "");
+    return {
+      status: r.status,
+      ok: r.ok,
+      data: parsed,
+      ...normalized,
+      instructions: [
+        normalized.crm_instructions,
+        (cfg.response_hint || "").trim() || "Use ALL relevant fields from `data` to answer the caller. If `data` contains a nested array like data.result[0] or data.items[0], look INSIDE that nested object for the specific field you need — do not assume fields are at the top level.",
+        normalized.crm_answer_context,
+      ].filter(Boolean).join("\n\n"),
+    };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
@@ -205,12 +213,19 @@ async function callCrm1(ctx: ExtCtx, args: Record<string, unknown>): Promise<unk
     let parsed: Record<string, unknown> = {};
     try { parsed = JSON.parse(txt); } catch { /* text */ }
     if (!r.ok) return { ok: false, error: "Данные временно недоступны", reason: `http_${r.status}` };
+    const normalized = normalizeCrmToolResult(parsed, `${c.object1}\n${c.object2}\n${c.object3}`);
     return {
       ok: true, latency_ms: Date.now() - t0,
       [c.object1]: (parsed as any).object_1 ?? (parsed as any)[c.object1] ?? null,
       [c.object2]: (parsed as any).object_2 ?? (parsed as any)[c.object2] ?? null,
       [c.object3]: (parsed as any).object_3 ?? (parsed as any)[c.object3] ?? null,
       raw: parsed,
+      ...normalized,
+      instructions: [
+        normalized.crm_instructions,
+        "Use the normalized CRM facts first. Use ALL three returned fields naturally in the conversation; do not read the field names out loud.",
+        normalized.crm_answer_context,
+      ].join("\n\n"),
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

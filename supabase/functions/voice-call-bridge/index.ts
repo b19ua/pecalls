@@ -15,6 +15,7 @@ import {
   buildObjectionInstructions,
   buildToolDeclarations,
   normalizeCrmToolResult,
+  pickCrmLookupToolName,
   toolAllowed as _toolAllowed,
   type ToolRow as SharedToolRow,
   type ToolParam as SharedToolParam,

@@ -11,6 +11,7 @@ import {
 import { buildGeminiSetupPayload, buildGreetingTurn, buildToolResponse } from "../_shared/live-session.ts";
 import {
   OBJECTION_CATEGORY_LABELS,
+  buildCallerContextBlock,
   buildObjectionInstructions,
   buildToolDeclarations,
   normalizeCrmToolResult,
@@ -176,9 +177,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         ? `\n\n=== EMERGENCY TICKET CREATION (create_emergency_ticket) ===\n${c.crm2.systemPromptTemplate.trim()}\n=== END EMERGENCY TICKET ===`
         : "";
       const callerPhone = String(c.callerPhone ?? callerPhoneKnown ?? "").trim();
-      const callerCtxBlock = callerPhone
-        ? `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known: ${callerPhone}.\nIf you need CRM/customer data, IMMEDIATELY call \`get_local_system_data\` with phone_number="${callerPhone}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\n=== END CALLER CONTEXT ===`
-        : "";
+      const callerCtxBlock = buildCallerContextBlock(callerPhone);
       // Make sure buildToolDeclarations sees the caller phone so its get_local_system_data
       // description also reinforces "use the number from CALLER CONTEXT above".
       if (callerPhone && !c.callerPhone) c.callerPhone = callerPhone;
@@ -263,17 +262,19 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         } else if (msg.toolCall) {
           const calls = msg.toolCall?.functionCalls || [];
           for (const fc of calls) {
+            const rawArgs = (fc.args || {}) as Record<string, unknown>;
+            const effectiveArgs = withCallerPhone(rawArgs, ctx?.callerPhone ?? callerPhoneKnown);
             let result: unknown;
             if (fc.name === "log_objection") {
-              result = await logObjectionEvent(ctx, callSid, (fc.args || {}) as Record<string, unknown>);
+              result = await logObjectionEvent(ctx, callSid, rawArgs);
             } else if (fc.name === "get_local_system_data") {
-              result = await callLocalCrm(ctx, (fc.args || {}) as Record<string, unknown>, callSid);
+              result = await callLocalCrm(ctx, effectiveArgs, callSid);
             } else if (fc.name === "create_emergency_ticket") {
-              result = await callLocalCrm2(ctx, (fc.args || {}) as Record<string, unknown>, callSid);
+              result = await callLocalCrm2(ctx, effectiveArgs, callSid);
             } else {
               const tool = ctx?.tools.find((t) => t.name === fc.name);
               result = tool
-                ? await executeTool(tool, (fc.args || {}) as Record<string, unknown>)
+                ? await executeTool(tool, effectiveArgs)
                 : { error: `unknown tool ${fc.name}` };
             }
             try {

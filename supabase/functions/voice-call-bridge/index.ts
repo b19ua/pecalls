@@ -917,6 +917,17 @@ function fillTemplate(tmpl: string, args: Record<string, unknown>): string {
     args[k] !== undefined ? String(args[k]) : "");
 }
 
+function withCallerPhone(args: Record<string, unknown>, callerPhone?: string | null): Record<string, unknown> {
+  const phone = String(callerPhone ?? "").trim();
+  if (!phone) return args;
+  return {
+    ...args,
+    phone_number: phone,
+    caller_phone: phone,
+    caller_id: phone,
+  };
+}
+
 async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promise<unknown> {
   const cfg = tool.config;
   const timeout = Math.min(Math.max(cfg.timeout_ms ?? 8000, 500), 20000);
@@ -1010,7 +1021,7 @@ async function callLocalCrm(
     log("crm", "integration disabled at call time → returning unavailable");
     return { ok: false, error: "Данные временно недоступны", reason: "integration_disabled" };
   }
-  const phone = String(args.phone_number ?? "").trim();
+  const phone = String(args.phone_number ?? ctx?.callerPhone ?? "").trim();
   if (!phone) {
     log("crm", "missing phone_number arg");
     return { ok: false, error: "Данные временно недоступны", reason: "missing_phone_number" };
@@ -1029,7 +1040,7 @@ async function callLocalCrm(
     const r = await fetch(c.url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ phone_number: phone }),
+      body: JSON.stringify({ phone_number: phone, caller_phone: phone, caller_id: phone }),
       signal: ctl.signal,
     });
     clearTimeout(tid);
@@ -1134,7 +1145,7 @@ async function callLocalCrm2(
   }
 
   const emergency_type = String(args.emergency_type ?? "").trim();
-  const phone_number = String(args.phone_number ?? "").trim();
+  const phone_number = String(args.phone_number ?? ctx?.callerPhone ?? "").trim();
   const nlc_number = String(args.nlc_number ?? "").trim();
   const facility_address = String(args.facility_address ?? "").trim();
   const caller_comment = String(args.caller_comment ?? "").trim();

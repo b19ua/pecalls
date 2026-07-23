@@ -917,15 +917,30 @@ function fillTemplate(tmpl: string, args: Record<string, unknown>): string {
     args[k] !== undefined ? String(args[k]) : "");
 }
 
-function withCallerPhone(args: Record<string, unknown>, callerPhone?: string | null): Record<string, unknown> {
+function withCallerPhone(args: Record<string, unknown>, callerPhone?: string | null, params?: ToolRow["config"]["parameters"]): Record<string, unknown> {
   const phone = String(callerPhone ?? "").trim();
   if (!phone) return args;
-  return {
-    ...args,
-    phone_number: phone,
-    caller_phone: phone,
-    caller_id: phone,
-  };
+  const next: Record<string, unknown> = { ...args };
+  const common = ["phone_number", "phone", "PHONE", "caller_phone", "caller_id", "mobile", "msisdn"];
+  const names = new Set<string>();
+  if (params?.length) {
+    for (const p of params) {
+      if (/phone|caller|mobile|msisdn|телефон/i.test(`${p.name} ${p.query_key ?? ""}`)) names.add(p.name);
+    }
+  } else {
+    for (const n of common) names.add(n);
+  }
+  if (!names.size) names.add("phone_number");
+  for (const name of names) next[name] = phone;
+  return next;
+}
+
+function buildCrmFirstTurn(c: Ctx): Record<string, unknown> {
+  const phone = String(c.callerPhone ?? "").trim();
+  const text = c.crm?.enabled && phone
+    ? `Before greeting, silently call get_local_system_data with phone_number="${phone}" to identify the caller by phone. If CRM returns a name or customer data, greet the caller using that data. Then say: "${String(c.greeting).slice(0, 200)}"`
+    : `Greet the caller now. Say: "${String(c.greeting).slice(0, 200)}"`;
+  return { client_content: { turns: [{ role: "user", parts: [{ text }] }], turn_complete: true } };
 }
 
 async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promise<unknown> {

@@ -56,7 +56,7 @@ export type AiCoreCtx = {
 export function buildCallerContextBlock(phone?: string | null): string {
   const p = String(phone ?? "").trim();
   if (!p) return "";
-  return `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known: ${p}.\nIf you need CRM/customer data, IMMEDIATELY call \`get_local_system_data\` with phone_number="${p}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\n=== END CALLER CONTEXT ===`;
+  return `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known by the telephony system: ${p}. This is the authoritative identifier for CRM lookup.\nIf you need CRM/customer data, IMMEDIATELY call \`get_local_system_data\` with phone_number="${p}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\nIf any CRM/tool call needs a phone/caller/customer identifier, use exactly this number.\n=== END CALLER CONTEXT ===`;
 }
 
 export const OBJECTION_CATEGORY_LABELS: Record<string, string> = {
@@ -296,7 +296,7 @@ export function buildToolDeclarations(tools: ToolRow[], ctx: AiCoreCtx): ToolDec
       parameters: {
         type: "object",
         properties: {
-          phone_number: { type: "string", description: "Caller phone number in E.164 if known, otherwise as spoken." },
+          phone_number: { type: "string", description: "Authoritative caller phone number from CALLER CONTEXT. Use that exact value; do not ask the caller to say it." },
         },
         required: ["phone_number"],
       },

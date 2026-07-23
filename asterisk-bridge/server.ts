@@ -144,6 +144,32 @@ function fillTemplate(t: string, args: Record<string, unknown>): string {
   return t.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => args[k] !== undefined ? String(args[k]) : "");
 }
 
+function withCallerPhone(args: Record<string, unknown>, callerPhone?: string | null, params?: ToolRow["config"]["parameters"]): Record<string, unknown> {
+  const phone = String(callerPhone ?? "").trim();
+  if (!phone) return args;
+  const next: Record<string, unknown> = { ...args };
+  const common = ["phone_number", "phone", "PHONE", "caller_phone", "caller_id", "mobile", "msisdn"];
+  const names = new Set<string>();
+  if (params?.length) {
+    for (const p of params) {
+      if (/phone|caller|mobile|msisdn|телефон/i.test(`${p.name} ${p.query_key ?? ""}`)) names.add(p.name);
+    }
+  } else {
+    for (const n of common) names.add(n);
+  }
+  if (!names.size) names.add("phone_number");
+  for (const name of names) next[name] = phone;
+  return next;
+}
+
+function crmFirstTurnText(ctx: ExtCtx): string {
+  const phone = String(ctx.callerPhone ?? "").trim();
+  if (ctx.crm?.enabled && phone) {
+    return `Before greeting, silently call get_local_system_data with phone_number="${phone}" to identify the caller by phone. If CRM returns a name or customer data, greet the caller using that data. Then say: "${String(ctx.greeting).slice(0, 200)}"`;
+  }
+  return `Greet the caller now. Say: "${String(ctx.greeting).slice(0, 200)}"`;
+}
+
 async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>): Promise<unknown> {
   const cfg = tool.config;
   const timeout = Math.min(Math.max(cfg.timeout_ms ?? 8000, 500), 20000);
@@ -200,7 +226,7 @@ async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>):
 async function callCrm1(ctx: ExtCtx, args: Record<string, unknown>): Promise<unknown> {
   const c = ctx.crmFull;
   if (!c) return { ok: false, error: "Данные временно недоступны", reason: "integration_disabled" };
-  const phone = String(args.phone_number ?? "").trim();
+  const phone = String(args.phone_number ?? ctx.callerPhone ?? "").trim();
   if (!phone) return { ok: false, error: "Данные временно недоступны", reason: "missing_phone_number" };
   const t0 = Date.now();
   try {
@@ -208,7 +234,7 @@ async function callCrm1(ctx: ExtCtx, args: Record<string, unknown>): Promise<unk
     setTimeout(() => ctl.abort(), Math.min(Math.max(c.timeoutMs, 500), 10000));
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (c.authHeader && c.authValue) headers[c.authHeader] = c.authValue;
-    const r = await fetch(c.url, { method: "POST", headers, body: JSON.stringify({ phone_number: phone }), signal: ctl.signal });
+    const r = await fetch(c.url, { method: "POST", headers, body: JSON.stringify({ phone_number: phone, caller_phone: phone, caller_id: phone }), signal: ctl.signal });
     const txt = (await r.text()).slice(0, 30000);
     let parsed: Record<string, unknown> = {};
     try { parsed = JSON.parse(txt); } catch { /* text */ }
@@ -382,7 +408,7 @@ async function handleConn(conn: Deno.Conn) {
         greetingSent = true;
         h.send({
           client_content: {
-            turns: [{ role: "user", parts: [{ text: `Greet the caller now. Say: "${String(ctx.greeting).slice(0, 200)}"` }] }],
+            turns: [{ role: "user", parts: [{ text: crmFirstTurnText(ctx) }] }],
             turn_complete: true,
           },
         });
@@ -401,11 +427,11 @@ async function handleConn(conn: Deno.Conn) {
       if (!ctx) return;
       let result: unknown;
       if (name === "log_objection") result = await logObjection(callUuid, args);
-      else if (name === "get_local_system_data") result = await callCrm1(ctx, args);
-      else if (name === "create_emergency_ticket") result = await callCrm2(callUuid, args);
+      else if (name === "get_local_system_data") result = await callCrm1(ctx, withCallerPhone(args, ctx.callerPhone));
+      else if (name === "create_emergency_ticket") result = await callCrm2(callUuid, withCallerPhone(args, ctx.callerPhone));
       else {
         const tool = ctx.tools.find((t) => t.name === name);
-        result = tool ? await executeWebhookTool(tool, args) : { error: `unknown tool ${name}` };
+        result = tool ? await executeWebhookTool(tool, withCallerPhone(args, ctx.callerPhone, tool.config.parameters)) : { error: `unknown tool ${name}` };
       }
       h.send(buildToolResponse(id, name, result));
     });
@@ -477,6 +503,8 @@ async function handleConn(conn: Deno.Conn) {
                   if (!v.ok) continue;
                   const jv = await v.json();
                   if (String(jv?.value || "") !== callUuid) continue;
+                  const channelCaller = String(ch?.caller?.number || ch?.connected?.number || "").trim();
+                  if (channelCaller) fromNumber = channelCaller;
                   const cv = await fetch(`${ctx.handoffAriBase}/ari/channels/${ch.id}/variable?variable=LUNARA_CALLERID`, { headers: { Authorization: ctx.handoffAriAuth } });
                   if (cv.ok) {
                     const cvj = await cv.json();

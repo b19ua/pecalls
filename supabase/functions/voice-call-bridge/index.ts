@@ -8,9 +8,10 @@ import {
   getModelCandidates,
   sanitizeSystemPrompt,
 } from "../_shared/live-config.ts";
-import { buildGeminiSetupPayload, buildGreetingTurn, buildToolResponse } from "../_shared/live-session.ts";
+import { buildGeminiSetupPayload, buildToolResponse } from "../_shared/live-session.ts";
 import {
   OBJECTION_CATEGORY_LABELS,
+  buildCallerContextBlock,
   buildObjectionInstructions,
   buildToolDeclarations,
   normalizeCrmToolResult,
@@ -176,9 +177,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         ? `\n\n=== EMERGENCY TICKET CREATION (create_emergency_ticket) ===\n${c.crm2.systemPromptTemplate.trim()}\n=== END EMERGENCY TICKET ===`
         : "";
       const callerPhone = String(c.callerPhone ?? callerPhoneKnown ?? "").trim();
-      const callerCtxBlock = callerPhone
-        ? `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known: ${callerPhone}.\nIf you need CRM/customer data, IMMEDIATELY call \`get_local_system_data\` with phone_number="${callerPhone}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\n=== END CALLER CONTEXT ===`
-        : "";
+      const callerCtxBlock = buildCallerContextBlock(callerPhone);
       // Make sure buildToolDeclarations sees the caller phone so its get_local_system_data
       // description also reinforces "use the number from CALLER CONTEXT above".
       if (callerPhone && !c.callerPhone) c.callerPhone = callerPhone;
@@ -206,8 +205,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (!greetingRequested) {
             greetingRequested = true;
             const c = ctx!;
-            // Lunara-style greeting trigger via shared client_content turn.
-            gemini!.send(JSON.stringify(buildGreetingTurn(String(c.greeting))));
+            // If the phone number is known, identify the caller in CRM before the audible greeting.
+            gemini!.send(JSON.stringify(buildCrmFirstTurn(c)));
           }
           for (const b64 of pendingAudioToGemini) sendAudioToGemini(b64);
           pendingAudioToGemini = [];
@@ -263,17 +262,19 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         } else if (msg.toolCall) {
           const calls = msg.toolCall?.functionCalls || [];
           for (const fc of calls) {
+            const rawArgs = (fc.args || {}) as Record<string, unknown>;
+            const effectiveArgs = withCallerPhone(rawArgs, ctx?.callerPhone ?? callerPhoneKnown);
             let result: unknown;
             if (fc.name === "log_objection") {
-              result = await logObjectionEvent(ctx, callSid, (fc.args || {}) as Record<string, unknown>);
+              result = await logObjectionEvent(ctx, callSid, rawArgs);
             } else if (fc.name === "get_local_system_data") {
-              result = await callLocalCrm(ctx, (fc.args || {}) as Record<string, unknown>, callSid);
+              result = await callLocalCrm(ctx, effectiveArgs, callSid);
             } else if (fc.name === "create_emergency_ticket") {
-              result = await callLocalCrm2(ctx, (fc.args || {}) as Record<string, unknown>, callSid);
+              result = await callLocalCrm2(ctx, effectiveArgs, callSid);
             } else {
               const tool = ctx?.tools.find((t) => t.name === fc.name);
               result = tool
-                ? await executeTool(tool, (fc.args || {}) as Record<string, unknown>)
+                ? await executeTool(tool, withCallerPhone(rawArgs, ctx?.callerPhone ?? callerPhoneKnown, tool.config.parameters))
                 : { error: `unknown tool ${fc.name}` };
             }
             try {
@@ -916,6 +917,32 @@ function fillTemplate(tmpl: string, args: Record<string, unknown>): string {
     args[k] !== undefined ? String(args[k]) : "");
 }
 
+function withCallerPhone(args: Record<string, unknown>, callerPhone?: string | null, params?: ToolRow["config"]["parameters"]): Record<string, unknown> {
+  const phone = String(callerPhone ?? "").trim();
+  if (!phone) return args;
+  const next: Record<string, unknown> = { ...args };
+  const common = ["phone_number", "phone", "PHONE", "caller_phone", "caller_id", "mobile", "msisdn"];
+  const names = new Set<string>();
+  if (params?.length) {
+    for (const p of params) {
+      if (/phone|caller|mobile|msisdn|телефон/i.test(`${p.name} ${p.query_key ?? ""}`)) names.add(p.name);
+    }
+  } else {
+    for (const n of common) names.add(n);
+  }
+  if (!names.size) names.add("phone_number");
+  for (const name of names) next[name] = phone;
+  return next;
+}
+
+function buildCrmFirstTurn(c: Ctx): Record<string, unknown> {
+  const phone = String(c.callerPhone ?? "").trim();
+  const text = c.crm?.enabled && phone
+    ? `Before greeting, silently call get_local_system_data with phone_number="${phone}" to identify the caller by phone. If CRM returns a name or customer data, greet the caller using that data. Then say: "${String(c.greeting).slice(0, 200)}"`
+    : `Greet the caller now. Say: "${String(c.greeting).slice(0, 200)}"`;
+  return { client_content: { turns: [{ role: "user", parts: [{ text }] }], turn_complete: true } };
+}
+
 async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promise<unknown> {
   const cfg = tool.config;
   const timeout = Math.min(Math.max(cfg.timeout_ms ?? 8000, 500), 20000);
@@ -1009,7 +1036,7 @@ async function callLocalCrm(
     log("crm", "integration disabled at call time → returning unavailable");
     return { ok: false, error: "Данные временно недоступны", reason: "integration_disabled" };
   }
-  const phone = String(args.phone_number ?? "").trim();
+  const phone = String(args.phone_number ?? ctx?.callerPhone ?? "").trim();
   if (!phone) {
     log("crm", "missing phone_number arg");
     return { ok: false, error: "Данные временно недоступны", reason: "missing_phone_number" };
@@ -1028,7 +1055,7 @@ async function callLocalCrm(
     const r = await fetch(c.url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ phone_number: phone }),
+      body: JSON.stringify({ phone_number: phone, caller_phone: phone, caller_id: phone }),
       signal: ctl.signal,
     });
     clearTimeout(tid);
@@ -1133,7 +1160,7 @@ async function callLocalCrm2(
   }
 
   const emergency_type = String(args.emergency_type ?? "").trim();
-  const phone_number = String(args.phone_number ?? "").trim();
+  const phone_number = String(args.phone_number ?? ctx?.callerPhone ?? "").trim();
   const nlc_number = String(args.nlc_number ?? "").trim();
   const facility_address = String(args.facility_address ?? "").trim();
   const caller_comment = String(args.caller_comment ?? "").trim();

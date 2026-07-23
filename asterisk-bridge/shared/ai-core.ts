@@ -96,6 +96,154 @@ export function buildObjectionInstructions(c: Pick<AiCoreCtx, "objectionEnabled"
 
 export type ToolDecl = { name: string; description: string; parameters: { type: "object"; properties: Record<string, { type: string; description?: string }>; required: string[] } };
 
+export type CrmFact = {
+  path: string;
+  key: string;
+  label: string;
+  value: string | number | boolean;
+};
+
+const CRM_FACT_LIMIT = 60;
+const CRM_VALUE_LIMIT = 500;
+
+export const CRM_TOOL_RESPONSE_INSTRUCTIONS =
+  "When a CRM/tool response contains `crm_answer_context`, `crm_semantic`, or `crm_facts`, use those normalized facts first. If the caller asks for debt, balance, payment amount, address, ticket status, or another customer field, answer from those exact values; do not say that the data is unavailable while the value is present in the tool response.";
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function scalarValue(v: unknown): string | number | boolean | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "string") {
+    const s = v.trim();
+    return s ? s.slice(0, CRM_VALUE_LIMIT) : null;
+  }
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "boolean") return v;
+  return null;
+}
+
+function lastKey(path: string): string {
+  const parts = path.replace(/\[\d+\]/g, "").split(".").filter(Boolean);
+  return parts[parts.length - 1] || path;
+}
+
+function humanizeKey(key: string): string {
+  const known: Record<string, string> = {
+    NAME: "Имя клиента",
+    LAST_NAME: "Фамилия клиента",
+    SECOND_NAME: "Отчество клиента",
+    FULL_NAME: "ФИО клиента",
+    PHONE: "Телефон клиента",
+    ADDRESS: "Адрес клиента",
+    ADDRESS_CITY: "Город",
+    ADDRESS_STREET: "Улица",
+    ADDRESS_1: "Адрес клиента",
+    EMAIL: "Email клиента",
+    UF_CRM_1784721692802: "Задолженность по оплате",
+  };
+  if (known[key]) return known[key];
+  return key
+    .replace(/^UF_CRM_/i, "CRM поле ")
+    .replace(/_/g, " ")
+    .trim();
+}
+
+function labelFromHint(key: string, responseHint: string): string | null {
+  if (!responseHint || !key) return null;
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const parenthetical = responseHint.match(new RegExp(`${escaped}\\s*\\(([^)]+)\\)`, "i"));
+  if (parenthetical?.[1]) return parenthetical[1].trim();
+  const lower = responseHint.toLowerCase();
+  if (lower.includes(key.toLowerCase())) {
+    if (/(задолж|долг|debt|balance|оплат|payment|amount|сумм)/i.test(responseHint)) return "Задолженность по оплате";
+    if (/(имя|name|клиент|customer)/i.test(responseHint)) return "Имя клиента";
+  }
+  return null;
+}
+
+function labelForFact(path: string, responseHint: string): string {
+  const key = lastKey(path);
+  return labelFromHint(key, responseHint) || humanizeKey(key);
+}
+
+function collectFacts(value: unknown, path: string, responseHint: string, out: CrmFact[], depth = 0): void {
+  if (out.length >= CRM_FACT_LIMIT || depth > 6) return;
+  const scalar = scalarValue(value);
+  if (scalar !== null) {
+    const key = lastKey(path);
+    out.push({ path, key, label: labelForFact(path, responseHint), value: scalar });
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (let i = 0; i < Math.min(value.length, 3); i += 1) {
+      collectFacts(value[i], `${path}[${i}]`, responseHint, out, depth + 1);
+      if (out.length >= CRM_FACT_LIMIT) return;
+    }
+    return;
+  }
+  if (!isRecord(value)) return;
+  for (const [k, v] of Object.entries(value)) {
+    if (k === "raw" || k === "data") continue;
+    collectFacts(v, path ? `${path}.${k}` : k, responseHint, out, depth + 1);
+    if (out.length >= CRM_FACT_LIMIT) return;
+  }
+}
+
+function pickPrimaryRecord(data: unknown): { node: unknown; path: string } {
+  if (Array.isArray(data)) return { node: data[0] ?? data, path: Array.isArray(data) && data.length ? "[0]" : "" };
+  if (!isRecord(data)) return { node: data, path: "" };
+  const candidateKeys = ["result", "items", "data", "records", "contacts", "companies", "leads", "deals"];
+  for (const key of candidateKeys) {
+    const v = data[key];
+    if (Array.isArray(v) && v.length) return { node: v[0], path: `${key}[0]` };
+    if (isRecord(v)) return { node: v, path: key };
+  }
+  return { node: data, path: "" };
+}
+
+function factMatches(f: CrmFact, re: RegExp): boolean {
+  return re.test(`${f.key} ${f.label} ${f.path}`);
+}
+
+export function normalizeCrmToolResult(data: unknown, responseHint = "") {
+  const primary = pickPrimaryRecord(data);
+  const facts: CrmFact[] = [];
+  collectFacts(primary.node, primary.path, responseHint, facts);
+  if (!facts.length) collectFacts(data, "", responseHint, facts);
+
+  const nameFact = facts.find((f) => /^(NAME|FULL_NAME)$/i.test(f.key))
+    || facts.find((f) => factMatches(f, /(имя клиента|customer name|client name)/i));
+  const lastNameFact = facts.find((f) => /^LAST_NAME$/i.test(f.key));
+  const debtFact = facts.find((f) => /^UF_CRM_1784721692802$/i.test(f.key))
+    || facts.find((f) => factMatches(f, /(задолж|долг|debt|balance|остаток|оплат|payment due|amount due|сумм)/i));
+  const phoneFact = facts.find((f) => factMatches(f, /(^|\b)(PHONE|телефон|phone)(\b|$)/i));
+  const addressFact = facts.find((f) => factMatches(f, /(адрес|address|street|улица|дом)/i));
+
+  const semantic: Record<string, string | number | boolean> = {};
+  if (nameFact) semantic.customer_name = lastNameFact && lastNameFact.value !== nameFact.value
+    ? `${String(nameFact.value)} ${String(lastNameFact.value)}`.trim()
+    : nameFact.value;
+  if (debtFact) semantic.payment_debt = debtFact.value;
+  if (phoneFact) semantic.phone_number = phoneFact.value;
+  if (addressFact) semantic.address = addressFact.value;
+
+  const lines = [
+    "CRM FACTS — use these exact values when answering the caller:",
+    ...Object.entries(semantic).map(([k, v]) => `- ${k}: ${String(v)}`),
+    ...facts.slice(0, 25).map((f) => `- ${f.label} (${f.path}): ${String(f.value)}`),
+  ];
+
+  return {
+    crm_primary_record_path: primary.path || "root",
+    crm_semantic: semantic,
+    crm_facts: facts,
+    crm_answer_context: lines.join("\n"),
+    crm_instructions: CRM_TOOL_RESPONSE_INSTRUCTIONS,
+  };
+}
+
 export function buildToolDeclarations(tools: ToolRow[], ctx: AiCoreCtx): ToolDecl[] {
   const cfg = ctx.toolsConfig;
   const decls: ToolDecl[] = tools
@@ -109,9 +257,12 @@ export function buildToolDeclarations(tools: ToolRow[], ctx: AiCoreCtx): ToolDec
         properties[p.name] = { type: p.type || "string", description: p.description || undefined };
         if (p.required) required.push(p.name);
       }
+      const crmResponseHint = t.type === "crm_lookup" || t.type === "crm_write"
+        ? CRM_TOOL_RESPONSE_INSTRUCTIONS
+        : "";
       return {
         name: t.name,
-        description: [t.description, t.config.response_hint].filter(Boolean).join("\n"),
+        description: [t.description, t.config.response_hint, crmResponseHint].filter(Boolean).join("\n"),
         parameters: { type: "object", properties, required },
       };
     });
@@ -141,7 +292,7 @@ export function buildToolDeclarations(tools: ToolRow[], ctx: AiCoreCtx): ToolDec
       : "";
     decls.push({
       name: "get_local_system_data",
-      description: `${c.description}\nSILENTLY call this the moment the caller's phone number is known (or as soon as they identify themselves) to enrich the conversation with CRM data.${phoneHint} Returns fields: ${c.object1}, ${c.object2}, ${c.object3}. If the data is temporarily unavailable, continue the dialog naturally without mentioning the tool.`,
+      description: `${c.description}\nSILENTLY call this the moment the caller's phone number is known (or as soon as they identify themselves) to enrich the conversation with CRM data.${phoneHint} Returns fields: ${c.object1}, ${c.object2}, ${c.object3}. If the response contains crm_answer_context/crm_semantic/crm_facts, answer from those exact values. If the data is temporarily unavailable, continue the dialog naturally without mentioning the tool.`,
       parameters: {
         type: "object",
         properties: {

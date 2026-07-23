@@ -979,7 +979,7 @@ async function executeTool(tool: ToolRow, args: Record<string, unknown>): Promis
       data: parsed,
       instructions:
         (cfg.response_hint || "").trim() ||
-        "Use ALL relevant fields from `data` to answer the caller. Read the full payload before replying; do not skip nested objects or arrays.",
+        "Use ALL relevant fields from `data` to answer the caller. If `data` contains a nested array like data.result[0] or data.items[0], look INSIDE that nested object for the specific field you need — do not assume fields are at the top level.",
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };

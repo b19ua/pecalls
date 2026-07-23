@@ -21,7 +21,7 @@
 // deno-lint-ignore-file no-explicit-any
 
 import { buildGeminiSetupPayload, buildRealtimeAudio, buildToolResponse } from "./shared/live-session.ts";
-import { buildSystemText, buildToolDeclarations, normalizeCrmToolResult, type AiCoreCtx, type ToolRow } from "./shared/ai-core.ts";
+import { buildSystemText, buildToolDeclarations, normalizeCrmToolResult, pickCrmLookupToolName, type AiCoreCtx, type ToolRow } from "./shared/ai-core.ts";
 import { buildKnowledgePreamble, buildPhoneInstructions, getModelCandidates, sanitizeSystemPrompt } from "./shared/live-config.ts";
 
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";

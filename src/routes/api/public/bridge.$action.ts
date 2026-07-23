@@ -23,8 +23,8 @@ function unauthorized() { return new Response("Unauthorized", { status: 401 }); 
 function badRequest(msg: string) { return new Response(msg, { status: 400 }); }
 function ok(body: unknown) { return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } }); }
 
-function buildCallerContextText(phone: string): string {
-  return `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known by the telephony system: ${phone}. This is the authoritative identifier for CRM lookup.\nIf you need CRM/customer data, IMMEDIATELY call \`get_local_system_data\` with phone_number="${phone}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\nIf any CRM/tool call needs a phone/caller/customer identifier, use exactly this number.\n=== END CALLER CONTEXT ===`;
+function buildCallerContextText(phone: string, toolName: string): string {
+  return `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known by the telephony system: ${phone}. This is the authoritative identifier for CRM lookup.\nIf you need CRM/customer data, IMMEDIATELY call \`${toolName}\` with phone_number="${phone}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\nIf any CRM/tool call needs a phone/caller/customer identifier, use exactly this number.\n\nMANDATORY CRM RULE: For ANY customer-specific question (задолженность / долг / баланс / сумма к оплате / имя / адрес / статус заявки / договор / счёт), if you have NOT yet called \`${toolName}\` in this conversation for phone_number="${phone}", you MUST call it FIRST and wait for the response before answering. It is FORBIDDEN to reply "информация недоступна", "данных нет", "не могу найти", "система недоступна" or anything similar without first attempting a \`${toolName}\` call for this phone number in this conversation. If the call fails or returns no result, only THEN you may say the data is unavailable.\n=== END CALLER CONTEXT ===`;
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -154,7 +154,12 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
           const inferredCallerPhone = callForInference
             ? String(callForInference.direction === "outbound" ? callForInference.to_number || "" : callForInference.from_number || "").trim()
             : "";
-          const callerContextText = inferredCallerPhone ? buildCallerContextText(inferredCallerPhone) : "";
+          const crmLookupToolName = crmLite
+            ? "get_local_system_data"
+            : ((toolRows || []).find((t: any) => t?.type === "crm_lookup" && t?.enabled !== false)?.name || "");
+          const callerContextText = inferredCallerPhone && crmLookupToolName
+            ? buildCallerContextText(inferredCallerPhone, crmLookupToolName)
+            : "";
           const systemPrompt = [agent.system_prompt || "", callerContextText].filter(Boolean).join("\n\n");
           const crmWithCaller = crmLite && inferredCallerPhone
             ? {

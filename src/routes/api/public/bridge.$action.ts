@@ -123,17 +123,32 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
           // copy `call-init.caller_phone` into the Gemini system context. Infer the
           // current call here and inject the caller phone into fields every bridge
           // version already consumes (`systemPrompt` and CRM tool description).
-          const recentCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-          const { data: activeCall } = await supabaseAdmin
-            .from("calls")
-            .select("direction, from_number, to_number, started_at")
-            .eq("agent_id", auth.agentId)
-            .eq("owner_id", auth.ownerId)
-            .in("status", ["in_progress", "queued", "ringing"])
-            .gte("started_at", recentCutoff)
-            .order("started_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          const contextCallSid = String(body.call_sid || "").trim();
+          let activeCall: { direction: string | null; from_number: string | null; to_number: string | null; started_at: string | null } | null = null;
+          if (contextCallSid) {
+            const { data } = await supabaseAdmin
+              .from("calls")
+              .select("direction, from_number, to_number, started_at")
+              .eq("agent_id", auth.agentId)
+              .eq("owner_id", auth.ownerId)
+              .eq("twilio_call_sid", contextCallSid)
+              .maybeSingle();
+            activeCall = data as typeof activeCall;
+          }
+          if (!activeCall) {
+            const recentCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+            const { data } = await supabaseAdmin
+              .from("calls")
+              .select("direction, from_number, to_number, started_at")
+              .eq("agent_id", auth.agentId)
+              .eq("owner_id", auth.ownerId)
+              .in("status", ["in_progress", "queued", "ringing"])
+              .gte("started_at", recentCutoff)
+              .order("started_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            activeCall = data as typeof activeCall;
+          }
           const inferredCallerPhone = activeCall
             ? String(activeCall.direction === "outbound" ? activeCall.to_number || "" : activeCall.from_number || "").trim()
             : "";

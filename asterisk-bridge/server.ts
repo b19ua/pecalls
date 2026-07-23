@@ -178,7 +178,10 @@ async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>):
     if (txt.length > 60000) txt = txt.slice(0, 60000) + "\n…[truncated]";
     let parsed: unknown = txt;
     try { parsed = JSON.parse(txt); } catch { /* keep text */ }
-    return { status: r.status, ok: r.ok, data: parsed, instructions: (cfg.response_hint || "").trim() || "Use ALL relevant fields from `data` to answer the caller." };
+    // TEMP DEBUG, remove after diagnosis
+    log("[tool-debug]", tool.name, "RAW:", txt.slice(0, 2000));
+    log("[tool-debug]", tool.name, "PARSED:", JSON.stringify(parsed).slice(0, 2000));
+    return { status: r.status, ok: r.ok, data: parsed, instructions: (cfg.response_hint || "").trim() || "Use ALL relevant fields from `data` to answer the caller. If `data` contains a nested array like data.result[0] or data.items[0], look INSIDE that nested object for the specific field you need — do not assume fields are at the top level." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }

@@ -132,9 +132,9 @@ type ExtCtx = AiCoreCtx & {
   handoffAriAuth: string;
 };
 
-async function loadContext(): Promise<ExtCtx | null> {
+async function loadContext(callSid?: string): Promise<ExtCtx | null> {
   try {
-    const ctx = await bridgeCall("context", {});
+    const ctx = await bridgeCall("context", callSid ? { call_sid: callSid } : {});
     return ctx as ExtCtx;
   } catch (e) { log("loadContext", e); return null; }
 }
@@ -481,17 +481,15 @@ async function handleConn(conn: Deno.Conn) {
           callUuid = payload.length === 16 ? uuidBytesToString(payload) : new TextDecoder().decode(payload);
           log("call", callUuid, "connected");
           // Load context first — we need handoffAriBase/handoffAriAuth to fetch caller id.
-          ctx = await loadContext();
+          ctx = await loadContext(callUuid);
           if (!ctx) { log("ctx load failed"); await cleanup("failed"); return; }
-          // Определяем direction: исходящие звонки инициируются placeAsteriskCall,
-          // который генерирует callUuid через crypto.randomUUID() → строгий формат
-          // 8-4-4-4-12. Входящие используют ${UNIQUEID} Asterisk (например
-          // "1699999999.42") — не UUID. Для исходящих номер уже сохранён в БД
-          // через placeAsteriskCall, ARI round-trip не нужен.
-          const isUuidFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(callUuid);
-          const direction: "inbound" | "outbound" = isUuidFormat ? "outbound" : "inbound";
+          // AudioSocket payload can be UUID-shaped for both inbound and outbound
+          // channels, so never infer direction from the id format. Default this
+          // socket leg to inbound; if it is a pre-created outbound call, call-init
+          // finds the existing DB row and keeps its stored outbound direction.
+          const direction: "inbound" | "outbound" = "inbound";
           let fromNumber: string | null = null;
-          if (direction === "inbound" && ctx.handoffAriBase && ctx.handoffAriAuth) {
+          if (ctx.handoffAriBase && ctx.handoffAriAuth) {
             try {
               // Точечный GET канал-переменной LUNARA_CALLERID через ARI.
               // Тот же паттерн аутентификации, что использует ariSetHandoff.

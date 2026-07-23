@@ -205,6 +205,8 @@ async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>):
     let parsed: unknown = txt;
     try { parsed = JSON.parse(txt); } catch { /* keep text */ }
     const normalized = normalizeCrmToolResult(parsed, cfg.response_hint || "");
+    // TEMP DEBUG, remove after diagnosis.
+    log("[crm-debug] executeWebhookTool tool=", tool.name, "responseHint=", cfg.response_hint, "debtFact found=", !!normalized.crm_semantic.payment_debt);
     return {
       status: r.status,
       ok: r.ok,
@@ -240,6 +242,8 @@ async function callCrm1(ctx: ExtCtx, args: Record<string, unknown>): Promise<unk
     try { parsed = JSON.parse(txt); } catch { /* text */ }
     if (!r.ok) return { ok: false, error: "Данные временно недоступны", reason: `http_${r.status}` };
     const normalized = normalizeCrmToolResult(parsed, `${c.object1}\n${c.object2}\n${c.object3}`);
+    // TEMP DEBUG, remove after diagnosis.
+    log("[crm-debug] callCrm1 object1/2/3=", c.object1, c.object2, c.object3, "debtFact found=", !!normalized.crm_semantic.payment_debt);
     return {
       ok: true, latency_ms: Date.now() - t0,
       [c.object1]: (parsed as any).object_1 ?? (parsed as any)[c.object1] ?? null,

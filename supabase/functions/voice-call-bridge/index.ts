@@ -205,8 +205,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           if (!greetingRequested) {
             greetingRequested = true;
             const c = ctx!;
-            // Lunara-style greeting trigger via shared client_content turn.
-            gemini!.send(JSON.stringify(buildGreetingTurn(String(c.greeting))));
+            // If the phone number is known, identify the caller in CRM before the audible greeting.
+            gemini!.send(JSON.stringify(buildCrmFirstTurn(c)));
           }
           for (const b64 of pendingAudioToGemini) sendAudioToGemini(b64);
           pendingAudioToGemini = [];
@@ -274,7 +274,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
             } else {
               const tool = ctx?.tools.find((t) => t.name === fc.name);
               result = tool
-                ? await executeTool(tool, effectiveArgs)
+                ? await executeTool(tool, withCallerPhone(rawArgs, ctx?.callerPhone ?? callerPhoneKnown, tool.config.parameters))
                 : { error: `unknown tool ${fc.name}` };
             }
             try {

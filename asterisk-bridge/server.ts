@@ -144,15 +144,30 @@ function fillTemplate(t: string, args: Record<string, unknown>): string {
   return t.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => args[k] !== undefined ? String(args[k]) : "");
 }
 
-function withCallerPhone(args: Record<string, unknown>, callerPhone?: string | null): Record<string, unknown> {
+function withCallerPhone(args: Record<string, unknown>, callerPhone?: string | null, params?: ToolRow["config"]["parameters"]): Record<string, unknown> {
   const phone = String(callerPhone ?? "").trim();
   if (!phone) return args;
-  return {
-    ...args,
-    phone_number: phone,
-    caller_phone: phone,
-    caller_id: phone,
-  };
+  const next: Record<string, unknown> = { ...args };
+  const common = ["phone_number", "phone", "PHONE", "caller_phone", "caller_id", "mobile", "msisdn"];
+  const names = new Set<string>();
+  if (params?.length) {
+    for (const p of params) {
+      if (/phone|caller|mobile|msisdn|телефон/i.test(`${p.name} ${p.query_key ?? ""}`)) names.add(p.name);
+    }
+  } else {
+    for (const n of common) names.add(n);
+  }
+  if (!names.size) names.add("phone_number");
+  for (const name of names) next[name] = phone;
+  return next;
+}
+
+function crmFirstTurnText(ctx: ExtCtx): string {
+  const phone = String(ctx.callerPhone ?? "").trim();
+  if (ctx.crm?.enabled && phone) {
+    return `Before greeting, silently call get_local_system_data with phone_number="${phone}" to identify the caller by phone. If CRM returns a name or customer data, greet the caller using that data. Then say: "${String(ctx.greeting).slice(0, 200)}"`;
+  }
+  return `Greet the caller now. Say: "${String(ctx.greeting).slice(0, 200)}"`;
 }
 
 async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>): Promise<unknown> {
@@ -393,7 +408,7 @@ async function handleConn(conn: Deno.Conn) {
         greetingSent = true;
         h.send({
           client_content: {
-            turns: [{ role: "user", parts: [{ text: `Greet the caller now. Say: "${String(ctx.greeting).slice(0, 200)}"` }] }],
+            turns: [{ role: "user", parts: [{ text: crmFirstTurnText(ctx) }] }],
             turn_complete: true,
           },
         });
@@ -410,14 +425,13 @@ async function handleConn(conn: Deno.Conn) {
     });
     h.onToolCall(async (id, name, args) => {
       if (!ctx) return;
-      const effectiveArgs = withCallerPhone(args, ctx.callerPhone);
       let result: unknown;
       if (name === "log_objection") result = await logObjection(callUuid, args);
-      else if (name === "get_local_system_data") result = await callCrm1(ctx, effectiveArgs);
-      else if (name === "create_emergency_ticket") result = await callCrm2(callUuid, effectiveArgs);
+      else if (name === "get_local_system_data") result = await callCrm1(ctx, withCallerPhone(args, ctx.callerPhone));
+      else if (name === "create_emergency_ticket") result = await callCrm2(callUuid, withCallerPhone(args, ctx.callerPhone));
       else {
         const tool = ctx.tools.find((t) => t.name === name);
-        result = tool ? await executeWebhookTool(tool, effectiveArgs) : { error: `unknown tool ${name}` };
+        result = tool ? await executeWebhookTool(tool, withCallerPhone(args, ctx.callerPhone, tool.config.parameters)) : { error: `unknown tool ${name}` };
       }
       h.send(buildToolResponse(id, name, result));
     });

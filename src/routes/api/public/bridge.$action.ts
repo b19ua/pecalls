@@ -23,6 +23,10 @@ function unauthorized() { return new Response("Unauthorized", { status: 401 }); 
 function badRequest(msg: string) { return new Response(msg, { status: 400 }); }
 function ok(body: unknown) { return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } }); }
 
+function buildCallerContextText(phone: string): string {
+  return `=== CALLER CONTEXT ===\nThe caller's phone number for this call is already known by the telephony system: ${phone}. This is the authoritative identifier for CRM lookup.\nIf you need CRM/customer data, IMMEDIATELY call \`get_local_system_data\` with phone_number="${phone}" at the start of the conversation — do NOT ask the caller to say their phone number unless this lookup fails or returns no result.\nIf any CRM/tool call needs a phone/caller/customer identifier, use exactly this number.\n=== END CALLER CONTEXT ===`;
+}
+
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let m = 0;
@@ -114,10 +118,38 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
           // HMAC secret НЕ отдаём наружу — CRM2 вызовы проксируются через action=crm2.
           const crm2Configured = !!(drc?.crm2_enabled && drc?.crm2_url);
 
+          // Backward-compatibility for already installed on-prem Asterisk bridges:
+          // older bridge builds call `call-init` first, then `context`, but do not
+          // copy `call-init.caller_phone` into the Gemini system context. Infer the
+          // current call here and inject the caller phone into fields every bridge
+          // version already consumes (`systemPrompt` and CRM tool description).
+          const recentCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+          const { data: activeCall } = await supabaseAdmin
+            .from("calls")
+            .select("direction, from_number, to_number, started_at")
+            .eq("agent_id", auth.agentId)
+            .eq("owner_id", auth.ownerId)
+            .in("status", ["in_progress", "queued", "ringing"])
+            .gte("started_at", recentCutoff)
+            .order("started_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          const inferredCallerPhone = activeCall
+            ? String(activeCall.direction === "outbound" ? activeCall.to_number || "" : activeCall.from_number || "").trim()
+            : "";
+          const callerContextText = inferredCallerPhone ? buildCallerContextText(inferredCallerPhone) : "";
+          const systemPrompt = [agent.system_prompt || "", callerContextText].filter(Boolean).join("\n\n");
+          const crmWithCaller = crmLite && inferredCallerPhone
+            ? {
+                ...crmLite,
+                description: `${crmLite.description}\nCaller phone is already known from telephony: ${inferredCallerPhone}. Always call this tool with phone_number="${inferredCallerPhone}"; never ask the caller to dictate their phone number first.`,
+              }
+            : crmLite;
+
           return ok({
             agentId: agent.id,
             ownerId: agent.owner_id,
-            systemPrompt: agent.system_prompt || "",
+            systemPrompt,
             knowledgeContext,
             language: agent.language || "ru-RU",
             greeting: agent.greeting || "Здравствуйте!",
@@ -131,8 +163,9 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
             objectionCustomResponses: (agent.objection_custom_responses && typeof agent.objection_custom_responses === "object")
               ? agent.objection_custom_responses : {},
             emotionTrackingEnabled: agent.emotion_tracking_enabled !== false,
-            crm: crmLite,
+            crm: crmWithCaller,
             crm2: crm2Lite,
+            callerPhone: inferredCallerPhone || null,
             crm2Configured,
             toolsConfig: (agent.tools_config && typeof agent.tools_config === "object" && !Array.isArray(agent.tools_config))
               ? agent.tools_config : {},

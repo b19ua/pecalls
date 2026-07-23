@@ -141,7 +141,6 @@ function humanizeKey(key: string): string {
     ADDRESS_STREET: "Улица",
     ADDRESS_1: "Адрес клиента",
     EMAIL: "Email клиента",
-    UF_CRM_1784721692802: "Задолженность по оплате",
   };
   if (known[key]) return known[key];
   return key
@@ -207,19 +206,61 @@ function factMatches(f: CrmFact, re: RegExp): boolean {
   return re.test(`${f.key} ${f.label} ${f.path}`);
 }
 
-export function normalizeCrmToolResult(data: unknown, responseHint = "") {
+function semanticKeyFromLabel(label: string): string | null {
+  if (/(задолж|долг|debt|balance|остаток|оплат|payment|amount due|сумм)/i.test(label)) return "debt";
+  if (/(имя|фио|name|customer|client|клиент)/i.test(label)) return "customer_name";
+  if (/(телефон|phone|mobile|caller|msisdn)/i.test(label)) return "phone_number";
+  if (/(адрес|address|street|улица|дом)/i.test(label)) return "address";
+  return null;
+}
+
+function fieldKeyFromHint(rawField: string): string {
+  return lastKey(rawField.replace(/\[\d+\]/g, "").trim());
+}
+
+export function extractExplicitFieldHints(responseHint = ""): Record<string, string> {
+  const hints: Record<string, string> = {};
+  if (!responseHint.trim()) return hints;
+
+  const field = "([A-Za-z_][A-Za-z0-9_.\\[\\]-]{1,160})";
+  const patterns = [
+    new RegExp(`${field}\\s*(?:->|:|=)\\s*([^\\n;,]+)`, "gi"),
+    new RegExp(`${field}\\s*\\(([^)]+)\\)`, "gi"),
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of responseHint.matchAll(pattern)) {
+      const key = fieldKeyFromHint(match[1] || "");
+      const semantic = semanticKeyFromLabel(match[2] || "");
+      if (key && semantic && !hints[semantic]) hints[semantic] = key;
+    }
+  }
+
+  return hints;
+}
+
+function findExplicitFact(facts: CrmFact[], fieldName?: string): CrmFact | undefined {
+  const wanted = String(fieldName ?? "").trim().toLowerCase();
+  if (!wanted) return undefined;
+  return facts.find((f) => f.key.toLowerCase() === wanted);
+}
+
+export function normalizeCrmToolResult(data: unknown, responseHint = "", explicitFieldHints: Record<string, string> = extractExplicitFieldHints(responseHint)) {
   const primary = pickPrimaryRecord(data);
   const facts: CrmFact[] = [];
   collectFacts(primary.node, primary.path, responseHint, facts);
   if (!facts.length) collectFacts(data, "", responseHint, facts);
 
-  const nameFact = facts.find((f) => /^(NAME|FULL_NAME)$/i.test(f.key))
+  const nameFact = findExplicitFact(facts, explicitFieldHints.customer_name || explicitFieldHints.name)
+    || facts.find((f) => /^(NAME|FULL_NAME)$/i.test(f.key))
     || facts.find((f) => factMatches(f, /(имя клиента|customer name|client name)/i));
   const lastNameFact = facts.find((f) => /^LAST_NAME$/i.test(f.key));
-  const debtFact = facts.find((f) => /^UF_CRM_1784721692802$/i.test(f.key))
+  const debtFact = findExplicitFact(facts, explicitFieldHints.debt || explicitFieldHints.payment_debt)
     || facts.find((f) => factMatches(f, /(задолж|долг|debt|balance|остаток|оплат|payment due|amount due|сумм)/i));
-  const phoneFact = facts.find((f) => factMatches(f, /(^|\b)(PHONE|телефон|phone)(\b|$)/i));
-  const addressFact = facts.find((f) => factMatches(f, /(адрес|address|street|улица|дом)/i));
+  const phoneFact = findExplicitFact(facts, explicitFieldHints.phone_number || explicitFieldHints.phone)
+    || facts.find((f) => factMatches(f, /(^|\b)(PHONE|телефон|phone)(\b|$)/i));
+  const addressFact = findExplicitFact(facts, explicitFieldHints.address)
+    || facts.find((f) => factMatches(f, /(адрес|address|street|улица|дом)/i));
 
   const semantic: Record<string, string | number | boolean> = {};
   if (nameFact) semantic.customer_name = lastNameFact && lastNameFact.value !== nameFact.value

@@ -503,6 +503,8 @@ async function handleConn(conn: Deno.Conn) {
                   if (!v.ok) continue;
                   const jv = await v.json();
                   if (String(jv?.value || "") !== callUuid) continue;
+                  const channelCaller = String(ch?.caller?.number || ch?.connected?.number || "").trim();
+                  if (channelCaller) fromNumber = channelCaller;
                   const cv = await fetch(`${ctx.handoffAriBase}/ari/channels/${ch.id}/variable?variable=LUNARA_CALLERID`, { headers: { Authorization: ctx.handoffAriAuth } });
                   if (cv.ok) {
                     const cvj = await cv.json();

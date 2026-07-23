@@ -8,7 +8,7 @@ import {
   getModelCandidates,
   sanitizeSystemPrompt,
 } from "../_shared/live-config.ts";
-import { buildGeminiSetupPayload, buildGreetingTurn, buildToolResponse } from "../_shared/live-session.ts";
+import { buildGeminiSetupPayload, buildToolResponse } from "../_shared/live-session.ts";
 import {
   OBJECTION_CATEGORY_LABELS,
   buildCallerContextBlock,

@@ -439,15 +439,31 @@ async function handleConn(conn: Deno.Conn) {
     h.onToolCall(async (id, name, args) => {
       if (!ctx) return;
       let result: unknown;
+      const t0 = Date.now();
+      const effArgs = withCallerPhone(args, ctx.callerPhone);
       if (name === "log_objection") result = await logObjection(callUuid, args);
-      else if (name === "get_local_system_data") result = await callCrm1(ctx, withCallerPhone(args, ctx.callerPhone));
-      else if (name === "create_emergency_ticket") result = await callCrm2(callUuid, withCallerPhone(args, ctx.callerPhone));
+      else if (name === "get_local_system_data") result = await callCrm1(ctx, effArgs);
+      else if (name === "create_emergency_ticket") result = await callCrm2(callUuid, effArgs);
       else {
         const tool = ctx.tools.find((t) => t.name === name);
         result = tool ? await executeWebhookTool(tool, withCallerPhone(args, ctx.callerPhone, tool.config.parameters)) : { error: `unknown tool ${name}` };
       }
+      if (name !== "log_objection") {
+        const r = (result ?? {}) as Record<string, any>;
+        logToolCall(callUuid, {
+          tool_name: name,
+          ok: r.error === undefined && r.ok !== false,
+          status_code: typeof r.status === "number" ? r.status : null,
+          latency_ms: Date.now() - t0,
+          args: effArgs,
+          semantic: r.crm_semantic ?? {},
+          facts_count: Array.isArray(r.crm_facts) ? r.crm_facts.length : 0,
+          error: r.error ? String(r.error) : (r.reason ? String(r.reason) : null),
+        });
+      }
       h.send(buildToolResponse(id, name, result));
     });
+
     h.onClose((code, reason) => {
       geminiReady = false;
       log("gemini closed", code, reason);

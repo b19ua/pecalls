@@ -121,6 +121,14 @@ async function bridgeCall(action: string, body: unknown): Promise<any> {
   return txt ? JSON.parse(txt) : null;
 }
 
+// Отправляет телеметрию по CRM/tool-вызовам в Lovable, чтобы диагностика была
+// видна в UI, а не только в stdout докера на сервере клиента.
+function logToolCall(callSid: string, payload: Record<string, unknown>): void {
+  void bridgeCall("tool-log", { call_sid: callSid, ...payload }).catch((e) => log("tool-log", e));
+}
+
+
+
 type ExtCtx = AiCoreCtx & {
   voice: string;
   model: string;

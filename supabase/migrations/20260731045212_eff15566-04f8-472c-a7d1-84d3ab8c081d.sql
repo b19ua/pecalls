@@ -1,0 +1,1 @@
+DELETE FROM public.crm_tool_calls WHERE call_sid = 'selftest-1';

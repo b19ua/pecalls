@@ -687,7 +687,9 @@ function LocalCrmCard() {
           <TabsList>
             <TabsTrigger value="crm1">CRM #1: Client Lookup</TabsTrigger>
             <TabsTrigger value="crm2">CRM #2: Emergency Ticket Creation</TabsTrigger>
+            <TabsTrigger value="crmlog">CRM Call Log</TabsTrigger>
           </TabsList>
+
 
           <TabsContent value="crm1" className="space-y-4">
             <div className="flex items-center justify-between">

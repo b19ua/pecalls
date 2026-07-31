@@ -251,7 +251,7 @@ export const getCrmHealthFn = createServerFn({ method: "GET" })
 export type CrmToolCallRow = {
   id: string; created_at: string; call_sid: string | null; transport: string;
   tool_name: string; ok: boolean; status_code: number | null; latency_ms: number | null;
-  args: Record<string, unknown>; semantic: Record<string, unknown>; facts_count: number;
+  args: Record<string, string | number | boolean | null>; semantic: Record<string, string | number | boolean | null>; facts_count: number;
   error: string | null;
 };
 

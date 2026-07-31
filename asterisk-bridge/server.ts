@@ -214,8 +214,8 @@ async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>):
     let parsed: unknown = txt;
     try { parsed = JSON.parse(txt); } catch { /* keep text */ }
     const normalized = normalizeCrmToolResult(parsed, cfg.response_hint || "");
-    // TEMP DEBUG, remove after diagnosis.
-    log("[crm-debug] executeWebhookTool tool=", tool.name, "responseHint=", cfg.response_hint, "debtFact found=", !!normalized.crm_semantic.payment_debt);
+    log("[crm]", tool.name, "status=", r.status, "facts=", normalized.crm_facts.length, "semantic=", Object.keys(normalized.crm_semantic).join(","));
+
     return {
       status: r.status,
       ok: r.ok,

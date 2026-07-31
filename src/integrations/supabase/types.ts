@@ -946,6 +946,57 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_tool_calls: {
+        Row: {
+          agent_id: string | null
+          args: Json
+          call_sid: string | null
+          created_at: string
+          error: string | null
+          facts_count: number
+          id: string
+          latency_ms: number | null
+          ok: boolean
+          owner_id: string
+          semantic: Json
+          status_code: number | null
+          tool_name: string
+          transport: string
+        }
+        Insert: {
+          agent_id?: string | null
+          args?: Json
+          call_sid?: string | null
+          created_at?: string
+          error?: string | null
+          facts_count?: number
+          id?: string
+          latency_ms?: number | null
+          ok?: boolean
+          owner_id: string
+          semantic?: Json
+          status_code?: number | null
+          tool_name: string
+          transport?: string
+        }
+        Update: {
+          agent_id?: string | null
+          args?: Json
+          call_sid?: string | null
+          created_at?: string
+          error?: string | null
+          facts_count?: number
+          id?: string
+          latency_ms?: number | null
+          ok?: boolean
+          owner_id?: string
+          semantic?: Json
+          status_code?: number | null
+          tool_name?: string
+          transport?: string
+        }
+        Relationships: []
+      }
       data_residency_configs: {
         Row: {
           created_at: string

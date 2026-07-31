@@ -266,6 +266,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
             const rawArgs = (fc.args || {}) as Record<string, unknown>;
             const effectiveArgs = withCallerPhone(rawArgs, ctx?.callerPhone ?? callerPhoneKnown);
             let result: unknown;
+            const t0 = Date.now();
             if (fc.name === "log_objection") {
               result = await logObjectionEvent(ctx, callSid, rawArgs);
             } else if (fc.name === "get_local_system_data") {
@@ -278,11 +279,29 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
                 ? await executeTool(tool, withCallerPhone(rawArgs, ctx?.callerPhone ?? callerPhoneKnown, tool.config.parameters))
                 : { error: `unknown tool ${fc.name}` };
             }
+            if (fc.name !== "log_objection" && ctx?.ownerId) {
+              const r = (result ?? {}) as Record<string, any>;
+              void supa.from("crm_tool_calls").insert({
+                owner_id: ctx.ownerId,
+                agent_id: ctx.agentId,
+                call_sid: callSid,
+                transport: "twilio",
+                tool_name: String(fc.name).slice(0, 120),
+                ok: r.error === undefined && r.ok !== false,
+                status_code: typeof r.status === "number" ? r.status : null,
+                latency_ms: Date.now() - t0,
+                args: effectiveArgs,
+                semantic: r.crm_semantic ?? {},
+                facts_count: Array.isArray(r.crm_facts) ? r.crm_facts.length : 0,
+                error: r.error ? String(r.error).slice(0, 1000) : (r.reason ? String(r.reason).slice(0, 1000) : null),
+              } as never).then(({ error }) => { if (error) console.error("crm_tool_calls", error.message); });
+            }
             try {
               gemini!.send(JSON.stringify(buildToolResponse(fc.id, fc.name, result)));
             } catch (e) { console.error("tool resp", e); }
           }
         }
+
 
       } catch (e) {
         console.error("gemini parse", e);

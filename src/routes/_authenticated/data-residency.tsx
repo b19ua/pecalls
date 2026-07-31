@@ -23,6 +23,7 @@ import {
 } from "@/lib/data-residency.functions";
 import { listCronJobsFn, listCronRunsFn, setCronActiveFn, type CronJob, type CronRun } from "@/lib/admin-cron.functions";
 import { getMyRolesFn } from "@/lib/admin-roles.functions";
+import { listCrmToolCallsFn, type CrmToolCallRow } from "@/lib/data-residency.functions";
 import { exportMyDataFn, eraseMyDataFn, syncToGatewayFn, listMyDsrRequestsFn } from "@/lib/gdpr.functions";
 import { useI18n } from "@/lib/i18n";
 
@@ -687,7 +688,9 @@ function LocalCrmCard() {
           <TabsList>
             <TabsTrigger value="crm1">CRM #1: Client Lookup</TabsTrigger>
             <TabsTrigger value="crm2">CRM #2: Emergency Ticket Creation</TabsTrigger>
+            <TabsTrigger value="crmlog">CRM Call Log</TabsTrigger>
           </TabsList>
+
 
           <TabsContent value="crm1" className="space-y-4">
             <div className="flex items-center justify-between">
@@ -897,7 +900,12 @@ function LocalCrmCard() {
               </p>
             </div>
           </TabsContent>
+
+          <TabsContent value="crmlog" className="space-y-4">
+            <CrmToolCallsSection />
+          </TabsContent>
         </Tabs>
+
       </CardContent>
       <RecentTicketsSection />
     </Card>
@@ -1096,3 +1104,83 @@ function CronJobsAdminCard() {
 
 
 
+
+function CrmToolCallsSection() {
+  const load = useServerFn(listCrmToolCallsFn);
+  const [rows, setRows] = useState<CrmToolCallRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const res = await load({ data: { limit: 50 } });
+      setRows(res.rows);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось загрузить журнал");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Каждый вызов CRM-инструмента агентом во время звонка (Asterisk и Twilio). Здесь видно, был ли вообще
+          выполнен lookup, сколько фактов извлечено и какие поля распознаны (имя, задолженность, адрес).
+        </p>
+        <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+        </Button>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Пока нет записей. Если во время звонка агент говорит «данные недоступны», а здесь пусто —
+          значит инструмент вообще не был вызван (или мост на сервере клиента устаревшей версии).
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-md border border-border">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                <th className="p-2 text-left">Время</th>
+                <th className="p-2 text-left">Инструмент</th>
+                <th className="p-2 text-left">Транспорт</th>
+                <th className="p-2 text-left">Результат</th>
+                <th className="p-2 text-left">Задержка</th>
+                <th className="p-2 text-left">Факты</th>
+                <th className="p-2 text-left">Распознано</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t border-border align-top">
+                  <td className="p-2 whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</td>
+                  <td className="p-2 font-mono">{r.tool_name}</td>
+                  <td className="p-2">{r.transport}</td>
+                  <td className="p-2">
+                    {r.ok
+                      ? <Badge variant="secondary">ok{r.status_code ? ` ${r.status_code}` : ""}</Badge>
+                      : <Badge variant="destructive">{r.error ? String(r.error).slice(0, 60) : "error"}</Badge>}
+                  </td>
+                  <td className="p-2">{r.latency_ms ?? "—"} ms</td>
+                  <td className="p-2">{r.facts_count}</td>
+                  <td className="p-2">
+                    {Object.keys(r.semantic || {}).length
+                      ? Object.entries(r.semantic).map(([k, v]) => (
+                          <div key={k}><span className="text-muted-foreground">{k}:</span> {String(v)}</div>
+                        ))
+                      : <span className="text-muted-foreground">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

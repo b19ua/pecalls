@@ -247,3 +247,25 @@ export const getCrmHealthFn = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return { rows: (data ?? []) as unknown as CrmHealthRow[] };
   });
+
+export type CrmToolCallRow = {
+  id: string; created_at: string; call_sid: string | null; transport: string;
+  tool_name: string; ok: boolean; status_code: number | null; latency_ms: number | null;
+  args: Record<string, string | number | boolean | null>; semantic: Record<string, string | number | boolean | null>; facts_count: number;
+  error: string | null;
+};
+
+export const listCrmToolCallsFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ limit: z.number().int().min(1).max(200).default(50) }).parse(d))
+  .handler(async ({ data, context }): Promise<{ rows: CrmToolCallRow[] }> => {
+    const { supabase, userId } = context;
+    const { data: rows, error } = await supabase
+      .from("crm_tool_calls" as never)
+      .select("id, created_at, call_sid, transport, tool_name, ok, status_code, latency_ms, args, semantic, facts_count, error")
+      .eq("owner_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(data.limit);
+    if (error) throw new Error(error.message);
+    return { rows: (rows ?? []) as unknown as CrmToolCallRow[] };
+  });

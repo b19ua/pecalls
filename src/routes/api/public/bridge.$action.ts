@@ -310,7 +310,29 @@ export const Route = createFileRoute("/api/public/bridge/$action")({
           return ok({ ok: true });
         }
 
+        // ---------------- tool-log (CRM tool telemetry from on-prem bridge) ----------------
+        if (action === "tool-log") {
+          const row = {
+            owner_id: auth.ownerId,
+            agent_id: auth.agentId,
+            call_sid: body.call_sid ? String(body.call_sid).slice(0, 128) : null,
+            transport: "asterisk",
+            tool_name: String(body.tool_name || "unknown").slice(0, 120),
+            ok: body.ok === true,
+            status_code: Number.isFinite(Number(body.status_code)) ? Number(body.status_code) : null,
+            latency_ms: Number.isFinite(Number(body.latency_ms)) ? Number(body.latency_ms) : null,
+            args: (body.args && typeof body.args === "object") ? body.args : {},
+            semantic: (body.semantic && typeof body.semantic === "object") ? body.semantic : {},
+            facts_count: Number.isFinite(Number(body.facts_count)) ? Number(body.facts_count) : 0,
+            error: body.error ? String(body.error).slice(0, 1000) : null,
+          };
+          const { error } = await supabaseAdmin.from("crm_tool_calls").insert(row as never);
+          if (error) return new Response(error.message, { status: 500 });
+          return ok({ ok: true });
+        }
+
         // ---------------- objection ----------------
+
         if (action === "objection") {
           const row = {
             owner_id: auth.ownerId,

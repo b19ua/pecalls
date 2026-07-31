@@ -121,6 +121,14 @@ async function bridgeCall(action: string, body: unknown): Promise<any> {
   return txt ? JSON.parse(txt) : null;
 }
 
+// Отправляет телеметрию по CRM/tool-вызовам в Lovable, чтобы диагностика была
+// видна в UI, а не только в stdout докера на сервере клиента.
+function logToolCall(callSid: string, payload: Record<string, unknown>): void {
+  void bridgeCall("tool-log", { call_sid: callSid, ...payload }).catch((e) => log("tool-log", e));
+}
+
+
+
 type ExtCtx = AiCoreCtx & {
   voice: string;
   model: string;
@@ -206,8 +214,8 @@ async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>):
     let parsed: unknown = txt;
     try { parsed = JSON.parse(txt); } catch { /* keep text */ }
     const normalized = normalizeCrmToolResult(parsed, cfg.response_hint || "");
-    // TEMP DEBUG, remove after diagnosis.
-    log("[crm-debug] executeWebhookTool tool=", tool.name, "responseHint=", cfg.response_hint, "debtFact found=", !!normalized.crm_semantic.payment_debt);
+    log("[crm]", tool.name, "status=", r.status, "facts=", normalized.crm_facts.length, "semantic=", Object.keys(normalized.crm_semantic).join(","));
+
     return {
       status: r.status,
       ok: r.ok,
@@ -243,8 +251,8 @@ async function callCrm1(ctx: ExtCtx, args: Record<string, unknown>): Promise<unk
     try { parsed = JSON.parse(txt); } catch { /* text */ }
     if (!r.ok) return { ok: false, error: "Данные временно недоступны", reason: `http_${r.status}` };
     const normalized = normalizeCrmToolResult(parsed, `${c.object1}\n${c.object2}\n${c.object3}`);
-    // TEMP DEBUG, remove after diagnosis.
-    log("[crm-debug] callCrm1 object1/2/3=", c.object1, c.object2, c.object3, "debtFact found=", !!normalized.crm_semantic.payment_debt);
+    log("[crm] get_local_system_data facts=", normalized.crm_facts.length, "semantic=", Object.keys(normalized.crm_semantic).join(","));
+
     return {
       ok: true, latency_ms: Date.now() - t0,
       [c.object1]: (parsed as any).object_1 ?? (parsed as any)[c.object1] ?? null,
@@ -431,15 +439,31 @@ async function handleConn(conn: Deno.Conn) {
     h.onToolCall(async (id, name, args) => {
       if (!ctx) return;
       let result: unknown;
+      const t0 = Date.now();
+      const effArgs = withCallerPhone(args, ctx.callerPhone);
       if (name === "log_objection") result = await logObjection(callUuid, args);
-      else if (name === "get_local_system_data") result = await callCrm1(ctx, withCallerPhone(args, ctx.callerPhone));
-      else if (name === "create_emergency_ticket") result = await callCrm2(callUuid, withCallerPhone(args, ctx.callerPhone));
+      else if (name === "get_local_system_data") result = await callCrm1(ctx, effArgs);
+      else if (name === "create_emergency_ticket") result = await callCrm2(callUuid, effArgs);
       else {
         const tool = ctx.tools.find((t) => t.name === name);
         result = tool ? await executeWebhookTool(tool, withCallerPhone(args, ctx.callerPhone, tool.config.parameters)) : { error: `unknown tool ${name}` };
       }
+      if (name !== "log_objection") {
+        const r = (result ?? {}) as Record<string, any>;
+        logToolCall(callUuid, {
+          tool_name: name,
+          ok: r.error === undefined && r.ok !== false,
+          status_code: typeof r.status === "number" ? r.status : null,
+          latency_ms: Date.now() - t0,
+          args: effArgs,
+          semantic: r.crm_semantic ?? {},
+          facts_count: Array.isArray(r.crm_facts) ? r.crm_facts.length : 0,
+          error: r.error ? String(r.error) : (r.reason ? String(r.reason) : null),
+        });
+      }
       h.send(buildToolResponse(id, name, result));
     });
+
     h.onClose((code, reason) => {
       geminiReady = false;
       log("gemini closed", code, reason);

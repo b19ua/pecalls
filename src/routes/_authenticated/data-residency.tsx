@@ -899,7 +899,12 @@ function LocalCrmCard() {
               </p>
             </div>
           </TabsContent>
+
+          <TabsContent value="crmlog" className="space-y-4">
+            <CrmToolCallsSection />
+          </TabsContent>
         </Tabs>
+
       </CardContent>
       <RecentTicketsSection />
     </Card>

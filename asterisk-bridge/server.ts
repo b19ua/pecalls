@@ -399,6 +399,39 @@ function openGemini(ctx: ExtCtx, modelOverride?: string, skipGreeting = false): 
   });
 }
 
+// ------------------------- caller id via ARI -------------------------
+// Кэш ARI-кредов последнего звонка: позволяет стартовать поиск caller id
+// параллельно с загрузкой контекста, а не после неё.
+let cachedAri: { base: string; auth: string } | null = null;
+
+async function resolveCallerId(base: string, auth: string, callUuid: string): Promise<string | null> {
+  try {
+    const chList = await fetch(`${base}/ari/channels`, { headers: { Authorization: auth } });
+    if (!chList.ok) return null;
+    const chans: any[] = await chList.json();
+    // Все каналы опрашиваем параллельно — последовательный цикл добавлял
+    // до нескольких сотен мс на каждый канал перед первым словом агента.
+    const probes = await Promise.all(chans.slice(0, 25).map(async (ch) => {
+      try {
+        const [uv, cv] = await Promise.all([
+          fetch(`${base}/ari/channels/${ch.id}/variable?variable=LUNARA_UUID`, { headers: { Authorization: auth } }),
+          fetch(`${base}/ari/channels/${ch.id}/variable?variable=LUNARA_CALLERID`, { headers: { Authorization: auth } }),
+        ]);
+        if (!uv.ok) return null;
+        const uuidVal = String((await uv.json())?.value || "");
+        if (uuidVal !== callUuid) return null;
+        const dialplanCaller = cv.ok ? String((await cv.json())?.value || "").trim() : "";
+        const channelCaller = String(ch?.caller?.number || ch?.connected?.number || "").trim();
+        return dialplanCaller || channelCaller || null;
+      } catch { return null; }
+    }));
+    return probes.find((v) => !!v) ?? null;
+  } catch (e) {
+    log("[caller-id] ARI lookup failed:", e);
+    return null;
+  }
+}
+
 // ------------------------- handoff via ARI setChannelVar -------------------------
 async function ariSetHandoff(ctx: ExtCtx, callUuid: string): Promise<{ ok: boolean; target: string | null }> {
   if (!ctx.handoffAriBase || !ctx.handoffAriAuth || !ctx.handoffNumbers.length) return { ok: false, target: null };

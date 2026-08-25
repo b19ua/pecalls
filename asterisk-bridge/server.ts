@@ -464,6 +464,17 @@ async function handleConn(conn: Deno.Conn) {
             turn_complete: true,
           },
         });
+        // CRM-идентификация идёт параллельно приветствию, не задерживая звук.
+        void prefetchCrmFacts(ctx, callUuid).then((facts) => {
+          if (!facts) return;
+          h.send({
+            client_content: {
+              turns: [{ role: "user", parts: [{ text: facts }] }],
+              turn_complete: false,
+            },
+          });
+          log("[prefetch] CRM facts injected");
+        });
       }
     });
     h.onAudio((pcm, rate) => {

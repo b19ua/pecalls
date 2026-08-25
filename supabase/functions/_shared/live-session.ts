@@ -2,7 +2,9 @@
 // Возвращает готовый setup-payload с проверенной Lunara-конфигурацией:
 //   response_modalities: AUDIO
 //   snake_case (как принимает Gemini Live)
-//   VAD: HIGH start / LOW end (не режем клиента, ловим перебивы)
+//   VAD: HIGH start / HIGH end + 400ms silence (быстрый ответ)
+//   interruption handling: NO_INTERRUPTION (телефония часто возвращает echo и
+//   иначе Gemini обрывает собственную фразу на полуслове)
 //   input+output audio transcription
 //   optional function tools
 //
@@ -28,6 +30,7 @@ export type GeminiSetupInput = {
     prefixPaddingMs?: number;
     silenceDurationMs?: number;
   };
+  activityHandling?: "START_OF_ACTIVITY_INTERRUPTS" | "NO_INTERRUPTION";
 };
 
 export function buildGeminiSetupPayload(input: GeminiSetupInput): Record<string, unknown> {
@@ -59,7 +62,7 @@ export function buildGeminiSetupPayload(input: GeminiSetupInput): Record<string,
           prefix_padding_ms: vad.prefixPaddingMs ?? 200,
           silence_duration_ms: vad.silenceDurationMs ?? 400,
         },
-        activity_handling: "START_OF_ACTIVITY_INTERRUPTS",
+        activity_handling: input.activityHandling ?? "NO_INTERRUPTION",
       },
       ...(tools ? { tools } : {}),
     },

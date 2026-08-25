@@ -464,6 +464,9 @@ async function handleConn(conn: Deno.Conn) {
   let geminiReady = false;
   let modelIdx = 0;
   let greetingSent = false;
+  let prefetchedCrmResult: unknown | null = null;
+  let prefetchedCrmToolName: string | null = null;
+  let prefetchingCrm = false;
   const transcript: { role: string; text: string; at: number }[] = [];
   let lastSavedLen = 0;
   let outQueue = new Uint8Array(0);
@@ -497,17 +500,19 @@ async function handleConn(conn: Deno.Conn) {
             turn_complete: true,
           },
         });
-        // CRM-идентификация идёт параллельно приветствию, не задерживая звук.
-        void prefetchCrmFacts(ctx, callUuid).then((facts) => {
-          if (!facts) return;
-          h.send({
-            client_content: {
-              turns: [{ role: "user", parts: [{ text: facts }] }],
-              turn_complete: false,
-            },
-          });
-          log("[prefetch] CRM facts injected");
-        });
+        // CRM-идентификация идёт параллельно приветствию, но НЕ отправляется в
+        // Gemini отдельным client_content во время речи агента: такая инъекция
+        // может прервать текущую аудио-генерацию и дать обрыв на полуслове.
+        // Результат кэшируется и отдаётся мгновенно при первом tool-call.
+        const toolName = pickCrmLookupToolName(ctx);
+        if (toolName && !prefetchingCrm) {
+          prefetchingCrm = true;
+          prefetchedCrmToolName = toolName;
+          void prefetchCrmFacts(ctx, callUuid).then((result) => {
+            prefetchedCrmResult = result;
+            if (result) log("[prefetch] CRM facts cached");
+          }).finally(() => { prefetchingCrm = false; });
+        }
       }
     });
     h.onAudio((pcm, rate) => {
@@ -525,6 +530,7 @@ async function handleConn(conn: Deno.Conn) {
       const t0 = Date.now();
       const effArgs = withCallerPhone(args, ctx.callerPhone);
       if (name === "log_objection") result = await logObjection(callUuid, args);
+      else if (prefetchedCrmResult && name === prefetchedCrmToolName) result = prefetchedCrmResult;
       else if (name === "get_local_system_data") result = await callCrm1(ctx, effArgs);
       else if (name === "create_emergency_ticket") result = await callCrm2(callUuid, effArgs);
       else {

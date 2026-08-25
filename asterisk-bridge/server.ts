@@ -272,8 +272,9 @@ async function callCrm1(ctx: ExtCtx, args: Record<string, unknown>): Promise<unk
 }
 
 // Предзагрузка карточки клиента по CLI параллельно с приветствием.
-// Возвращает готовый текст фактов для подмешивания в контекст диалога.
-async function prefetchCrmFacts(ctx: ExtCtx, callSid: string): Promise<string | null> {
+// Ничего не инжектим в Gemini во время речи агента — возвращаем готовый
+// tool-result, который будет отдан при первом реальном вызове CRM-инструмента.
+async function prefetchCrmFacts(ctx: ExtCtx, callSid: string): Promise<unknown | null> {
   const phone = String(ctx.callerPhone ?? "").trim();
   const toolName = pickCrmLookupToolName(ctx);
   if (!phone || !toolName) return null;
@@ -303,12 +304,7 @@ async function prefetchCrmFacts(ctx: ExtCtx, callSid: string): Promise<string | 
     error: result?.error ? String(result.error) : null,
   });
   if (!facts.length) return null;
-  return [
-    "=== CRM DATA FOR THIS CALLER (already fetched, do NOT call the tool again for these fields) ===",
-    `phone: ${phone}`,
-    ...facts,
-    "Use these facts directly when the caller asks about their account, debt, balance, address or status. Never say the data is unavailable while these facts exist.",
-  ].join("\n");
+  return result;
 }
 
 // CRM2 requires the HMAC secret which lives on Lovable — proxy the call.

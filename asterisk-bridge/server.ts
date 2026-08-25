@@ -271,6 +271,46 @@ async function callCrm1(ctx: ExtCtx, args: Record<string, unknown>): Promise<unk
   }
 }
 
+// Предзагрузка карточки клиента по CLI параллельно с приветствием.
+// Возвращает готовый текст фактов для подмешивания в контекст диалога.
+async function prefetchCrmFacts(ctx: ExtCtx, callSid: string): Promise<string | null> {
+  const phone = String(ctx.callerPhone ?? "").trim();
+  const toolName = pickCrmLookupToolName(ctx);
+  if (!phone || !toolName) return null;
+  const t0 = Date.now();
+  let result: any;
+  try {
+    if (toolName === "get_local_system_data") {
+      result = await callCrm1(ctx, { phone_number: phone });
+    } else {
+      const tool = ctx.tools.find((t) => t.name === toolName);
+      if (!tool) return null;
+      result = await executeWebhookTool(tool, withCallerPhone({}, phone, tool.config.parameters));
+    }
+  } catch (e) {
+    log("[prefetch] failed", e);
+    return null;
+  }
+  const facts: string[] = Array.isArray(result?.crm_facts) ? result.crm_facts : [];
+  logToolCall(callSid, {
+    tool_name: `${toolName} (prefetch)`,
+    ok: result?.error === undefined && result?.ok !== false,
+    status_code: typeof result?.status === "number" ? result.status : null,
+    latency_ms: Date.now() - t0,
+    args: { phone_number: phone },
+    semantic: result?.crm_semantic ?? {},
+    facts_count: facts.length,
+    error: result?.error ? String(result.error) : null,
+  });
+  if (!facts.length) return null;
+  return [
+    "=== CRM DATA FOR THIS CALLER (already fetched, do NOT call the tool again for these fields) ===",
+    `phone: ${phone}`,
+    ...facts,
+    "Use these facts directly when the caller asks about their account, debt, balance, address or status. Never say the data is unavailable while these facts exist.",
+  ].join("\n");
+}
+
 // CRM2 requires the HMAC secret which lives on Lovable — proxy the call.
 const crm2TicketPerCall = new Map<string, number>();
 async function callCrm2(callSid: string, args: Record<string, unknown>): Promise<unknown> {

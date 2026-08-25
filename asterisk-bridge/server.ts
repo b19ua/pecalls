@@ -557,57 +557,40 @@ async function handleConn(conn: Deno.Conn) {
         buf = buf.slice(3 + len);
 
         if (type === T_UUID) {
+          const tStart = Date.now();
           callUuid = payload.length === 16 ? uuidBytesToString(payload) : new TextDecoder().decode(payload);
           log("call", callUuid, "connected");
-          // Load context first — we need handoffAriBase/handoffAriAuth to fetch caller id.
-          ctx = await loadContext(callUuid);
+          // Контекст и caller-id тянем ПАРАЛЛЕЛЬНО: ARI-креды берём из кэша
+          // прошлого звонка, чтобы не ждать HTTPS-раунд до Lovable.
+          const ctxP = loadContext(callUuid);
+          const ariEarly = cachedAri ? resolveCallerId(cachedAri.base, cachedAri.auth, callUuid) : null;
+          ctx = await ctxP;
           if (!ctx) { log("ctx load failed"); await cleanup("failed"); return; }
+          if (ctx.handoffAriBase && ctx.handoffAriAuth) cachedAri = { base: ctx.handoffAriBase, auth: ctx.handoffAriAuth };
           // AudioSocket payload can be UUID-shaped for both inbound and outbound
           // channels, so never infer direction from the id format. Default this
           // socket leg to inbound; if it is a pre-created outbound call, call-init
           // finds the existing DB row and keeps its stored outbound direction.
           const direction: "inbound" | "outbound" = "inbound";
-          let fromNumber: string | null = null;
-          if (ctx.handoffAriBase && ctx.handoffAriAuth) {
-            try {
-              // Точечный GET канал-переменной LUNARA_CALLERID через ARI.
-              // Тот же паттерн аутентификации, что использует ariSetHandoff.
-              const chList = await fetch(`${ctx.handoffAriBase}/ari/channels`, { headers: { Authorization: ctx.handoffAriAuth } });
-              if (chList.ok) {
-                const chans: any[] = await chList.json();
-                for (const ch of chans) {
-                  const v = await fetch(`${ctx.handoffAriBase}/ari/channels/${ch.id}/variable?variable=LUNARA_UUID`, { headers: { Authorization: ctx.handoffAriAuth } });
-                  if (!v.ok) continue;
-                  const jv = await v.json();
-                  if (String(jv?.value || "") !== callUuid) continue;
-                  const channelCaller = String(ch?.caller?.number || ch?.connected?.number || "").trim();
-                  if (channelCaller) fromNumber = channelCaller;
-                  const cv = await fetch(`${ctx.handoffAriBase}/ari/channels/${ch.id}/variable?variable=LUNARA_CALLERID`, { headers: { Authorization: ctx.handoffAriAuth } });
-                  if (cv.ok) {
-                    const cvj = await cv.json();
-                    const val = String(cvj?.value || "").trim();
-                    if (val) fromNumber = val;
-                  }
-                  break;
-                }
-              }
-              if (!fromNumber) log("[caller-id] not resolved for", callUuid, "— continuing without from_number");
-            } catch (e) {
-              log("[caller-id] ARI lookup failed, continuing without from_number:", e);
-            }
-          }
+          const fromNumber = ariEarly
+            ? await ariEarly
+            : (ctx.handoffAriBase && ctx.handoffAriAuth ? await resolveCallerId(ctx.handoffAriBase, ctx.handoffAriAuth, callUuid) : null);
+          if (!fromNumber) log("[caller-id] not resolved for", callUuid, "— continuing without from_number");
+          ctx.callerPhone = fromNumber;
+          // call-init НЕ блокирует старт Gemini — приветствие важнее записи в БД.
           const initBody: Record<string, unknown> = { call_sid: callUuid, direction };
           if (fromNumber) initBody.from_number = fromNumber;
-          const init = await bridgeCall("call-init", initBody).catch(() => null);
-          if (!init?.agent_id) { log("no agent"); await cleanup("failed"); return; }
-          // Backend resolves the remote-party phone (inbound → from_number, outbound → to_number).
-          // Expose it via ctx.callerPhone so buildSystemText injects CALLER CONTEXT.
-          const callerPhoneFromInit = typeof init.caller_phone === "string" ? init.caller_phone.trim() : "";
-          ctx.callerPhone = callerPhoneFromInit || fromNumber || null;
+          const initP = bridgeCall("call-init", initBody).catch((e) => { log("call-init", e); return null; });
           const candidates = getModelCandidates(ctx.model);
           gemini = await openGemini(ctx, candidates[modelIdx]);
           setupHandlers(gemini);
+          log("[latency] session ready in", Date.now() - tStart, "ms (callerId=", fromNumber ?? "-", ")");
           persistTimer = setInterval(() => { void persistTranscript(); }, 3000) as unknown as number;
+          void initP.then((init) => {
+            if (!init?.agent_id) { log("call-init: no agent row (continuing)"); return; }
+            const p = typeof init.caller_phone === "string" ? init.caller_phone.trim() : "";
+            if (p && ctx && !ctx.callerPhone) ctx.callerPhone = p;
+          });
         } else if (type === T_AUDIO) {
           if (!gemini || !geminiReady) continue;
           const f = pcm16ToFloat(payload);

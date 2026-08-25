@@ -170,13 +170,12 @@ function withCallerPhone(args: Record<string, unknown>, callerPhone?: string | n
   return next;
 }
 
+// Приветствие всегда мгновенное: НИКАКОГО forced tool-call до первой реплики —
+// поход в CRM (0.5–3 с) раньше блокировал звук и клиент слушал тишину.
+// Идентификация делается мостом параллельно (prefetchCrmFacts) и подмешивается
+// в контекст диалога, как только ответ CRM пришёл.
 function crmFirstTurnText(ctx: ExtCtx): string {
-  const phone = String(ctx.callerPhone ?? "").trim();
-  const toolName = pickCrmLookupToolName(ctx);
-  if (toolName && phone) {
-    return `Before greeting, silently call \`${toolName}\` with phone_number="${phone}" to identify the caller by phone. Wait for the tool response. If it returns a name or customer data, greet the caller using that data. Then say: "${String(ctx.greeting).slice(0, 200)}". Remember the tool result — reuse it for any later question about this caller (debt, balance, address, status) instead of saying data is unavailable.`;
-  }
-  return `Greet the caller now. Say: "${String(ctx.greeting).slice(0, 200)}"`;
+  return `Greet the caller now, immediately and without calling any tool. Say: "${String(ctx.greeting).slice(0, 200)}"`;
 }
 
 async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>): Promise<unknown> {

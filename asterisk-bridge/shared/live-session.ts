@@ -2,7 +2,7 @@
 // Возвращает готовый setup-payload с проверенной Lunara-конфигурацией:
 //   response_modalities: AUDIO
 //   snake_case (как принимает Gemini Live)
-//   VAD: HIGH start / LOW end (не режем клиента, ловим перебивы)
+//   VAD: HIGH start / HIGH end + 400ms silence (низкая задержка ответа)
 //   input+output audio transcription
 //   optional function tools
 //
@@ -55,11 +55,11 @@ export function buildGeminiSetupPayload(input: GeminiSetupInput): Record<string,
         automatic_activity_detection: {
           disabled: false,
           start_of_speech_sensitivity: vad.startSensitivity ?? "START_SENSITIVITY_HIGH",
-          end_of_speech_sensitivity: vad.endSensitivity ?? "END_SENSITIVITY_LOW",
-          prefix_padding_ms: vad.prefixPaddingMs ?? 300,
-          silence_duration_ms: vad.silenceDurationMs ?? 800,
+          end_of_speech_sensitivity: vad.endSensitivity ?? "END_SENSITIVITY_HIGH",
+          prefix_padding_ms: vad.prefixPaddingMs ?? 200,
+          silence_duration_ms: vad.silenceDurationMs ?? 400,
         },
-        activity_handling: "NO_INTERRUPTION",
+        activity_handling: "START_OF_ACTIVITY_INTERRUPTS",
       },
       ...(tools ? { tools } : {}),
     },

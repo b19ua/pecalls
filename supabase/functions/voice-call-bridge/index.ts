@@ -955,12 +955,11 @@ function withCallerPhone(args: Record<string, unknown>, callerPhone?: string | n
   return next;
 }
 
+// Приветствие произносится сразу, без ожидания CRM: forced tool-call перед
+// первой репликой давал 1–3 с тишины после снятия трубки. Правило "сначала
+// сходи в CRM, прежде чем сказать «нет данных»" остаётся в system prompt.
 function buildCrmFirstTurn(c: Ctx): Record<string, unknown> {
-  const phone = String(c.callerPhone ?? "").trim();
-  const toolName = pickCrmLookupToolName(c);
-  const text = toolName && phone
-    ? `Before greeting, silently call \`${toolName}\` with phone_number="${phone}" to identify the caller by phone. Wait for the tool response. If it returns a name or customer data, greet the caller using that data. Then say: "${String(c.greeting).slice(0, 200)}". Remember the tool result — reuse it for any later question about this caller (debt, balance, address, status) instead of saying data is unavailable.`
-    : `Greet the caller now. Say: "${String(c.greeting).slice(0, 200)}"`;
+  const text = `Greet the caller now, immediately and without calling any tool. Say: "${String(c.greeting).slice(0, 200)}"`;
   return { client_content: { turns: [{ role: "user", parts: [{ text }] }], turn_complete: true } };
 }
 

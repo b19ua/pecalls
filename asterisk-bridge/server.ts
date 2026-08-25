@@ -170,13 +170,12 @@ function withCallerPhone(args: Record<string, unknown>, callerPhone?: string | n
   return next;
 }
 
+// Приветствие всегда мгновенное: НИКАКОГО forced tool-call до первой реплики —
+// поход в CRM (0.5–3 с) раньше блокировал звук и клиент слушал тишину.
+// Идентификация делается мостом параллельно (prefetchCrmFacts) и подмешивается
+// в контекст диалога, как только ответ CRM пришёл.
 function crmFirstTurnText(ctx: ExtCtx): string {
-  const phone = String(ctx.callerPhone ?? "").trim();
-  const toolName = pickCrmLookupToolName(ctx);
-  if (toolName && phone) {
-    return `Before greeting, silently call \`${toolName}\` with phone_number="${phone}" to identify the caller by phone. Wait for the tool response. If it returns a name or customer data, greet the caller using that data. Then say: "${String(ctx.greeting).slice(0, 200)}". Remember the tool result — reuse it for any later question about this caller (debt, balance, address, status) instead of saying data is unavailable.`;
-  }
-  return `Greet the caller now. Say: "${String(ctx.greeting).slice(0, 200)}"`;
+  return `Greet the caller now, immediately and without calling any tool. Say: "${String(ctx.greeting).slice(0, 200)}"`;
 }
 
 async function executeWebhookTool(tool: ToolRow, args: Record<string, unknown>): Promise<unknown> {
@@ -272,6 +271,46 @@ async function callCrm1(ctx: ExtCtx, args: Record<string, unknown>): Promise<unk
   }
 }
 
+// Предзагрузка карточки клиента по CLI параллельно с приветствием.
+// Возвращает готовый текст фактов для подмешивания в контекст диалога.
+async function prefetchCrmFacts(ctx: ExtCtx, callSid: string): Promise<string | null> {
+  const phone = String(ctx.callerPhone ?? "").trim();
+  const toolName = pickCrmLookupToolName(ctx);
+  if (!phone || !toolName) return null;
+  const t0 = Date.now();
+  let result: any;
+  try {
+    if (toolName === "get_local_system_data") {
+      result = await callCrm1(ctx, { phone_number: phone });
+    } else {
+      const tool = ctx.tools.find((t) => t.name === toolName);
+      if (!tool) return null;
+      result = await executeWebhookTool(tool, withCallerPhone({}, phone, tool.config.parameters));
+    }
+  } catch (e) {
+    log("[prefetch] failed", e);
+    return null;
+  }
+  const facts: string[] = Array.isArray(result?.crm_facts) ? result.crm_facts : [];
+  logToolCall(callSid, {
+    tool_name: `${toolName} (prefetch)`,
+    ok: result?.error === undefined && result?.ok !== false,
+    status_code: typeof result?.status === "number" ? result.status : null,
+    latency_ms: Date.now() - t0,
+    args: { phone_number: phone },
+    semantic: result?.crm_semantic ?? {},
+    facts_count: facts.length,
+    error: result?.error ? String(result.error) : null,
+  });
+  if (!facts.length) return null;
+  return [
+    "=== CRM DATA FOR THIS CALLER (already fetched, do NOT call the tool again for these fields) ===",
+    `phone: ${phone}`,
+    ...facts,
+    "Use these facts directly when the caller asks about their account, debt, balance, address or status. Never say the data is unavailable while these facts exist.",
+  ].join("\n");
+}
+
 // CRM2 requires the HMAC secret which lives on Lovable — proxy the call.
 const crm2TicketPerCall = new Map<string, number>();
 async function callCrm2(callSid: string, args: Record<string, unknown>): Promise<unknown> {
@@ -360,6 +399,39 @@ function openGemini(ctx: ExtCtx, modelOverride?: string, skipGreeting = false): 
   });
 }
 
+// ------------------------- caller id via ARI -------------------------
+// Кэш ARI-кредов последнего звонка: позволяет стартовать поиск caller id
+// параллельно с загрузкой контекста, а не после неё.
+let cachedAri: { base: string; auth: string } | null = null;
+
+async function resolveCallerId(base: string, auth: string, callUuid: string): Promise<string | null> {
+  try {
+    const chList = await fetch(`${base}/ari/channels`, { headers: { Authorization: auth } });
+    if (!chList.ok) return null;
+    const chans: any[] = await chList.json();
+    // Все каналы опрашиваем параллельно — последовательный цикл добавлял
+    // до нескольких сотен мс на каждый канал перед первым словом агента.
+    const probes = await Promise.all(chans.slice(0, 25).map(async (ch) => {
+      try {
+        const [uv, cv] = await Promise.all([
+          fetch(`${base}/ari/channels/${ch.id}/variable?variable=LUNARA_UUID`, { headers: { Authorization: auth } }),
+          fetch(`${base}/ari/channels/${ch.id}/variable?variable=LUNARA_CALLERID`, { headers: { Authorization: auth } }),
+        ]);
+        if (!uv.ok) return null;
+        const uuidVal = String((await uv.json())?.value || "");
+        if (uuidVal !== callUuid) return null;
+        const dialplanCaller = cv.ok ? String((await cv.json())?.value || "").trim() : "";
+        const channelCaller = String(ch?.caller?.number || ch?.connected?.number || "").trim();
+        return dialplanCaller || channelCaller || null;
+      } catch { return null; }
+    }));
+    return probes.find((v) => !!v) ?? null;
+  } catch (e) {
+    log("[caller-id] ARI lookup failed:", e);
+    return null;
+  }
+}
+
 // ------------------------- handoff via ARI setChannelVar -------------------------
 async function ariSetHandoff(ctx: ExtCtx, callUuid: string): Promise<{ ok: boolean; target: string | null }> {
   if (!ctx.handoffAriBase || !ctx.handoffAriAuth || !ctx.handoffNumbers.length) return { ok: false, target: null };
@@ -424,6 +496,17 @@ async function handleConn(conn: Deno.Conn) {
             turns: [{ role: "user", parts: [{ text: crmFirstTurnText(ctx) }] }],
             turn_complete: true,
           },
+        });
+        // CRM-идентификация идёт параллельно приветствию, не задерживая звук.
+        void prefetchCrmFacts(ctx, callUuid).then((facts) => {
+          if (!facts) return;
+          h.send({
+            client_content: {
+              turns: [{ role: "user", parts: [{ text: facts }] }],
+              turn_complete: false,
+            },
+          });
+          log("[prefetch] CRM facts injected");
         });
       }
     });
@@ -507,57 +590,40 @@ async function handleConn(conn: Deno.Conn) {
         buf = buf.slice(3 + len);
 
         if (type === T_UUID) {
+          const tStart = Date.now();
           callUuid = payload.length === 16 ? uuidBytesToString(payload) : new TextDecoder().decode(payload);
           log("call", callUuid, "connected");
-          // Load context first — we need handoffAriBase/handoffAriAuth to fetch caller id.
-          ctx = await loadContext(callUuid);
+          // Контекст и caller-id тянем ПАРАЛЛЕЛЬНО: ARI-креды берём из кэша
+          // прошлого звонка, чтобы не ждать HTTPS-раунд до Lovable.
+          const ctxP = loadContext(callUuid);
+          const ariEarly = cachedAri ? resolveCallerId(cachedAri.base, cachedAri.auth, callUuid) : null;
+          ctx = await ctxP;
           if (!ctx) { log("ctx load failed"); await cleanup("failed"); return; }
+          if (ctx.handoffAriBase && ctx.handoffAriAuth) cachedAri = { base: ctx.handoffAriBase, auth: ctx.handoffAriAuth };
           // AudioSocket payload can be UUID-shaped for both inbound and outbound
           // channels, so never infer direction from the id format. Default this
           // socket leg to inbound; if it is a pre-created outbound call, call-init
           // finds the existing DB row and keeps its stored outbound direction.
           const direction: "inbound" | "outbound" = "inbound";
-          let fromNumber: string | null = null;
-          if (ctx.handoffAriBase && ctx.handoffAriAuth) {
-            try {
-              // Точечный GET канал-переменной LUNARA_CALLERID через ARI.
-              // Тот же паттерн аутентификации, что использует ariSetHandoff.
-              const chList = await fetch(`${ctx.handoffAriBase}/ari/channels`, { headers: { Authorization: ctx.handoffAriAuth } });
-              if (chList.ok) {
-                const chans: any[] = await chList.json();
-                for (const ch of chans) {
-                  const v = await fetch(`${ctx.handoffAriBase}/ari/channels/${ch.id}/variable?variable=LUNARA_UUID`, { headers: { Authorization: ctx.handoffAriAuth } });
-                  if (!v.ok) continue;
-                  const jv = await v.json();
-                  if (String(jv?.value || "") !== callUuid) continue;
-                  const channelCaller = String(ch?.caller?.number || ch?.connected?.number || "").trim();
-                  if (channelCaller) fromNumber = channelCaller;
-                  const cv = await fetch(`${ctx.handoffAriBase}/ari/channels/${ch.id}/variable?variable=LUNARA_CALLERID`, { headers: { Authorization: ctx.handoffAriAuth } });
-                  if (cv.ok) {
-                    const cvj = await cv.json();
-                    const val = String(cvj?.value || "").trim();
-                    if (val) fromNumber = val;
-                  }
-                  break;
-                }
-              }
-              if (!fromNumber) log("[caller-id] not resolved for", callUuid, "— continuing without from_number");
-            } catch (e) {
-              log("[caller-id] ARI lookup failed, continuing without from_number:", e);
-            }
-          }
+          const fromNumber = ariEarly
+            ? await ariEarly
+            : (ctx.handoffAriBase && ctx.handoffAriAuth ? await resolveCallerId(ctx.handoffAriBase, ctx.handoffAriAuth, callUuid) : null);
+          if (!fromNumber) log("[caller-id] not resolved for", callUuid, "— continuing without from_number");
+          ctx.callerPhone = fromNumber;
+          // call-init НЕ блокирует старт Gemini — приветствие важнее записи в БД.
           const initBody: Record<string, unknown> = { call_sid: callUuid, direction };
           if (fromNumber) initBody.from_number = fromNumber;
-          const init = await bridgeCall("call-init", initBody).catch(() => null);
-          if (!init?.agent_id) { log("no agent"); await cleanup("failed"); return; }
-          // Backend resolves the remote-party phone (inbound → from_number, outbound → to_number).
-          // Expose it via ctx.callerPhone so buildSystemText injects CALLER CONTEXT.
-          const callerPhoneFromInit = typeof init.caller_phone === "string" ? init.caller_phone.trim() : "";
-          ctx.callerPhone = callerPhoneFromInit || fromNumber || null;
+          const initP = bridgeCall("call-init", initBody).catch((e) => { log("call-init", e); return null; });
           const candidates = getModelCandidates(ctx.model);
           gemini = await openGemini(ctx, candidates[modelIdx]);
           setupHandlers(gemini);
+          log("[latency] session ready in", Date.now() - tStart, "ms (callerId=", fromNumber ?? "-", ")");
           persistTimer = setInterval(() => { void persistTranscript(); }, 3000) as unknown as number;
+          void initP.then((init) => {
+            if (!init?.agent_id) { log("call-init: no agent row (continuing)"); return; }
+            const p = typeof init.caller_phone === "string" ? init.caller_phone.trim() : "";
+            if (p && ctx && !ctx.callerPhone) ctx.callerPhone = p;
+          });
         } else if (type === T_AUDIO) {
           if (!gemini || !geminiReady) continue;
           const f = pcm16ToFloat(payload);

@@ -82,7 +82,7 @@ function CopilotHome() {
             <Button variant="outline" asChild>
               <Link to="/copilot/agents"><Settings2 className="h-4 w-4 mr-1" /> {t("cop.agentsBtn")}</Link>
             </Button>
-            <Button variant="outline" onClick={() => navigate({ to: "/copilot/agents/new" })}>
+            <Button variant="outline" onClick={() => navigate({ to: "/copilot/agents/$agentId", params: { agentId: "new" } })}>
               <Plus className="h-4 w-4 mr-1" /> {t("cop.newCopilot")}
             </Button>
           </div>
@@ -148,7 +148,7 @@ function CopilotHome() {
               icon={<Headphones className="h-10 w-10 text-muted-foreground" />}
               title={t("cop.noAgents")}
               body={t("cop.noAgentsBody")}
-              action={<Button onClick={() => navigate({ to: "/copilot/agents/new" })}><Plus className="h-4 w-4 mr-1" />{t("cop.create")}</Button>}
+              action={<Button onClick={() => navigate({ to: "/copilot/agents/$agentId", params: { agentId: "new" } })}><Plus className="h-4 w-4 mr-1" />{t("cop.create")}</Button>}
             />
           ) : (
             <div className="grid sm:grid-cols-2 gap-4">

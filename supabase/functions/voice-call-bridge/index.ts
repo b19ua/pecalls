@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const agentId = url.searchParams.get("agent_id") || "";
   const callSid = url.searchParams.get("call_sid") || "";
+  const resume = url.searchParams.get("resume") === "1";
   const upgrade = req.headers.get("upgrade") || "";
   if (url.searchParams.get("action") === "handoff") return handleHandoffAction(req, url);
   if (url.searchParams.get("action") === "handoff-result") return handleHandoffResult(req, url);
@@ -48,7 +49,7 @@ Deno.serve(async (req) => {
   const wantTwilio = requested.split(",").map((s) => s.trim()).includes("audio.twilio.com");
   const upgradeOpts = wantTwilio ? { protocol: "audio.twilio.com" } : undefined;
   const { socket: twilio, response } = Deno.upgradeWebSocket(req, upgradeOpts);
-  handle(twilio, agentId, callSid).catch((e) => console.error("bridge error", e));
+  handle(twilio, agentId, callSid, resume).catch((e) => console.error("bridge error", e));
   return response;
 });
 
@@ -114,12 +115,14 @@ const toolAllowed = _toolAllowed;
 
 
 
-async function handle(twilio: WebSocket, agentId: string, callSid: string) {
+async function handle(twilio: WebSocket, agentId: string, callSid: string, resume = false) {
   let streamSid = "";
   let gemini: WebSocket | null = null;
   let geminiReady = false;
   let geminiModelIndex = 0;
-  let greetingRequested = false;
+  // On a replacement stream the caller already heard the greeting. Keeping this
+  // true also prevents a reconnect from restarting the scripted first CRM turn.
+  let greetingRequested = resume;
   let pendingAudioToGemini: string[] = [];
   const transcript: { role: "user" | "agent"; text: string; ts: string }[] = [];
   let lastUserAudioAt = Date.now();
@@ -133,6 +136,34 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   // Caller CLI resolved from the calls row (populated by src/routes/api/public/twilio/voice.ts
   // from Twilio's From param). Injected into ctx.callerPhone so buildSystemText adds CALLER CONTEXT.
   let callerPhoneKnown: string | null = null;
+  let resumedConversation = "";
+
+  const priorTranscriptReady = resume && callSid
+    ? (async () => {
+        try {
+          const { data: row } = await supa.from("calls")
+            .select("transcript")
+            .eq("twilio_call_sid", callSid)
+            .maybeSingle();
+          const previous = Array.isArray(row?.transcript)
+            ? row.transcript.filter((item: unknown) => {
+                if (!item || typeof item !== "object") return false;
+                const role = (item as Record<string, unknown>).role;
+                const text = (item as Record<string, unknown>).text;
+                return (role === "user" || role === "agent") && typeof text === "string";
+              }) as { role: "user" | "agent"; text: string; ts: string }[]
+            : [];
+          transcript.push(...previous);
+          lastSavedLen = transcript.length;
+          resumedConversation = previous.slice(-12).map((item) =>
+            `${item.role === "user" ? "CALLER" : "AGENT"}: ${item.text}`
+          ).join("\n");
+          log("restored call after stream recycle call=", callSid, "turns=", previous.length);
+        } catch (e) {
+          console.error("restore transcript", e);
+        }
+      })()
+    : Promise.resolve();
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;
@@ -163,7 +194,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   const connectGemini = () => {
     gemini = new WebSocket(GEMINI_WS);
     gemini.onopen = async () => {
-      const c = ctx || await ctxReady;
+      const [c] = await Promise.all([ctx || ctxReady, priorTranscriptReady]);
       const lang = c.language || "ru-RU";
       const modelCandidates = getModelCandidates(c.model);
       const model = modelCandidates[geminiModelIndex] || modelCandidates[0] || GEMINI_MODELS[0];
@@ -182,7 +213,10 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       // Make sure buildToolDeclarations sees the caller phone so its get_local_system_data
       // description also reinforces "use the number from CALLER CONTEXT above".
       if (callerPhone && !c.callerPhone) c.callerPhone = callerPhone;
-      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, callerCtxBlock, handoffInstr, objectionInstr, crm2Instr]
+      const resumeBlock = resumedConversation
+        ? `=== CONTINUED CALL ===\nThe audio stream was transparently reconnected. Continue the same conversation without greeting, introducing yourself, or mentioning the reconnection. Recent transcript:\n${resumedConversation}\n=== END CONTINUED CALL ===`
+        : "";
+      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, callerCtxBlock, handoffInstr, objectionInstr, crm2Instr, resumeBlock]
         .filter(Boolean)
         .join("\n\n");
       // Lunara-proven payload shape (snake_case, NO languageCode lock).
@@ -535,6 +569,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         const paramAgent = params.agent_id ? String(params.agent_id) : "";
         const paramCall = params.call_sid ? String(params.call_sid) : (msg.start?.callSid || "");
         if (!callSid && paramCall) callSid = paramCall;
+        if (String(params.resume || "") === "1") greetingRequested = true;
         // SECURITY: derive agent_id from the calls row keyed by call_sid (Twilio-issued, signed via webhook),
         // not from the WSS query string which is attacker-controllable. Query agent_id only used if no row found.
         if (callSid) {

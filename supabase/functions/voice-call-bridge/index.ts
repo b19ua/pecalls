@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const agentId = url.searchParams.get("agent_id") || "";
   const callSid = url.searchParams.get("call_sid") || "";
+  const resume = url.searchParams.get("resume") === "1";
   const upgrade = req.headers.get("upgrade") || "";
   if (url.searchParams.get("action") === "handoff") return handleHandoffAction(req, url);
   if (url.searchParams.get("action") === "handoff-result") return handleHandoffResult(req, url);
@@ -48,7 +49,7 @@ Deno.serve(async (req) => {
   const wantTwilio = requested.split(",").map((s) => s.trim()).includes("audio.twilio.com");
   const upgradeOpts = wantTwilio ? { protocol: "audio.twilio.com" } : undefined;
   const { socket: twilio, response } = Deno.upgradeWebSocket(req, upgradeOpts);
-  handle(twilio, agentId, callSid).catch((e) => console.error("bridge error", e));
+  handle(twilio, agentId, callSid, resume).catch((e) => console.error("bridge error", e));
   return response;
 });
 
@@ -114,12 +115,16 @@ const toolAllowed = _toolAllowed;
 
 
 
-async function handle(twilio: WebSocket, agentId: string, callSid: string) {
+async function handle(twilio: WebSocket, agentId: string, callSid: string, resume = false) {
   let streamSid = "";
   let gemini: WebSocket | null = null;
   let geminiReady = false;
   let geminiModelIndex = 0;
-  let greetingRequested = false;
+  let geminiReconnectAttempts = 0;
+  let geminiConnectedAt = 0;
+  // On a replacement stream the caller already heard the greeting. Keeping this
+  // true also prevents a reconnect from restarting the scripted first CRM turn.
+  let greetingRequested = resume;
   let pendingAudioToGemini: string[] = [];
   const transcript: { role: "user" | "agent"; text: string; ts: string }[] = [];
   let lastUserAudioAt = Date.now();
@@ -128,11 +133,40 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   let handoffTriggered = false;
   let recordingStarted = false;
   let transcriptSaveTimer: number | null = null;
+  let streamRotationTimer: number | null = null;
   let lastSavedLen = 0;
   let userPhraseBuffer = ""; // rolling buffer of user speech for phrase matching
   // Caller CLI resolved from the calls row (populated by src/routes/api/public/twilio/voice.ts
   // from Twilio's From param). Injected into ctx.callerPhone so buildSystemText adds CALLER CONTEXT.
   let callerPhoneKnown: string | null = null;
+  let resumedConversation = "";
+
+  const priorTranscriptReady = resume && callSid
+    ? (async () => {
+        try {
+          const { data: row } = await supa.from("calls")
+            .select("transcript")
+            .eq("twilio_call_sid", callSid)
+            .maybeSingle();
+          const previous = Array.isArray(row?.transcript)
+            ? row.transcript.filter((item: unknown) => {
+                if (!item || typeof item !== "object") return false;
+                const role = (item as Record<string, unknown>).role;
+                const text = (item as Record<string, unknown>).text;
+                return (role === "user" || role === "agent") && typeof text === "string";
+              }) as { role: "user" | "agent"; text: string; ts: string }[]
+            : [];
+          transcript.push(...previous);
+          lastSavedLen = transcript.length;
+          resumedConversation = previous.slice(-12).map((item) =>
+            `${item.role === "user" ? "CALLER" : "AGENT"}: ${item.text}`
+          ).join("\n");
+          log("restored call after stream recycle call=", callSid, "turns=", previous.length);
+        } catch (e) {
+          console.error("restore transcript", e);
+        }
+      })()
+    : Promise.resolve();
 
   let ctx: Ctx | null = null;
   let ctxResolver: ((c: Ctx) => void) | null = null;
@@ -163,7 +197,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   const connectGemini = () => {
     gemini = new WebSocket(GEMINI_WS);
     gemini.onopen = async () => {
-      const c = ctx || await ctxReady;
+      const [c] = await Promise.all([ctx || ctxReady, priorTranscriptReady]);
       const lang = c.language || "ru-RU";
       const modelCandidates = getModelCandidates(c.model);
       const model = modelCandidates[geminiModelIndex] || modelCandidates[0] || GEMINI_MODELS[0];
@@ -182,7 +216,13 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
       // Make sure buildToolDeclarations sees the caller phone so its get_local_system_data
       // description also reinforces "use the number from CALLER CONTEXT above".
       if (callerPhone && !c.callerPhone) c.callerPhone = callerPhone;
-      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, callerCtxBlock, handoffInstr, objectionInstr, crm2Instr]
+      const recentConversation = transcript.slice(-12).map((item) =>
+        `${item.role === "user" ? "CALLER" : "AGENT"}: ${item.text}`
+      ).join("\n") || resumedConversation;
+      const resumeBlock = greetingRequested && recentConversation
+        ? `=== CONTINUED CALL ===\nThe audio stream was transparently reconnected. Continue the same conversation without greeting, introducing yourself, or mentioning the reconnection. Recent transcript:\n${recentConversation}\n=== END CONTINUED CALL ===`
+        : "";
+      const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, callerCtxBlock, handoffInstr, objectionInstr, crm2Instr, resumeBlock]
         .filter(Boolean)
         .join("\n\n");
       // Lunara-proven payload shape (snake_case, NO languageCode lock).
@@ -203,6 +243,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         const msg = JSON.parse(text);
         if (msg.setupComplete) {
           geminiReady = true;
+          geminiConnectedAt = Date.now();
+          geminiReconnectAttempts = 0;
           if (!greetingRequested) {
             greetingRequested = true;
             const c = ctx!;
@@ -309,7 +351,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     };
     gemini.onerror = (e) => log("gemini ERROR", (e as ErrorEvent).message || String(e));
     gemini.onclose = (e) => {
-      log("gemini CLOSED", e.code, e.reason);
+      const sessionAgeMs = geminiConnectedAt ? Date.now() - geminiConnectedAt : 0;
+      log("gemini CLOSED", e.code, e.reason, "sessionAgeMs=", sessionAgeMs);
       geminiReady = false;
       const fatalReason = (e.reason || "").toLowerCase();
       const isPrepayment = e.code === 1011 || fatalReason.includes("prepayment") || fatalReason.includes("quota") || fatalReason.includes("billing");
@@ -325,15 +368,18 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
           owner_id: ctx?.ownerId,
         });
       }
-      // Reconnect mid-call too: native-audio models sometimes drop with 1011
-      // after ~1 minute. Skip greeting on resume so the caller doesn't hear it twice.
-      if (twilio.readyState === 1 && (e.code === 1008 || e.code === 1011)) {
+      // Recover from every provider-side close while the phone call is active.
+      // Close codes vary between normal session expiry, upstream resets and quotas.
+      if (twilio.readyState === 1) {
+        geminiReconnectAttempts += 1;
         const candidates = getModelCandidates(ctx?.model);
         if (!greetingRequested && geminiModelIndex < candidates.length - 1) {
           geminiModelIndex += 1;
         }
-        // keep greetingRequested=true on mid-call drop → resumed session stays silent until user speaks
-        setTimeout(connectGemini, 200);
+        const delay = Math.min(250 * (2 ** Math.min(geminiReconnectAttempts - 1, 4)), 4000);
+        // Keep greetingRequested=true on mid-call drop; current transcript is added
+        // to the next setup so the replacement session continues coherently.
+        setTimeout(connectGemini, delay);
       }
     };
   };
@@ -357,10 +403,11 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   const checkSilence = () => {
     if (twilio.readyState !== 1) return;
     const idleMs = Date.now() - lastUserAudioAt;
-    // Hang up only after 30s of complete silence from the caller.
-    if (idleMs >= 30_000) {
-      setTimeout(() => { try { twilio.close(); } catch { /* noop */ } }, 500);
-      if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
+    // Never terminate the phone call merely because the caller is quiet. Long
+    // agent answers, muted handsets and provider reconnects can all exceed 30s.
+    if (idleMs >= 30_000 && !silenceWarned) {
+      silenceWarned = true;
+      log("caller audio quiet for", Math.round(idleMs / 1000), "seconds; keeping call open");
     }
   };
 
@@ -374,6 +421,41 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         media: { payload: bytesToB64(chunk) },
       }));
     }
+  };
+
+  const scheduleStreamRotation = () => {
+    if (streamRotationTimer !== null || !callSid || !LOVABLE_KEY || !TWILIO_KEY) return;
+    // Hosted WebSocket workers have a bounded lifetime. Rotate before that limit
+    // instead of letting the provider see an abrupt socket loss and end the call.
+    streamRotationTimer = setTimeout(async () => {
+      streamRotationTimer = null;
+      if (twilio.readyState !== 1 || handoffTriggered) return;
+      const bridgeWs = `${SUPABASE_URL.replace(/^https?:/, "wss:").replace(/\/$/, "")}/functions/v1/voice-call-bridge`;
+      const streamUrl = `${bridgeWs}?agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&call_sid=${encodeURIComponent(callSid)}&resume=1`;
+      const fallbackUrl = `${Deno.env.get("PUBLIC_APP_URL") || "https://project--d7e8c4a9-917e-4bb2-a113-6e70fdf150da.lovable.app"}/api/public/twilio/voice?agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&resume=1`;
+      const twiml = `<Response><Connect><Stream name="gemini" url="${escXml(streamUrl)}"><Parameter name="agent_id" value="${escXml(ctx?.agentId || agentId)}"/><Parameter name="call_sid" value="${escXml(callSid)}"/><Parameter name="resume" value="1"/></Stream></Connect><Redirect method="POST">${escXml(fallbackUrl)}</Redirect></Response>`;
+      try {
+        await persistTranscript();
+        const response = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_KEY}`,
+            "X-Connection-Api-Key": TWILIO_KEY,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({ Twiml: twiml }),
+        });
+        if (!response.ok) {
+          log("stream rotation failed", response.status, await response.text());
+          scheduleStreamRotation();
+        } else {
+          log("stream rotation requested call=", callSid);
+        }
+      } catch (e) {
+        console.error("stream rotation error", e);
+        scheduleStreamRotation();
+      }
+    }, 50_000) as unknown as number;
   };
 
   const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
@@ -535,6 +617,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         const paramAgent = params.agent_id ? String(params.agent_id) : "";
         const paramCall = params.call_sid ? String(params.call_sid) : (msg.start?.callSid || "");
         if (!callSid && paramCall) callSid = paramCall;
+        if (String(params.resume || "") === "1") greetingRequested = true;
         // SECURITY: derive agent_id from the calls row keyed by call_sid (Twilio-issued, signed via webhook),
         // not from the WSS query string which is attacker-controllable. Query agent_id only used if no row found.
         if (callSid) {
@@ -575,9 +658,11 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
         lastUserAudioAt = Date.now();
         if (silenceTimer === null) silenceTimer = setInterval(checkSilence, 2000) as unknown as number;
         if (transcriptSaveTimer === null) transcriptSaveTimer = setInterval(() => { void persistTranscript(); }, 3000) as unknown as number;
+        scheduleStreamRotation();
       } else if (msg.event === "media") {
         const b64 = msg.media?.payload;
         if (!b64) return;
+        silenceWarned = false;
         if (geminiReady) sendAudioToGemini(b64);
         else pendingAudioToGemini.push(b64);
       } else if (msg.event === "dtmf") {
@@ -599,6 +684,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
   twilio.onclose = async () => {
     if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
     if (transcriptSaveTimer !== null) { clearInterval(transcriptSaveTimer); transcriptSaveTimer = null; }
+    if (streamRotationTimer !== null) { clearTimeout(streamRotationTimer); streamRotationTimer = null; }
     // Force Gemini to flush any pending inputTranscription for the caller's
     // last utterance before we tear down the WS — otherwise the final user
     // phrase that was still mid-VAD when Twilio dropped gets lost.
@@ -613,12 +699,13 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string) {
     try { gemini?.close(); } catch { /* noop */ }
     if (callSid) {
       try {
-        const patch: Record<string, unknown> = {
-          status: "completed",
-          ended_at: new Date().toISOString(),
-        };
+        // A stream socket can be recycled while the phone call remains active.
+        // The signed Twilio status callback is the only authority that completes it.
+        const patch: Record<string, unknown> = {};
         if (transcript.length) patch.transcript = transcript;
-        await supa.from("calls").update(patch).eq("twilio_call_sid", callSid);
+        if (Object.keys(patch).length) {
+          await supa.from("calls").update(patch).eq("twilio_call_sid", callSid);
+        }
       } catch (e) { console.error("save transcript / mark ended", e); }
       if (transcript.length) {
         // Generate summary asynchronously

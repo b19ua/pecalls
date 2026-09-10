@@ -41,6 +41,7 @@ async function handleVoiceRequest(request: Request): Promise<Response> {
   }
 
   const callSid = String(params.get("CallSid") ?? "");
+  const requestedResume = params.get("resume") === "1";
   const fromRaw = String(params.get("From") ?? "");
   const toRaw = String(params.get("To") ?? "");
   const direction = String(params.get("Direction") ?? "inbound");
@@ -63,6 +64,7 @@ async function handleVoiceRequest(request: Request): Promise<Response> {
   let agentId = agentIdParam || null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let agent: any = null;
+  let existingCall: { status: string | null; started_at: string | null } | null = null;
 
   if (agentId) {
     const { data } = await supabaseAdmin.from("agents").select("*").eq("id", agentId).maybeSingle();
@@ -118,8 +120,21 @@ async function handleVoiceRequest(request: Request): Promise<Response> {
   }
 
   if (callSid) {
-    await supabaseAdmin.from("calls").upsert(
-      {
+    const { data } = await supabaseAdmin
+      .from("calls")
+      .select("status, started_at")
+      .eq("twilio_call_sid", callSid)
+      .maybeSingle();
+    existingCall = data;
+
+    if (existingCall) {
+      await supabaseAdmin.from("calls").update({
+        status: "in_progress",
+        ...(fromNumber ? { from_number: fromNumber } : {}),
+        ...(toNumber ? { to_number: toNumber } : {}),
+      }).eq("twilio_call_sid", callSid);
+    } else {
+      await supabaseAdmin.from("calls").insert({
         owner_id: agent.owner_id,
         agent_id: agent.id,
         twilio_call_sid: callSid,
@@ -128,9 +143,8 @@ async function handleVoiceRequest(request: Request): Promise<Response> {
         to_number: toNumber || null,
         status: "in_progress",
         started_at: new Date().toISOString(),
-      },
-      { onConflict: "twilio_call_sid" },
-    );
+      });
+    }
   }
 
   const greeting = escapeXml(agent.greeting || "Здравствуйте!");
@@ -143,9 +157,15 @@ async function handleVoiceRequest(request: Request): Promise<Response> {
   const bridgeWs = process.env.GEMINI_BRIDGE_WS_URL || defaultBridge;
 
   if (bridgeWs) {
-    const streamUrl = `${bridgeWs.replace(/\/$/, "")}?agent_id=${agent.id}&call_sid=${callSid}`;
+    // A hosted WebSocket worker can be recycled during a long call. Twilio then
+    // continues to the Redirect below and opens a fresh stream for the same CallSid.
+    // The bridge sees resume=1, restores the transcript, and skips the greeting.
+    const isResume = requestedResume || existingCall?.status === "in_progress";
+    const streamUrl = `${bridgeWs.replace(/\/$/, "")}?agent_id=${agent.id}&call_sid=${callSid}&resume=${isResume ? "1" : "0"}`;
+    const resumeUrl = `${url.origin}/api/public/twilio/voice?agent_id=${encodeURIComponent(agent.id)}&resume=1`;
     return twiml(
-      `<Connect><Stream name="gemini" url="${escapeXml(streamUrl)}"><Parameter name="agent_id" value="${agent.id}"/><Parameter name="call_sid" value="${callSid}"/></Stream></Connect>`,
+      `<Connect><Stream name="gemini" url="${escapeXml(streamUrl)}"><Parameter name="agent_id" value="${agent.id}"/><Parameter name="call_sid" value="${callSid}"/><Parameter name="resume" value="${isResume ? "1" : "0"}"/></Stream></Connect>` +
+        `<Redirect method="POST">${escapeXml(resumeUrl)}</Redirect>`,
     );
   }
 

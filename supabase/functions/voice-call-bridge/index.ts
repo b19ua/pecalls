@@ -120,6 +120,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
   let gemini: WebSocket | null = null;
   let geminiReady = false;
   let geminiModelIndex = 0;
+  let geminiReconnectAttempts = 0;
+  let geminiConnectedAt = 0;
   // On a replacement stream the caller already heard the greeting. Keeping this
   // true also prevents a reconnect from restarting the scripted first CRM turn.
   let greetingRequested = resume;
@@ -214,7 +216,10 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
       // Make sure buildToolDeclarations sees the caller phone so its get_local_system_data
       // description also reinforces "use the number from CALLER CONTEXT above".
       if (callerPhone && !c.callerPhone) c.callerPhone = callerPhone;
-      const resumeBlock = resumedConversation
+      const recentConversation = transcript.slice(-12).map((item) =>
+        `${item.role === "user" ? "CALLER" : "AGENT"}: ${item.text}`
+      ).join("\n") || resumedConversation;
+      const resumeBlock = greetingRequested && recentConversation
         ? `=== CONTINUED CALL ===\nThe audio stream was transparently reconnected. Continue the same conversation without greeting, introducing yourself, or mentioning the reconnection. Recent transcript:\n${resumedConversation}\n=== END CONTINUED CALL ===`
         : "";
       const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, callerCtxBlock, handoffInstr, objectionInstr, crm2Instr, resumeBlock]
@@ -238,6 +243,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
         const msg = JSON.parse(text);
         if (msg.setupComplete) {
           geminiReady = true;
+          geminiConnectedAt = Date.now();
+          geminiReconnectAttempts = 0;
           if (!greetingRequested) {
             greetingRequested = true;
             const c = ctx!;
@@ -344,7 +351,8 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
     };
     gemini.onerror = (e) => log("gemini ERROR", (e as ErrorEvent).message || String(e));
     gemini.onclose = (e) => {
-      log("gemini CLOSED", e.code, e.reason);
+      const sessionAgeMs = geminiConnectedAt ? Date.now() - geminiConnectedAt : 0;
+      log("gemini CLOSED", e.code, e.reason, "sessionAgeMs=", sessionAgeMs);
       geminiReady = false;
       const fatalReason = (e.reason || "").toLowerCase();
       const isPrepayment = e.code === 1011 || fatalReason.includes("prepayment") || fatalReason.includes("quota") || fatalReason.includes("billing");
@@ -360,15 +368,18 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
           owner_id: ctx?.ownerId,
         });
       }
-      // Reconnect mid-call too: native-audio models sometimes drop with 1011
-      // after ~1 minute. Skip greeting on resume so the caller doesn't hear it twice.
-      if (twilio.readyState === 1 && (e.code === 1008 || e.code === 1011)) {
+      // Recover from every provider-side close while the phone call is active.
+      // Close codes vary between normal session expiry, upstream resets and quotas.
+      if (twilio.readyState === 1) {
+        geminiReconnectAttempts += 1;
         const candidates = getModelCandidates(ctx?.model);
         if (!greetingRequested && geminiModelIndex < candidates.length - 1) {
           geminiModelIndex += 1;
         }
-        // keep greetingRequested=true on mid-call drop → resumed session stays silent until user speaks
-        setTimeout(connectGemini, 200);
+        const delay = Math.min(250 * (2 ** Math.min(geminiReconnectAttempts - 1, 4)), 4000);
+        // Keep greetingRequested=true on mid-call drop; current transcript is added
+        // to the next setup so the replacement session continues coherently.
+        setTimeout(connectGemini, delay);
       }
     };
   };
@@ -392,10 +403,11 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
   const checkSilence = () => {
     if (twilio.readyState !== 1) return;
     const idleMs = Date.now() - lastUserAudioAt;
-    // Hang up only after 30s of complete silence from the caller.
-    if (idleMs >= 30_000) {
-      setTimeout(() => { try { twilio.close(); } catch { /* noop */ } }, 500);
-      if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
+    // Never terminate the phone call merely because the caller is quiet. Long
+    // agent answers, muted handsets and provider reconnects can all exceed 30s.
+    if (idleMs >= 30_000 && !silenceWarned) {
+      silenceWarned = true;
+      log("caller audio quiet for", Math.round(idleMs / 1000), "seconds; keeping call open");
     }
   };
 
@@ -650,6 +662,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
       } else if (msg.event === "media") {
         const b64 = msg.media?.payload;
         if (!b64) return;
+        silenceWarned = false;
         if (geminiReady) sendAudioToGemini(b64);
         else pendingAudioToGemini.push(b64);
       } else if (msg.event === "dtmf") {

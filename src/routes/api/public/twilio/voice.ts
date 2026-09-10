@@ -41,6 +41,7 @@ async function handleVoiceRequest(request: Request): Promise<Response> {
   }
 
   const callSid = String(params.get("CallSid") ?? "");
+  const requestedResume = params.get("resume") === "1";
   const fromRaw = String(params.get("From") ?? "");
   const toRaw = String(params.get("To") ?? "");
   const direction = String(params.get("Direction") ?? "inbound");
@@ -159,7 +160,7 @@ async function handleVoiceRequest(request: Request): Promise<Response> {
     // A hosted WebSocket worker can be recycled during a long call. Twilio then
     // continues to the Redirect below and opens a fresh stream for the same CallSid.
     // The bridge sees resume=1, restores the transcript, and skips the greeting.
-    const isResume = existingCall?.status === "in_progress";
+    const isResume = requestedResume || existingCall?.status === "in_progress";
     const streamUrl = `${bridgeWs.replace(/\/$/, "")}?agent_id=${agent.id}&call_sid=${callSid}&resume=${isResume ? "1" : "0"}`;
     const resumeUrl = `${url.origin}/api/public/twilio/voice?agent_id=${encodeURIComponent(agent.id)}&resume=1`;
     return twiml(

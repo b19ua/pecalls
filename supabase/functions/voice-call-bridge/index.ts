@@ -131,6 +131,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
   let handoffTriggered = false;
   let recordingStarted = false;
   let transcriptSaveTimer: number | null = null;
+  let streamRotationTimer: number | null = null;
   let lastSavedLen = 0;
   let userPhraseBuffer = ""; // rolling buffer of user speech for phrase matching
   // Caller CLI resolved from the calls row (populated by src/routes/api/public/twilio/voice.ts
@@ -410,6 +411,41 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
     }
   };
 
+  const scheduleStreamRotation = () => {
+    if (streamRotationTimer !== null || !callSid || !LOVABLE_KEY || !TWILIO_KEY) return;
+    // Hosted WebSocket workers have a bounded lifetime. Rotate before that limit
+    // instead of letting the provider see an abrupt socket loss and end the call.
+    streamRotationTimer = setTimeout(async () => {
+      streamRotationTimer = null;
+      if (twilio.readyState !== 1 || handoffTriggered) return;
+      const bridgeWs = `${SUPABASE_URL.replace(/^https?:/, "wss:").replace(/\/$/, "")}/functions/v1/voice-call-bridge`;
+      const streamUrl = `${bridgeWs}?agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&call_sid=${encodeURIComponent(callSid)}&resume=1`;
+      const fallbackUrl = `${Deno.env.get("PUBLIC_APP_URL") || "https://project--d7e8c4a9-917e-4bb2-a113-6e70fdf150da.lovable.app"}/api/public/twilio/voice?agent_id=${encodeURIComponent(ctx?.agentId || agentId)}&resume=1`;
+      const twiml = `<Response><Connect><Stream name="gemini" url="${escXml(streamUrl)}"><Parameter name="agent_id" value="${escXml(ctx?.agentId || agentId)}"/><Parameter name="call_sid" value="${escXml(callSid)}"/><Parameter name="resume" value="1"/></Stream></Connect><Redirect method="POST">${escXml(fallbackUrl)}</Redirect></Response>`;
+      try {
+        await persistTranscript();
+        const response = await fetch(`${TWILIO_GATEWAY}/Calls/${encodeURIComponent(callSid)}.json`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_KEY}`,
+            "X-Connection-Api-Key": TWILIO_KEY,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({ Twiml: twiml }),
+        });
+        if (!response.ok) {
+          log("stream rotation failed", response.status, await response.text());
+          scheduleStreamRotation();
+        } else {
+          log("stream rotation requested call=", callSid);
+        }
+      } catch (e) {
+        console.error("stream rotation error", e);
+        scheduleStreamRotation();
+      }
+    }, 50_000) as unknown as number;
+  };
+
   const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
   // Language-segregated defaults — mixed RU+EN ‘human’ false-positives ("human resources") were a problem.
   const DEFAULT_TRIGGERS_RU = ["оператор", "живого оператора", "живой человек", "соедините с человеком", "менеджер", "позови человека"];
@@ -610,6 +646,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
         lastUserAudioAt = Date.now();
         if (silenceTimer === null) silenceTimer = setInterval(checkSilence, 2000) as unknown as number;
         if (transcriptSaveTimer === null) transcriptSaveTimer = setInterval(() => { void persistTranscript(); }, 3000) as unknown as number;
+        scheduleStreamRotation();
       } else if (msg.event === "media") {
         const b64 = msg.media?.payload;
         if (!b64) return;
@@ -634,6 +671,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
   twilio.onclose = async () => {
     if (silenceTimer !== null) { clearInterval(silenceTimer); silenceTimer = null; }
     if (transcriptSaveTimer !== null) { clearInterval(transcriptSaveTimer); transcriptSaveTimer = null; }
+    if (streamRotationTimer !== null) { clearTimeout(streamRotationTimer); streamRotationTimer = null; }
     // Force Gemini to flush any pending inputTranscription for the caller's
     // last utterance before we tear down the WS — otherwise the final user
     // phrase that was still mid-VAD when Twilio dropped gets lost.
@@ -648,12 +686,13 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
     try { gemini?.close(); } catch { /* noop */ }
     if (callSid) {
       try {
-        const patch: Record<string, unknown> = {
-          status: "completed",
-          ended_at: new Date().toISOString(),
-        };
+        // A stream socket can be recycled while the phone call remains active.
+        // The signed Twilio status callback is the only authority that completes it.
+        const patch: Record<string, unknown> = {};
         if (transcript.length) patch.transcript = transcript;
-        await supa.from("calls").update(patch).eq("twilio_call_sid", callSid);
+        if (Object.keys(patch).length) {
+          await supa.from("calls").update(patch).eq("twilio_call_sid", callSid);
+        }
       } catch (e) { console.error("save transcript / mark ended", e); }
       if (transcript.length) {
         // Generate summary asynchronously

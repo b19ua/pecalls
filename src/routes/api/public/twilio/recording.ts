@@ -198,6 +198,8 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
             .update({
               data_residency: "self_hosted",
               external_call_ref: call.id,
+              status: "completed",
+              ended_at: new Date().toISOString(),
               recording_status: "ready", // Mark as ready after handoff
               recording_url: `${recordingUrl}.mp3`,
               ...(duration ? { duration_seconds: duration } : {}),
@@ -235,6 +237,8 @@ export const Route = createFileRoute("/api/public/twilio/recording")({
           await supabaseAdmin
             .from("calls")
             .update({
+              status: "completed",
+              ended_at: new Date().toISOString(),
               recording_path: storagePath,
               recording_url: `${recordingUrl}.mp3`,
               recording_status: "ready",

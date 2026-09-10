@@ -220,7 +220,7 @@ async function handle(twilio: WebSocket, agentId: string, callSid: string, resum
         `${item.role === "user" ? "CALLER" : "AGENT"}: ${item.text}`
       ).join("\n") || resumedConversation;
       const resumeBlock = greetingRequested && recentConversation
-        ? `=== CONTINUED CALL ===\nThe audio stream was transparently reconnected. Continue the same conversation without greeting, introducing yourself, or mentioning the reconnection. Recent transcript:\n${resumedConversation}\n=== END CONTINUED CALL ===`
+        ? `=== CONTINUED CALL ===\nThe audio stream was transparently reconnected. Continue the same conversation without greeting, introducing yourself, or mentioning the reconnection. Recent transcript:\n${recentConversation}\n=== END CONTINUED CALL ===`
         : "";
       const sysText = [sanitizeSystemPrompt(c.systemPrompt), knowledgePreamble, phoneInstr, callerCtxBlock, handoffInstr, objectionInstr, crm2Instr, resumeBlock]
         .filter(Boolean)

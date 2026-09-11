@@ -26,6 +26,16 @@ export const Route = createFileRoute("/")({
       { property: "og:type", content: "website" },
     ],
     links: [{ rel: "canonical", href: "https://lunara.now/" }],
+    scripts: [
+      {
+        src: "https://lunaraagents.com/embed.js",
+        async: true,
+        "data-channel": "459b3eb7-f3fe-459d-9705-1c446cda3f4e",
+        "data-color": "#0ea5e9",
+        "data-position": "left",
+        "data-shape": "square",
+      },
+    ],
   }),
   component: LandingPage,
 });

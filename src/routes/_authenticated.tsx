@@ -15,25 +15,33 @@ function AuthGate() {
   useEffect(() => {
     let active = true;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!active) return;
-      if (!session) {
-        navigate({ to: "/login", replace: true });
-        return;
-      }
-      setReady(true);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const gate = async (session: { user: { id: string } } | null) => {
       if (!active) return;
       if (!session) {
         setReady(false);
         navigate({ to: "/login", replace: true });
         return;
       }
+      const { data } = await supabase
+        .from("profiles")
+        .select("approval_status")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+      if (!active) return;
+      if (data && data.approval_status !== "approved") {
+        setReady(false);
+        navigate({ to: "/pending", replace: true });
+        return;
+      }
       setReady(true);
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => gate(session));
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      gate(session);
     });
 
     return () => {

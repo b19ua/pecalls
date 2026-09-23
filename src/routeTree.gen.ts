@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SnRouteImport } from './routes/sn'
 import { Route as PmRouteImport } from './routes/pm'
+import { Route as PendingRouteImport } from './routes/pending'
 import { Route as PeRouteImport } from './routes/pe'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
@@ -31,10 +32,12 @@ import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated/agents'
 import { Route as AuthenticatedCopilotIndexRouteImport } from './routes/_authenticated/copilot.index'
 import { Route as AuthenticatedAgentsIndexRouteImport } from './routes/_authenticated/agents.index'
+import { Route as ApiPublicApproveUserRouteImport } from './routes/api/public/approve-user'
 import { Route as ApiAudioCallIdRouteImport } from './routes/api/audio.$callId'
 import { Route as AuthenticatedTicketsTicketIdRouteImport } from './routes/_authenticated/tickets.$ticketId'
 import { Route as AuthenticatedCallsCallIdRouteImport } from './routes/_authenticated/calls.$callId'
 import { Route as AuthenticatedAgentsAgentIdRouteImport } from './routes/_authenticated/agents.$agentId'
+import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin.users'
 import { Route as AuthenticatedAdminRolesRouteImport } from './routes/_authenticated/admin.roles'
 import { Route as AuthenticatedCopilotAgentsIndexRouteImport } from './routes/_authenticated/copilot.agents.index'
 import { Route as ApiPublicTwilioVoiceRouteImport } from './routes/api/public/twilio/voice'
@@ -66,6 +69,11 @@ const SnRoute = SnRouteImport.update({
 const PmRoute = PmRouteImport.update({
   id: '/pm',
   path: '/pm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PendingRoute = PendingRouteImport.update({
+  id: '/pending',
+  path: '/pending',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PeRoute = PeRouteImport.update({
@@ -170,6 +178,11 @@ const AuthenticatedAgentsIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedAgentsRoute,
   } as any)
+const ApiPublicApproveUserRoute = ApiPublicApproveUserRouteImport.update({
+  id: '/api/public/approve-user',
+  path: '/api/public/approve-user',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAudioCallIdRoute = ApiAudioCallIdRouteImport.update({
   id: '/api/audio/$callId',
   path: '/api/audio/$callId',
@@ -193,6 +206,11 @@ const AuthenticatedAgentsAgentIdRoute =
     path: '/$agentId',
     getParentRoute: () => AuthenticatedAgentsRoute,
   } as any)
+const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedAdminRolesRoute = AuthenticatedAdminRolesRouteImport.update({
   id: '/admin/roles',
   path: '/admin/roles',
@@ -321,6 +339,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/pe': typeof PeRoute
+  '/pending': typeof PendingRoute
   '/pm': typeof PmRoute
   '/sn': typeof SnRoute
   '/agents': typeof AuthenticatedAgentsRouteWithChildren
@@ -338,10 +357,12 @@ export interface FileRoutesByFullPath {
   '/tickets': typeof AuthenticatedTicketsRouteWithChildren
   '/tools': typeof AuthenticatedToolsRoute
   '/admin/roles': typeof AuthenticatedAdminRolesRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/tickets/$ticketId': typeof AuthenticatedTicketsTicketIdRoute
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
+  '/api/public/approve-user': typeof ApiPublicApproveUserRoute
   '/agents/': typeof AuthenticatedAgentsIndexRoute
   '/copilot/': typeof AuthenticatedCopilotIndexRoute
   '/copilot/agents/$agentId': typeof AuthenticatedCopilotAgentsAgentIdRoute
@@ -370,6 +391,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/pe': typeof PeRoute
+  '/pending': typeof PendingRoute
   '/pm': typeof PmRoute
   '/sn': typeof SnRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
@@ -385,10 +407,12 @@ export interface FileRoutesByTo {
   '/tickets': typeof AuthenticatedTicketsRouteWithChildren
   '/tools': typeof AuthenticatedToolsRoute
   '/admin/roles': typeof AuthenticatedAdminRolesRoute
+  '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/tickets/$ticketId': typeof AuthenticatedTicketsTicketIdRoute
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
+  '/api/public/approve-user': typeof ApiPublicApproveUserRoute
   '/agents': typeof AuthenticatedAgentsIndexRoute
   '/copilot': typeof AuthenticatedCopilotIndexRoute
   '/copilot/agents/$agentId': typeof AuthenticatedCopilotAgentsAgentIdRoute
@@ -419,6 +443,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/pe': typeof PeRoute
+  '/pending': typeof PendingRoute
   '/pm': typeof PmRoute
   '/sn': typeof SnRoute
   '/_authenticated/agents': typeof AuthenticatedAgentsRouteWithChildren
@@ -436,10 +461,12 @@ export interface FileRoutesById {
   '/_authenticated/tickets': typeof AuthenticatedTicketsRouteWithChildren
   '/_authenticated/tools': typeof AuthenticatedToolsRoute
   '/_authenticated/admin/roles': typeof AuthenticatedAdminRolesRoute
+  '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
   '/_authenticated/agents/$agentId': typeof AuthenticatedAgentsAgentIdRoute
   '/_authenticated/calls/$callId': typeof AuthenticatedCallsCallIdRoute
   '/_authenticated/tickets/$ticketId': typeof AuthenticatedTicketsTicketIdRoute
   '/api/audio/$callId': typeof ApiAudioCallIdRoute
+  '/api/public/approve-user': typeof ApiPublicApproveUserRoute
   '/_authenticated/agents/': typeof AuthenticatedAgentsIndexRoute
   '/_authenticated/copilot/': typeof AuthenticatedCopilotIndexRoute
   '/_authenticated/copilot/agents/$agentId': typeof AuthenticatedCopilotAgentsAgentIdRoute
@@ -470,6 +497,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/pe'
+    | '/pending'
     | '/pm'
     | '/sn'
     | '/agents'
@@ -487,10 +515,12 @@ export interface FileRouteTypes {
     | '/tickets'
     | '/tools'
     | '/admin/roles'
+    | '/admin/users'
     | '/agents/$agentId'
     | '/calls/$callId'
     | '/tickets/$ticketId'
     | '/api/audio/$callId'
+    | '/api/public/approve-user'
     | '/agents/'
     | '/copilot/'
     | '/copilot/agents/$agentId'
@@ -519,6 +549,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/pe'
+    | '/pending'
     | '/pm'
     | '/sn'
     | '/analytics'
@@ -534,10 +565,12 @@ export interface FileRouteTypes {
     | '/tickets'
     | '/tools'
     | '/admin/roles'
+    | '/admin/users'
     | '/agents/$agentId'
     | '/calls/$callId'
     | '/tickets/$ticketId'
     | '/api/audio/$callId'
+    | '/api/public/approve-user'
     | '/agents'
     | '/copilot'
     | '/copilot/agents/$agentId'
@@ -567,6 +600,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/login'
     | '/pe'
+    | '/pending'
     | '/pm'
     | '/sn'
     | '/_authenticated/agents'
@@ -584,10 +618,12 @@ export interface FileRouteTypes {
     | '/_authenticated/tickets'
     | '/_authenticated/tools'
     | '/_authenticated/admin/roles'
+    | '/_authenticated/admin/users'
     | '/_authenticated/agents/$agentId'
     | '/_authenticated/calls/$callId'
     | '/_authenticated/tickets/$ticketId'
     | '/api/audio/$callId'
+    | '/api/public/approve-user'
     | '/_authenticated/agents/'
     | '/_authenticated/copilot/'
     | '/_authenticated/copilot/agents/$agentId'
@@ -618,9 +654,11 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
   PeRoute: typeof PeRoute
+  PendingRoute: typeof PendingRoute
   PmRoute: typeof PmRoute
   SnRoute: typeof SnRoute
   ApiAudioCallIdRoute: typeof ApiAudioCallIdRoute
+  ApiPublicApproveUserRoute: typeof ApiPublicApproveUserRoute
   ApiPublicAsteriskRecordingRoute: typeof ApiPublicAsteriskRecordingRoute
   ApiPublicBridgeActionRoute: typeof ApiPublicBridgeActionRoute
   ApiPublicCrmCallsRoute: typeof ApiPublicCrmCallsRoute
@@ -655,6 +693,13 @@ declare module '@tanstack/react-router' {
       path: '/pm'
       fullPath: '/pm'
       preLoaderRoute: typeof PmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pending': {
+      id: '/pending'
+      path: '/pending'
+      fullPath: '/pending'
+      preLoaderRoute: typeof PendingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pe': {
@@ -797,6 +842,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgentsIndexRouteImport
       parentRoute: typeof AuthenticatedAgentsRoute
     }
+    '/api/public/approve-user': {
+      id: '/api/public/approve-user'
+      path: '/api/public/approve-user'
+      fullPath: '/api/public/approve-user'
+      preLoaderRoute: typeof ApiPublicApproveUserRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/audio/$callId': {
       id: '/api/audio/$callId'
       path: '/api/audio/$callId'
@@ -824,6 +876,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/agents/$agentId'
       preLoaderRoute: typeof AuthenticatedAgentsAgentIdRouteImport
       parentRoute: typeof AuthenticatedAgentsRoute
+    }
+    '/_authenticated/admin/users': {
+      id: '/_authenticated/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/admin/roles': {
       id: '/_authenticated/admin/roles'
@@ -1052,6 +1111,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRouteWithChildren
   AuthenticatedToolsRoute: typeof AuthenticatedToolsRoute
   AuthenticatedAdminRolesRoute: typeof AuthenticatedAdminRolesRoute
+  AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -1070,6 +1130,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedTicketsRoute: AuthenticatedTicketsRouteWithChildren,
   AuthenticatedToolsRoute: AuthenticatedToolsRoute,
   AuthenticatedAdminRolesRoute: AuthenticatedAdminRolesRoute,
+  AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
@@ -1081,9 +1142,11 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
   PeRoute: PeRoute,
+  PendingRoute: PendingRoute,
   PmRoute: PmRoute,
   SnRoute: SnRoute,
   ApiAudioCallIdRoute: ApiAudioCallIdRoute,
+  ApiPublicApproveUserRoute: ApiPublicApproveUserRoute,
   ApiPublicAsteriskRecordingRoute: ApiPublicAsteriskRecordingRoute,
   ApiPublicBridgeActionRoute: ApiPublicBridgeActionRoute,
   ApiPublicCrmCallsRoute: ApiPublicCrmCallsRoute,

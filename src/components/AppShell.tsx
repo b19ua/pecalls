@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { LayoutDashboard, Bot, PhoneCall, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench, Server, Plug, Headphones, Ticket, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Bot, PhoneCall, Settings, LogOut, Phone, Menu, Globe, BarChart3, Radio, Wrench, Server, Plug, Headphones, Ticket, ShieldCheck, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -67,6 +67,20 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             </Link>
           );
         })}
+        {isAdmin && (
+          <Link
+            to="/admin/users"
+            onClick={onNavigate}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              location.pathname.startsWith("/admin/users")
+                ? "bg-sidebar-primary/15 text-sidebar-primary"
+                : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            }`}
+          >
+            <UserCheck className="h-[18px] w-[18px]" />
+            Пользователи
+          </Link>
+        )}
         {isAdmin && (
           <Link
             to="/admin/roles"

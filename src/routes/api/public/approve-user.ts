@@ -8,7 +8,7 @@ function page(title: string, message: string, ok: boolean) {
 <style>
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
 font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0b1220;color:#e8eefc}
-.card{max-width:440px;padding:36px;border-radius:18px;background:#121c31;border:1px solid #223css;text-align:center}
+.card{max-width:440px;padding:36px;border-radius:18px;background:#121c31;border:1px solid #22314f;text-align:center}
 h1{font-size:20px;margin:0 0 10px}p{margin:0;color:#9db0d0;font-size:14px;line-height:1.6}
 .dot{width:44px;height:44px;border-radius:50%;margin:0 auto 18px;background:${ok ? "#12b981" : "#ef4444"}}
 a{display:inline-block;margin-top:22px;color:#7dd3fc;text-decoration:none;font-size:14px}

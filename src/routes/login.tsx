@@ -87,13 +87,16 @@ function LoginPage() {
           },
         });
         if (error) throw error;
+        try {
+          await requestApproval({ data: { email } });
+        } catch (notifyErr) {
+          console.error(notifyErr);
+        }
+        toast.success("Account created — waiting for approval.");
         if (data.session) {
-          localStorage.setItem(ADMIN_SESSION_KEY, "1");
-          toast.success("Account created!");
-          navigate({ to: "/dashboard" });
+          navigate({ to: "/pending" });
         } else {
-          toast.success("Check your email to confirm your account.");
-          setMode("signin");
+          navigate({ to: "/pending" });
         }
       }
     } catch (err) {

@@ -11,6 +11,7 @@ import starnetAsset from "@/assets/starnet-logo.png.asset.json";
 import { toast } from "sonner";
 import { Loader2, Lock } from "lucide-react";
 import { verifyAdminLogin } from "@/lib/admin-auth.functions";
+import { requestApprovalFn } from "@/lib/approvals.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 export const ADMIN_SESSION_KEY = "pe_admin_session";
@@ -56,6 +57,7 @@ function LoginPage() {
   const { c } = Route.useSearch();
   const client = CLIENTS[(c ?? "pe") as ClientId];
   const login = useServerFn(verifyAdminLogin);
+  const requestApproval = useServerFn(requestApprovalFn);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
